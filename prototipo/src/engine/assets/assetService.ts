@@ -1,6 +1,7 @@
 import "@babylonjs/loaders/glTF";
 import { HDRCubeTexture, LoadAssetContainerAsync } from "@babylonjs/core";
 import type { AssetContainer, Mesh, Scene } from "@babylonjs/core";
+import { assetUrl } from "./assetUrl";
 
 /**
  * CAMADA ENGINE (genérica). Carregamento de assets reais: modelos glTF/.glb e
@@ -11,7 +12,7 @@ import type { AssetContainer, Mesh, Scene } from "@babylonjs/core";
 /** Carrega um glTF/.glb num AssetContainer (templates), sem adicioná-lo à cena.
  * O jogo instancia cópias com container.instantiateModelsToScene(). */
 export async function loadContainer(scene: Scene, url: string): Promise<AssetContainer> {
-  return LoadAssetContainerAsync(url, scene);
+  return LoadAssetContainerAsync(assetUrl(url), scene);
 }
 
 export interface HdrEnvOptions {

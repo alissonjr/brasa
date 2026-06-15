@@ -1,7 +1,7 @@
 import { ImportMeshAsync, TransformNode } from "@babylonjs/core";
 import type { AnimationGroup, Scene } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF"; // registra o loader glTF
-import type { CharacterVisual } from "@engine";
+import { assetUrl, type CharacterVisual } from "@engine";
 
 /**
  * CAMADA JOGO (Brasa). Modelo visual do herói: um KayKit Adventurer (CC0) rigado, com
@@ -66,9 +66,9 @@ export class HeroModel implements CharacterVisual {
     // Usa o modelo pedido se existir; senão, o placeholder (biblioteca de animação).
     let result;
     try {
-      result = await ImportMeshAsync(this.modelUrl, this.scene, { pluginExtension: ".glb" });
+      result = await ImportMeshAsync(assetUrl(this.modelUrl), this.scene, { pluginExtension: ".glb" });
     } catch {
-      result = await ImportMeshAsync(PLACEHOLDER_URL, this.scene);
+      result = await ImportMeshAsync(assetUrl(PLACEHOLDER_URL), this.scene);
     }
     const top = result.meshes.find((m) => m.name === "__root__") ?? result.meshes[0];
 

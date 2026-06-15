@@ -26,3 +26,4 @@ export { createSun, createAmbient, createShadows } from "./world/lighting";
 export type { SunOptions, AmbientOptions, ShadowOptions } from "./world/lighting";
 export { loadContainer, createHdrEnvironment } from "./assets/assetService";
 export type { HdrEnvOptions } from "./assets/assetService";
+export { assetUrl } from "./assets/assetUrl";

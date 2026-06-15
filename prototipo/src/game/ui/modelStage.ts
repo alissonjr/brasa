@@ -13,7 +13,7 @@ import {
   type AnimationGroup,
 } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF"; // registra o loader glTF
-import { el } from "@engine";
+import { assetUrl, el } from "@engine";
 
 /**
  * CAMADA JOGO (Brasa). Vitrine 3D embutida nas telas de menu: um "nicho iluminado"
@@ -191,7 +191,7 @@ export class ModelStage {
     let meshes: AbstractMesh[];
     let animationGroups: AnimationGroup[];
     try {
-      const result = await ImportMeshAsync(this.opts.modelUrl, scene, { pluginExtension: ".glb" });
+      const result = await ImportMeshAsync(assetUrl(this.opts.modelUrl), scene, { pluginExtension: ".glb" });
       meshes = result.meshes;
       animationGroups = result.animationGroups;
     } catch (err) {
