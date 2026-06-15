@@ -1,0 +1,27 @@
+Creditos de assets - Brasa (CC0 1.0 Universal: uso livre, inclusive comercial,
+sem exigencia de atribuicao; creditamos por boa pratica).
+
+KayKit - Halloween Bits (Kay Lousberg)
+  Reforco CC0 do MESMO autor e registro low-poly chapado do Dungeon Remastered, escolhido
+  por casar com o tom de cripta/catacumba de Brasa: caixoes, lapides, tumulos, ossadas,
+  caveira com vela, relicarios (shrine), lanternas, placas e arcos.
+  Atlas proprio do pacote: halloweenbits_texture (1024), embutido em cada .glb na conversao.
+  Licenca: CC0 1.0 Universal (dominio publico, uso comercial livre, sem atribuicao).
+  Fonte: https://kaylousberg.itch.io/kaykit-halloween-bits
+         https://github.com/KayKit-Game-Assets/KayKit-Halloween-Bits-1.0
+  Data de download/ingestao: 2026-06-14.
+
+  Subconjunto ingerido (18 pecas, filtrando o que destoa do tom sombrio - sem aboboras,
+  jack-o-lanterns nem pinheiros):
+    Tumulos/cripta: coffin, coffin_decorated, gravestone, grave_A, gravemarker_A,
+      arch, arch_gate.
+    Ossadas: bone_A, bone_B, bone_C, ribcage.
+    Luz ritual: skull_candle, shrine, shrine_candles, lantern_hanging, lantern_standing,
+      plaque_candles, post_skull.
+  Pipeline: download (.gltf + .bin + textura compartilhada) e conversao para .glb por
+    optimize_asset.py (Blender 4.5 headless, textura embutida), validados por
+    validate_gltf.py (Y-up, escala, teto de tris) - todos RESULTADO OK.
+
+  Observacao de coesao: KayKit Halloween Bits NAO compartilha o atlas do Dungeon Remastered
+  (e um pacote separado), mas mantem o mesmo estilo low-poly chapado do mesmo autor, entao
+  preserva a coesao visual. Cada .glb e carregado uma vez e instanciado (loadContainer).

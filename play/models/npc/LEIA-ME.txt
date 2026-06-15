@@ -1,0 +1,9 @@
+Solte aqui os GLBs de PESSOAS (low-poly rigado, CC0 - ex.: Quaternius
+Universal Characters; animacoes Mixamo/Quaternius embutidas como AnimationGroups).
+Nomes reconhecidos (qualquer um que existir entra no rodizio de NPCs):
+  villager.glb, villager2.glb, villager3.glb  (moradores)
+  woman.glb, elder.glb                        (variacao)
+  soldier.glb                                 (defensor cananeu)
+Requisitos: altura livre (normalizada p/ ~1,7 m), com AnimationGroups
+Idle e Walk (nomes contendo "idle"/"walk"/"andar" sao detectados). Se houver
+so uma animacao, ela toca sempre. Licenca: CC0/permissiva.
