@@ -1,0 +1,1437 @@
+/* CAMADA JOGO (Brasa). Tema visual da UI (cripta de pedra fria com a brasa quente como
+   destaque). Estrutura/camadas vêm da engine (uiManager); aqui é a "pele".
+   Fontes: Cinzel (títulos) + EB Garamond (corpo), self-hosted via Fontsource (ver fonts.ts).
+   Paleta da bíblia de direção de arte de Brasa: assinatura frio-azul (pedra/escuro/morte)
+   contra laranja-quente (Brasa/braseiro/fagulha). Os NOMES das variáveis são herdados;
+   os VALORES agora são a paleta de Brasa, então toda a UI acompanha sem reescrever regras. */
+
+:root {
+  --areia: #cdd6e0; /* pedra clara fria (era areia) */
+  --pergaminho: #d7dee6; /* pedra muito clara */
+  --ouro: #f0a44e; /* a brasa: destaque quente */
+  --ouro-claro: #ffcf8a; /* fagulha clara */
+  --bronze: #c46a2a; /* brasa profunda */
+  --bronze-claro: #e08a3a; /* brasa acesa */
+  --texto: #d6dee8; /* texto frio claro */
+  --texto-suave: #8c9aa8; /* texto frio suave */
+  --borda: #2c3440; /* pedra escura */
+  --borda-clara: #46525f; /* pedra média */
+  --painel-1: #1c2430; /* pedra do painel (topo) */
+  --painel-2: #141a24; /* pedra do painel (meio) */
+  --painel-3: #0e131b; /* o escuro do poço (base) */
+  --perigo: #9a4334;
+  --perigo-borda: #b7322e;
+}
+
+.ui-root {
+  font-family: "EB Garamond", Georgia, serif;
+  color: var(--texto);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* --- Backdrop modal --- */
+.menu-backdrop {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(ellipse at 50% 38%, rgba(30, 42, 58, 0.35), rgba(4, 6, 10, 0.88) 78%);
+  backdrop-filter: blur(3px);
+  animation: fadeIn 0.22s ease both;
+}
+
+/* --- Painel (tabuleta) --- */
+.menu-panel {
+  position: relative;
+  min-width: 360px;
+  max-width: min(92vw, 540px);
+  max-height: 86vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 32px 36px 34px;
+  /* Granulado fino de pedra/pergaminho (SVG inline) sobre o gradiente de bronze,
+     misturado em soft-light para tirar o aspecto de CSS chapado. */
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E") repeat,
+    linear-gradient(157deg, #243040 0%, var(--painel-2) 58%, var(--painel-3) 100%);
+  background-blend-mode: soft-light, normal;
+  border: 1px solid var(--borda-clara);
+  border-radius: 4px;
+  box-shadow:
+    0 22px 60px rgba(0, 0, 0, 0.6),
+    0 2px 0 rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(246, 227, 176, 0.12),
+    inset 0 0 40px rgba(0, 0, 0, 0.35);
+  animation: panelIn 0.26s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+/* Cantoneiras de bronze (moldura antiga) */
+.menu-panel::before,
+.menu-panel::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--bronze);
+  opacity: 0.7;
+  pointer-events: none;
+}
+.menu-panel::before {
+  top: 8px;
+  left: 8px;
+  border-right: none;
+  border-bottom: none;
+}
+.menu-panel::after {
+  bottom: 8px;
+  right: 8px;
+  border-left: none;
+  border-top: none;
+}
+
+/* --- Títulos --- */
+.menu-title {
+  margin: 0;
+  font-family: "Cinzel", Georgia, serif;
+  font-weight: 700;
+  font-size: 32px;
+  letter-spacing: 2px;
+  text-align: center;
+  background: linear-gradient(180deg, var(--ouro-claro) 0%, var(--bronze-claro) 60%, #b07a30 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5));
+}
+.menu-title::after {
+  content: "";
+  display: block;
+  width: 70%;
+  height: 2px;
+  margin: 12px auto 2px;
+  background: linear-gradient(90deg, transparent, var(--bronze) 25%, var(--ouro) 50%, var(--bronze) 75%, transparent);
+  border-radius: 2px;
+}
+.menu-subtitle {
+  margin: -6px 0 8px;
+  font-size: 17px;
+  font-style: italic;
+  text-align: center;
+  color: var(--texto-suave);
+}
+
+/* --- Botões (bronze gravado) --- */
+.btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  appearance: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-align: center;
+  padding: 12px 18px;
+  color: #f6ecd6;
+  background: linear-gradient(180deg, #6a4e2b 0%, #543d22 52%, #46331c 100%);
+  border: 1px solid var(--borda-clara);
+  border-radius: 4px;
+  box-shadow:
+    inset 0 1px 0 rgba(246, 227, 176, 0.22),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.22),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.35),
+    0 1px 2px rgba(0, 0, 0, 0.4);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+  transition: background 0.14s ease, border-color 0.14s ease, transform 0.06s ease, color 0.14s ease, box-shadow 0.14s ease;
+}
+/* Conteúdo (glifo + rótulo) acima da varredura de luz. */
+.btn > * {
+  position: relative;
+  z-index: 1;
+}
+/* Varredura de luz diagonal (reflexo no metal polido) ao passar o mouse/focar. */
+.btn::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -135%;
+  width: 55%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(246, 227, 176, 0.3) 50%, transparent);
+  transform: skewX(-18deg);
+  transition: left 0.5s ease;
+  pointer-events: none;
+  z-index: 0;
+}
+.btn:hover::before,
+.btn:focus-visible::before {
+  left: 135%;
+}
+.btn:disabled::before {
+  display: none;
+}
+/* Glifo gravado à esquerda do rótulo (acende em ouro no hover/foco). */
+.btn-glyph {
+  display: inline-flex;
+  width: 17px;
+  height: 17px;
+  color: var(--ouro);
+  opacity: 0.85;
+  transition: color 0.14s ease, opacity 0.14s ease, transform 0.14s ease;
+}
+.btn-glyph svg {
+  width: 100%;
+  height: 100%;
+}
+.btn:hover .btn-glyph,
+.btn:focus-visible .btn-glyph {
+  color: var(--ouro-claro);
+  opacity: 1;
+  transform: scale(1.08);
+}
+.btn:hover {
+  background: linear-gradient(180deg, #82602f 0%, #654a28 52%, #543d20 100%);
+  border-color: var(--bronze-claro);
+  color: var(--ouro-claro);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--ouro);
+  outline-offset: 2px;
+}
+.btn:active {
+  transform: translateY(1px);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  filter: grayscale(0.5);
+}
+.btn-danger {
+  background: linear-gradient(180deg, #6e3128 0%, #57261f 100%);
+  border-color: #8a4036;
+}
+.btn-danger:hover {
+  background: linear-gradient(180deg, #863a2f 0%, #6a2d24 100%);
+  border-color: var(--perigo-borda);
+  color: #f4cfc6;
+}
+
+/* Ação primária (CTA iluminado em ouro): destaca-se da navegação secundária. */
+.btn-primary {
+  color: #2a1c0c;
+  background: linear-gradient(180deg, var(--ouro-claro) 0%, var(--bronze-claro) 55%, #a9701f 100%);
+  border-color: var(--ouro);
+  text-shadow: 0 1px 0 rgba(255, 244, 214, 0.45);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 248, 224, 0.55),
+    inset 0 -2px 6px rgba(120, 70, 14, 0.45),
+    0 0 0 1px rgba(120, 78, 24, 0.35),
+    0 2px 10px rgba(0, 0, 0, 0.4),
+    0 0 16px rgba(231, 189, 113, 0.26);
+  animation: ctaGlow 3.2s ease-in-out infinite;
+}
+.btn-primary .btn-glyph {
+  color: #5a3a12;
+  opacity: 1;
+}
+.btn-primary:hover {
+  background: linear-gradient(180deg, #fff0c8 0%, var(--ouro) 55%, #b87c24 100%);
+  border-color: var(--ouro-claro);
+  color: #241708;
+}
+.btn-primary:hover .btn-glyph {
+  color: #4a2f0e;
+  transform: scale(1.08);
+}
+@keyframes ctaGlow {
+  0%, 100% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 248, 224, 0.55), inset 0 -2px 6px rgba(120, 70, 14, 0.45),
+      0 0 0 1px rgba(120, 78, 24, 0.35), 0 2px 10px rgba(0, 0, 0, 0.4), 0 0 14px rgba(231, 189, 113, 0.22);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 248, 224, 0.55), inset 0 -2px 6px rgba(120, 70, 14, 0.45),
+      0 0 0 1px rgba(120, 78, 24, 0.35), 0 2px 10px rgba(0, 0, 0, 0.4), 0 0 26px rgba(231, 189, 113, 0.44);
+  }
+}
+
+/* Indicador de seleção: chevron de ouro que desliza no item focado/hover
+   das pilhas verticais de navegação (filhos diretos do painel). */
+.menu-panel > .btn::after {
+  content: "";
+  position: absolute;
+  left: 9px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--ouro);
+  border-top: 2px solid var(--ouro);
+  transform: translateY(-50%) rotate(45deg);
+  opacity: 0;
+  transition: opacity 0.16s ease, left 0.16s ease;
+  z-index: 1;
+  pointer-events: none;
+}
+.menu-panel > .btn:hover::after,
+.menu-panel > .btn:focus-visible::after {
+  opacity: 0.95;
+  left: 14px;
+}
+.menu-panel > .btn-primary::after {
+  border-color: #5a3a12;
+}
+
+/* Botão só-ícone (compacto): rótulo vai em title/aria-label.
+   Seletores com .btn.btn-icon para vencer .slot-actions .btn (que vem depois). */
+.btn.btn-icon {
+  gap: 0;
+  padding: 8px;
+  aspect-ratio: 1 / 1;
+  flex: 0 0 auto;
+}
+.btn.btn-icon .btn-glyph {
+  width: 18px;
+  height: 18px;
+}
+.slot-actions .btn.btn-icon {
+  padding: 7px;
+}
+.slot-actions .btn.btn-icon .btn-glyph {
+  width: 16px;
+  height: 16px;
+}
+
+.menu-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+.menu-actions .btn {
+  flex: 1;
+}
+
+/* --- Lista de slots --- */
+.slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 4px 0;
+}
+.slot-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(246, 227, 176, 0.06), rgba(0, 0, 0, 0.12));
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.slot-row:hover {
+  border-color: var(--bronze);
+}
+.slot-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.slot-info strong {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 15px;
+  color: var(--ouro);
+}
+.slot-info span {
+  font-size: 14px;
+  color: var(--texto-suave);
+}
+.slot-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.slot-actions .btn {
+  font-size: 13px;
+  padding: 8px 11px;
+}
+.empty {
+  color: var(--texto-suave);
+  font-style: italic;
+  text-align: center;
+  padding: 16px 0;
+  font-size: 16px;
+}
+
+/* --- Opções --- */
+.opt-section {
+  margin-top: 10px;
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--bronze-claro);
+}
+.opt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 17px;
+}
+.slider {
+  flex: 1;
+  max-width: 60%;
+  height: 6px;
+  accent-color: var(--bronze);
+  cursor: pointer;
+}
+.select {
+  font-family: "EB Garamond", Georgia, serif;
+  font-size: 16px;
+  color: #f6ecd6;
+  background: #46331c;
+  border: 1px solid var(--borda-clara);
+  border-radius: 4px;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+.hidden-file {
+  display: none;
+}
+.opt-note {
+  margin: -2px 0 2px;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--texto-suave);
+}
+.checkbox {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--bronze);
+  cursor: pointer;
+}
+
+/* --- Acessibilidade: reduzir movimento --- */
+.ui-root.reduce-motion *,
+.ui-root.reduce-motion *::before,
+.ui-root.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
+/* --- Acessibilidade: alto contraste --- */
+.ui-root.high-contrast {
+  --texto: #ffffff;
+  --texto-suave: #f0e6d2;
+  --ouro: #ffd479;
+  --ouro-claro: #ffe9b8;
+  --borda: #b9923f;
+}
+.ui-root.high-contrast .menu-panel,
+.ui-root.high-contrast .menu-backdrop {
+  background: #14100a;
+}
+.ui-root.high-contrast .menu-panel {
+  border-color: var(--ouro);
+}
+.ui-root.high-contrast .btn {
+  border-color: var(--ouro);
+}
+.ui-root.high-contrast .menu-subtitle,
+.ui-root.high-contrast .stat-row .k,
+.ui-root.high-contrast .opt-note {
+  color: #e8dcc0;
+}
+
+/* --- Botão Menu no HUD do jogo --- */
+.hud-pause-btn {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  pointer-events: auto;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: #f6ecd6;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, #6a4e2b 0%, #4f3a22 100%);
+  border: 1px solid var(--borda-clara);
+  border-radius: 4px;
+  box-shadow: inset 0 1px 0 rgba(246, 227, 176, 0.16), 0 1px 3px rgba(0, 0, 0, 0.45);
+  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+}
+.hud-pause-btn:hover {
+  background: linear-gradient(180deg, #82602f 0%, #604628 100%);
+  border-color: var(--bronze-claro);
+  color: var(--ouro-claro);
+}
+.hud-pause-btn .glyph {
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* --- Indicador de autosave (HUD) --- */
+.autosave-indicator {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  padding: 7px 14px;
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--ouro);
+  background: rgba(20, 14, 8, 0.78);
+  border: 1px solid rgba(216, 169, 59, 0.3);
+  border-radius: 4px;
+  opacity: 0;
+  transform: translate(-50%, 6px);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  pointer-events: none;
+}
+.autosave-indicator.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+/* --- HUD de jogo: chip do jogador, objetivo, minimapa --- */
+.hud-game {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hud-chip {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px 6px 6px;
+  background: linear-gradient(180deg, rgba(40, 28, 14, 0.88), rgba(20, 14, 8, 0.88));
+  border: 1px solid var(--borda-clara);
+  border-radius: 8px;
+  box-shadow: inset 0 1px 0 rgba(246, 227, 176, 0.14), 0 2px 8px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+  cursor: pointer;
+  transition: border-color 0.14s ease;
+}
+.hud-chip:hover {
+  border-color: var(--bronze-claro);
+}
+.chip-avatar {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  font-family: "Cinzel", Georgia, serif;
+  font-weight: 700;
+  font-size: 16px;
+  color: #2a1c0c;
+  background: radial-gradient(circle at 35% 30%, var(--ouro-claro), var(--bronze-claro) 70%, #9b6a28);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.chip-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.chip-name {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  color: var(--ouro-claro);
+}
+.chip-points {
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+
+.hud-objective {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 44vw;
+  padding: 7px 18px;
+  background: rgba(20, 14, 8, 0.72);
+  border: 1px solid rgba(216, 169, 59, 0.32);
+  border-radius: 20px;
+}
+.hud-obj-label {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--bronze-claro);
+}
+.hud-obj-text {
+  font-size: 15px;
+  font-style: italic;
+  color: var(--texto);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Bússola diegética leve no topo (faixa de cardeais + marcadores de rumo). */
+.compass {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 360px;
+  height: 34px;
+  pointer-events: auto;
+  cursor: pointer;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(40, 28, 14, 0.5), rgba(20, 14, 8, 0.5));
+  border: 1px solid rgba(216, 169, 59, 0.25);
+  box-shadow: inset 0 1px 0 rgba(246, 227, 176, 0.1);
+  transition: border-color 0.14s ease, background 0.14s ease;
+  /* Esmaece nas bordas (sensação diegética). */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+}
+.compass:hover {
+  border-color: var(--bronze-claro);
+  background: linear-gradient(180deg, rgba(50, 36, 18, 0.6), rgba(26, 18, 10, 0.6));
+}
+.compass-canvas {
+  display: block;
+}
+
+/* --- Perfil --- */
+.field-label {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--bronze-claro);
+  margin-top: 4px;
+}
+.name-row {
+  display: flex;
+  gap: 8px;
+}
+.text-input {
+  flex: 1;
+  font-family: "EB Garamond", Georgia, serif;
+  font-size: 16px;
+  color: #f6ecd6;
+  background: #46331c;
+  border: 1px solid var(--borda-clara);
+  border-radius: 4px;
+  padding: 9px 12px;
+}
+.text-input:focus {
+  outline: 2px solid var(--ouro);
+  outline-offset: 1px;
+}
+.profile-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 2px;
+}
+.stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 13px;
+  background: linear-gradient(180deg, rgba(246, 227, 176, 0.05), rgba(0, 0, 0, 0.12));
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+}
+.stat-row .k {
+  color: var(--texto-suave);
+  font-size: 15px;
+}
+.stat-row .v {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 15px;
+  color: var(--ouro);
+}
+
+/* --- Diálogo de confirmação / alerta --- */
+.dialog-panel {
+  min-width: 320px;
+  max-width: min(90vw, 460px);
+}
+.dialog-msg {
+  margin: 2px 0 6px;
+  font-size: 16px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--texto);
+}
+
+/* --- Toasts (HUD) --- */
+.hud-toasts {
+  position: absolute;
+  top: 98px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+.hud-toast {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 240px;
+  padding: 10px 22px;
+  text-align: center;
+  background: linear-gradient(180deg, rgba(58, 42, 22, 0.96), rgba(28, 19, 9, 0.96));
+  border: 1px solid var(--bronze-claro);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(246, 227, 176, 0.18);
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.hud-toast.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.toast-label {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--bronze-claro);
+}
+.toast-title {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 17px;
+  color: var(--ouro-claro);
+}
+.toast-desc {
+  font-size: 14px;
+  color: var(--texto-suave);
+}
+
+/* --- Lista de conquistas --- */
+.ach-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0;
+}
+.ach-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  background: linear-gradient(180deg, rgba(246, 227, 176, 0.04), rgba(0, 0, 0, 0.14));
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+  opacity: 0.62;
+}
+.ach-row.unlocked {
+  opacity: 1;
+  border-color: var(--bronze);
+}
+.ach-medal {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #2a2014;
+  border: 2px solid #5a4530;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.ach-row.unlocked .ach-medal {
+  background: radial-gradient(circle at 35% 30%, var(--ouro-claro), var(--bronze-claro) 70%, #9b6a28);
+  border-color: var(--ouro);
+  box-shadow: 0 0 8px rgba(231, 189, 113, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+}
+.ach-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.ach-text strong {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 15px;
+  color: var(--ouro);
+}
+.ach-row:not(.unlocked) .ach-text strong {
+  color: var(--texto-suave);
+}
+.ach-text span {
+  font-size: 14px;
+  color: var(--texto-suave);
+}
+
+/* --- Mapa-múndi --- */
+.map-panel {
+  max-width: min(94vw, 760px);
+}
+.map-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+}
+.map-legend {
+  display: flex;
+  gap: 18px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--texto-suave);
+}
+.map-legend > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+/* --- Controles (remapeamento) --- */
+.ctrl-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0;
+}
+.ctrl-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 14px;
+  background: linear-gradient(180deg, rgba(246, 227, 176, 0.05), rgba(0, 0, 0, 0.12));
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+}
+.ctrl-action {
+  font-size: 16px;
+  color: var(--texto);
+}
+.btn.ctrl-key {
+  min-width: 96px;
+  padding: 7px 12px;
+  font-size: 13px;
+}
+.btn.ctrl-key.capturing {
+  border-color: var(--ouro);
+  color: var(--ouro-claro);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+/* --- Crônica (Codex) --- */
+.codex-panel {
+  max-width: min(94vw, 640px);
+}
+.codex-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0;
+}
+.codex-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  background: linear-gradient(180deg, rgba(246, 227, 176, 0.04), rgba(0, 0, 0, 0.14));
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+}
+.codex-row.locked {
+  opacity: 0.55;
+}
+.codex-row.clickable {
+  cursor: pointer;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.codex-row.clickable:hover,
+.codex-row.clickable:focus-visible {
+  border-color: var(--bronze);
+  outline: none;
+}
+.codex-row.clickable:focus-visible {
+  outline: 2px solid var(--ouro);
+  outline-offset: 2px;
+}
+.codex-seal {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: radial-gradient(circle at 35% 30%, var(--ouro-claro), var(--bronze-claro) 70%, #9b6a28);
+  border: 1px solid var(--ouro);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4);
+}
+.codex-row.locked .codex-seal {
+  background: #2a2014;
+  border-color: #5a4530;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+/* Selo distinto por categoria (variedade visual por verbete): personagem = gema de
+   ouro redonda; lugar = pedra fria quadrada; relato = lacre de pergaminho (gota). */
+.codex-seal-lugares {
+  border-radius: 2px;
+  background: radial-gradient(circle at 35% 30%, #b6dcef, #4d7d9c 68%, #2a4f68);
+  border-color: #7fb4cf;
+}
+.codex-seal-relatos {
+  border-radius: 50% 50% 50% 2px;
+  background: radial-gradient(circle at 35% 30%, #efdfb6, #b89a63 68%, #7c6334);
+  border-color: #cdb277;
+}
+.codex-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.codex-text strong {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 15px;
+  color: var(--ouro);
+}
+.codex-row.locked .codex-text strong {
+  color: var(--texto-suave);
+}
+.codex-text span {
+  font-size: 14px;
+  color: var(--texto-suave);
+}
+.codex-article {
+  margin: 4px 0;
+  max-height: 52vh;
+  overflow-y: auto;
+}
+.codex-para {
+  margin: 0 0 12px;
+  font-size: 16px;
+  line-height: 1.6;
+  color: var(--texto);
+}
+
+/* --- Verbete imersivo: vitrine 3D + texto em duas colunas --- */
+.codex-panel-spread {
+  max-width: min(95vw, 880px);
+}
+.codex-spread {
+  display: grid;
+  grid-template-columns: minmax(220px, 300px) 1fr;
+  gap: 24px;
+  align-items: start;
+  margin: 4px 0;
+}
+.codex-spread-text {
+  min-width: 0;
+}
+.codex-spread .codex-article {
+  max-height: 56vh;
+}
+.codex-stage-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+}
+/* Empilha (3D em cima do texto) em painéis estreitos. */
+@media (max-width: 620px) {
+  .codex-spread {
+    grid-template-columns: 1fr;
+  }
+  .codex-stage-col {
+    position: static;
+  }
+}
+
+/* --- Nicho 3D (ModelStage) --- */
+.model-stage {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--borda-clara);
+  background:
+    radial-gradient(ellipse at 50% 32%, color-mix(in srgb, var(--stage-accent, #ff9646) 16%, transparent), rgba(9, 12, 18, 0) 62%),
+    linear-gradient(180deg, #0c111a 0%, #070a10 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(246, 227, 176, 0.1),
+    inset 0 -28px 50px rgba(0, 0, 0, 0.55),
+    0 10px 30px rgba(0, 0, 0, 0.45);
+  transition: background 0.25s ease;
+}
+.model-stage-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  outline: none;
+  cursor: grab;
+}
+.model-stage-canvas:active {
+  cursor: grabbing;
+}
+.model-stage.model-stage-ready .model-stage-canvas {
+  opacity: 1;
+}
+/* Vinheta por cima do canvas: escurece bordas, foca o personagem ao centro. */
+.model-stage-vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 45%, rgba(0, 0, 0, 0) 52%, rgba(0, 0, 0, 0.55) 100%);
+}
+/* Linha de chão quente sob os pés (o personagem "pousa" no nicho). */
+.model-stage-floor {
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 9%;
+  height: 18px;
+  pointer-events: none;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--stage-accent, #ff9646) 42%, transparent), transparent 72%);
+  filter: blur(2px);
+  transition: background 0.25s ease;
+}
+.model-stage.model-stage-empty {
+  /* Modelo não carregou: esconde o nicho vazio em vez de mostrar caixa preta. */
+  display: none;
+}
+.model-stage-hint {
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: var(--texto-suave);
+  opacity: 0.7;
+  text-transform: uppercase;
+}
+.ui-root.reduce-motion .model-stage-canvas {
+  /* Sem auto-rotação implícita aqui (o JS respeita), mas suaviza o fade. */
+  transition: none;
+}
+
+/* Variante "backdrop": diorama de fundo (tela-título), preenche o container. */
+.model-stage-backdrop {
+  aspect-ratio: auto;
+  width: 100%;
+  height: 100%;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: none;
+  pointer-events: none;
+}
+.model-stage-backdrop .model-stage-canvas {
+  cursor: default;
+}
+.model-stage-backdrop .model-stage-floor {
+  bottom: 6%;
+  left: 22%;
+  right: 22%;
+}
+
+/* --- Diário (objetivos) --- */
+.quest-panel {
+  max-width: min(94vw, 600px);
+}
+.quest-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0;
+}
+.quest-chapter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding: 4px 2px;
+  border-bottom: 1px solid var(--borda);
+}
+.quest-chapter:first-child {
+  margin-top: 0;
+}
+.quest-ch-name {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 13px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--bronze-claro);
+}
+.quest-chapter.active .quest-ch-name {
+  color: var(--ouro-claro);
+}
+.quest-ch-count {
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+.quest-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+.quest-row.current {
+  background: linear-gradient(180deg, rgba(231, 189, 113, 0.1), rgba(0, 0, 0, 0.12));
+  border-color: var(--bronze);
+}
+.quest-row.done {
+  opacity: 0.7;
+}
+.quest-mark {
+  width: 18px;
+  flex-shrink: 0;
+  text-align: center;
+  color: var(--ouro);
+  font-weight: 700;
+}
+.quest-text {
+  flex: 1;
+  font-size: 15px;
+  color: var(--texto);
+}
+.quest-row.done .quest-text {
+  text-decoration: line-through;
+  color: var(--texto-suave);
+}
+.quest-pts {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 13px;
+  color: var(--texto-suave);
+}
+
+/* --- Nova Jornada (criação de personagem) --- */
+.create-panel {
+  max-width: min(94vw, 560px);
+}
+/* Criação com vitrine 3D: nicho à esquerda (fixo), formulário à direita. */
+.create-panel-spread {
+  max-width: min(95vw, 920px);
+}
+.create-spread {
+  display: grid;
+  grid-template-columns: minmax(210px, 280px) 1fr;
+  gap: 24px;
+  align-items: start;
+  margin: 4px 0;
+}
+.create-stage-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: sticky;
+  top: 0;
+}
+.create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+@media (max-width: 640px) {
+  .create-spread {
+    grid-template-columns: 1fr;
+  }
+  .create-stage-col {
+    position: static;
+  }
+}
+.swatch-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.swatch {
+  appearance: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-family: "EB Garamond", Georgia, serif;
+  font-size: 14px;
+  color: var(--texto);
+  background: linear-gradient(180deg, rgba(246, 227, 176, 0.05), rgba(0, 0, 0, 0.14));
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.swatch:hover {
+  border-color: var(--bronze);
+}
+.swatch.selected {
+  border-color: var(--ouro);
+  background: linear-gradient(180deg, rgba(231, 189, 113, 0.12), rgba(0, 0, 0, 0.12));
+}
+.swatch:focus-visible {
+  outline: 2px solid var(--ouro);
+  outline-offset: 2px;
+}
+.swatch-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.4);
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3);
+}
+.choice-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.choice {
+  appearance: none;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 14px;
+  color: var(--texto);
+  background: linear-gradient(180deg, rgba(246, 227, 176, 0.05), rgba(0, 0, 0, 0.14));
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+.choice:hover {
+  border-color: var(--bronze);
+}
+.choice.selected {
+  border-color: var(--ouro);
+  background: linear-gradient(180deg, rgba(231, 189, 113, 0.12), rgba(0, 0, 0, 0.12));
+}
+.choice:focus-visible {
+  outline: 2px solid var(--ouro);
+  outline-offset: 2px;
+}
+.choice strong {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 15px;
+  color: var(--ouro);
+}
+.choice span {
+  font-size: 14px;
+  color: var(--texto-suave);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+/* --- Menu principal cinematográfico (tela-título) ---
+   Mantém a tabuleta de bronze (mesmo "quadrado" da pausa) para destacar-se do
+   3D do jogo, porém mais imponente: fundo dramático, moldura reforçada, emblema
+   e entrada encadeada dos itens. Os botões reaproveitam o estilo bronze evoluído. */
+.menu-backdrop.cinematic {
+  /* Base escura de poço-cripta. O diorama 3D vivo (a Acendedora girando) entra por
+     cima via <canvas>; este gradiente é o que aparece atrás do painel à esquerda. */
+  background:
+    radial-gradient(ellipse at 28% 40%, rgba(20, 28, 42, 0.6), rgba(4, 6, 10, 0.92) 78%),
+    linear-gradient(180deg, #070a10 0%, #0a0e16 55%, #05070c 100%);
+}
+/* Tela-título com diorama: painel à esquerda, a Acendedora ocupa a direita. */
+.menu-backdrop.title-screen {
+  justify-content: flex-start;
+  padding-left: clamp(24px, 7vw, 120px);
+}
+/* O diorama de fundo: ocupa a porção direita da tela, atrás do painel. */
+.title-screen .model-stage-backdrop {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: auto;
+  width: 62%;
+  z-index: 0;
+}
+/* Scrim: escurece a esquerda (legibilidade do painel) e funde o diorama ao fundo. */
+.title-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(5, 7, 12, 0.92) 0%, rgba(5, 7, 12, 0.5) 34%, rgba(5, 7, 12, 0) 58%),
+    radial-gradient(ellipse at 70% 50%, transparent 46%, rgba(4, 6, 10, 0.5) 100%);
+}
+.title-screen .menu-panel.cinematic {
+  position: relative;
+  z-index: 2;
+  margin: 0;
+}
+/* Em telas estreitas, o diorama vira fundo inteiro e o painel volta ao centro. */
+@media (max-width: 720px) {
+  .menu-backdrop.title-screen {
+    justify-content: center;
+    padding-left: 0;
+  }
+  .title-screen .model-stage-backdrop {
+    width: 100%;
+  }
+  .title-scrim {
+    background: radial-gradient(ellipse at 50% 42%, transparent 30%, rgba(4, 6, 10, 0.82) 86%);
+  }
+}
+/* Feixe de luz lento atrás do título (god rays sutis). */
+.menu-backdrop.cinematic::before {
+  content: "";
+  position: absolute;
+  inset: -25%;
+  background: conic-gradient(from 90deg at 50% 30%,
+    transparent 0deg, rgba(246, 227, 176, 0.05) 16deg, transparent 34deg,
+    transparent 180deg, rgba(246, 227, 176, 0.045) 200deg, transparent 220deg);
+  animation: titleRays 48s linear infinite;
+  pointer-events: none;
+}
+/* Tabuleta da tela-título: igual à de pausa, com padding e sombra reforçados. */
+.menu-panel.cinematic {
+  max-width: min(92vw, 460px);
+  padding: 30px 40px 36px;
+  gap: 12px;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.72),
+    0 2px 0 rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(246, 227, 176, 0.14),
+    inset 0 0 60px rgba(0, 0, 0, 0.4);
+}
+/* Cantoneiras de bronze mais marcadas na tela-título. */
+.menu-panel.cinematic::before,
+.menu-panel.cinematic::after {
+  width: 24px;
+  height: 24px;
+  opacity: 0.85;
+  border-color: var(--bronze-claro);
+}
+/* Emblema (selo solar) acima do título. */
+.title-emblem {
+  width: 54px;
+  height: 54px;
+  margin: 2px auto -2px;
+  color: var(--ouro);
+  filter: drop-shadow(0 0 10px rgba(231, 189, 113, 0.35));
+}
+.title-emblem svg {
+  width: 100%;
+  height: 100%;
+}
+.cinematic .menu-title {
+  font-size: clamp(32px, 5.5vw, 44px);
+  letter-spacing: 3px;
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.6));
+}
+.cinematic .menu-subtitle {
+  font-size: 18px;
+  margin: -2px 0 12px;
+}
+/* Entrada encadeada: os itens sobem em sequência. */
+.menu-panel.cinematic > .btn {
+  animation: riseIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.menu-panel.cinematic > .btn:nth-of-type(1) { animation-delay: 0.1s; }
+.menu-panel.cinematic > .btn:nth-of-type(2) { animation-delay: 0.16s; }
+.menu-panel.cinematic > .btn:nth-of-type(3) { animation-delay: 0.22s; }
+.menu-panel.cinematic > .btn:nth-of-type(4) { animation-delay: 0.28s; }
+.menu-panel.cinematic > .btn:nth-of-type(5) { animation-delay: 0.34s; }
+/* CTA sobe na entrada e mantém o pulso dourado em seguida. */
+.menu-panel.cinematic > .btn-primary {
+  animation: riseIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both, ctaGlow 3.2s ease-in-out 0.6s infinite;
+}
+@keyframes riseIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: none; }
+}
+/* Divisória ornamental (filete de bronze com losango de ouro ao centro). */
+.menu-divider {
+  position: relative;
+  width: 62%;
+  height: 14px;
+  margin: 0 auto 6px;
+  align-self: center;
+}
+.menu-divider::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--bronze) 22%, var(--bronze) 78%, transparent);
+}
+.menu-divider::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: linear-gradient(135deg, var(--ouro-claro), var(--bronze-claro));
+  box-shadow: 0 0 7px rgba(231, 189, 113, 0.5), inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+/* Versículo de rodapé (atmosférico). */
+.menu-verse {
+  margin: 16px 0 0;
+  font-size: 14px;
+  font-style: italic;
+  text-align: center;
+  letter-spacing: 0.4px;
+  color: var(--texto-suave);
+}
+
+@keyframes titleRays {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}

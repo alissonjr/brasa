@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Brasa - dungeon crawler de fantasia no navegador</title>
+  <meta name="description" content="Brasa: desca o poco-cripta, reacenda os braseiros e reavive a chama ancestral antes que a superficie congele. Um RPG de acao low-poly que roda no navegador." />
+
+  <!-- Open Graph / redes sociais -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Brasa" />
+  <meta property="og:description" content="Desca o poco-cripta, reacenda os braseiros e reavive a Brasa antes que a superficie congele." />
+  <meta property="og:image" content="./media/captura-cripta.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=EB+Garamond:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main>
+    <!-- HERO -->
+    <section class="hero">
+      <div class="ember"></div>
+      <div class="hero-content">
+        <p class="kicker">RPG de acao low-poly . roda no navegador</p>
+        <h1>Brasa</h1>
+        <p class="tagline">
+          A chama ancestral esta morrendo, e os mortos despertam no escuro.
+          Desca o poco-cripta, reacenda os braseiros e reavive a Brasa
+          antes que a superficie congele.
+        </p>
+        <div class="actions">
+          <a class="btn btn-primary" href="./play/">Jogar agora</a>
+          <a class="btn btn-ghost" href="https://github.com/SEU-USUARIO/brasa" target="_blank" rel="noopener">Codigo no GitHub</a>
+        </div>
+        <p class="note">Funciona no Chrome, Edge e Firefox recentes. Recomendado em desktop.</p>
+      </div>
+    </section>
+
+    <!-- PITCH / LOOP -->
+    <section class="band">
+      <h2>Voce e a ultima Acendedora</h2>
+      <p class="lead">
+        Enquanto a Brasa arde no fundo do poco, a superficie tem calor e vida.
+        Voce carrega a ultima fagulha do fogo. A cada camara selada que voce
+        limpa, um braseiro pode ser aceso: a luz quente volta, a porta seguinte
+        se abre, e o escuro recua um pouco mais para baixo.
+      </p>
+
+      <ol class="loop">
+        <li><span>01</span> Entre na camara selada, em penumbra fria.</li>
+        <li><span>02</span> Os mortos despertam: combate melee, esquiva, bloqueio e o golpe de fogo.</li>
+        <li><span>03</span> Sala limpa, acenda o braseiro: luz, uma dadiva e a saida destravada.</li>
+        <li><span>04</span> Desca ate o Guardiao da Brasa apagada.</li>
+      </ol>
+    </section>
+
+    <!-- CAPTURA -->
+    <section class="shot">
+      <figure>
+        <img src="./media/captura-cripta.png" alt="Captura do prototipo: a sala-cripta com o feixe de luz do braseiro" loading="lazy" />
+        <figcaption>Captura do prototipo em desenvolvimento (graybox iluminado).</figcaption>
+      </figure>
+    </section>
+
+    <!-- PILARES -->
+    <section class="band">
+      <h2>Feito para rodar leve</h2>
+      <div class="pillars">
+        <div>
+          <h3>Uma sala por vez</h3>
+          <p>O mundo e contido: so uma camara fica carregada de cada vez. A premissa narrativa e a otimizacao tecnica sao a mesma coisa.</p>
+        </div>
+        <div>
+          <h3>WebGPU com fallback</h3>
+          <p>Babylon.js 9 tenta WebGPU e cai para WebGL2 sem travar. Fisica Havok em WASM. Nada para instalar: abre e joga.</p>
+        </div>
+        <div>
+          <h3>Arte CC0</h3>
+          <p>Personagens, inimigos e cenario vem de pacotes CC0 (KayKit, Quaternius) num estilo unico e coeso.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <p><strong>Brasa</strong> . prototipo em desenvolvimento</p>
+      <p class="credits">
+        Codigo sob licenca MIT . Assets CC0 de
+        <a href="https://kaylousberg.itch.io/" target="_blank" rel="noopener">Kay Lousberg (KayKit)</a> e
+        <a href="https://quaternius.com/" target="_blank" rel="noopener">Quaternius</a>.
+      </p>
+    </footer>
+  </main>
+</body>
+</html>

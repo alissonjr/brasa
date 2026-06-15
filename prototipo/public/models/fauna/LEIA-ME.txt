@@ -1,0 +1,9 @@
+Solte aqui os GLBs de ANIMAIS (low-poly, CC0 - ex.: Quaternius Animal Pack).
+Nomes reconhecidos automaticamente (qualquer um que existir é usado):
+  goat.glb    (cabra; pode ser a ovelha re-tingida)
+  sheep.glb   (ovelha)
+  donkey.glb  (jumento/burro)
+  cow.glb     (boi/vaca)
+Requisitos: escala livre (o jogo normaliza a altura), de preferência com
+AnimationGroups chamados Idle/Walk (Quaternius já vem assim). Sem isso, o
+animal fica parado. Licença: use CC0/permissiva (ver criterios do projeto).

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <title>Brasa</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0a0e14;
+        font-family: system-ui, sans-serif;
+      }
+      #renderCanvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+        touch-action: none;
+        outline: none;
+      }
+      #hud {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        padding: 10px 14px;
+        background: rgba(12, 17, 24, 0.6);
+        color: #cdd6e0;
+        font-size: 13px;
+        line-height: 1.6;
+        border-radius: 6px;
+        border: 1px solid rgba(205, 214, 224, 0.2);
+        pointer-events: none;
+        user-select: none;
+      }
+      #hud b {
+        color: #ffb060;
+      }
+      #fps {
+        position: fixed;
+        bottom: 12px;
+        left: 12px;
+        padding: 6px 10px;
+        background: rgba(12, 17, 24, 0.6);
+        color: #ffb060;
+        font-size: 12px;
+        font-variant-numeric: tabular-nums;
+        border-radius: 6px;
+        pointer-events: none;
+        user-select: none;
+      }
+      #loading {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #cdd6e0;
+        font-size: 16px;
+        background: #0a0e14;
+        z-index: 10;
+      }
+      /* O atributo `hidden` precisa vencer o `display: flex` acima (mais
+         específico que a regra padrão [hidden] { display: none } do navegador). */
+      [hidden] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="loading">Carregando física (Havok)...</div>
+    <div id="hud" hidden>
+      <div><b>Clique</b> na tela para travar o mouse</div>
+      <div><b>WASD</b> mover · <b>Shift</b> correr · <b>Espaço</b> pular</div>
+      <div><b>Mouse</b> girar câmera · <b>Scroll</b> zoom</div>
+      <div><b>Esc</b> ou botão <b>Menu</b> (canto superior direito): pausar</div>
+    </div>
+    <div id="fps" hidden>-- fps</div>
+    <script type="module" src="/src/app/main.ts"></script>
+  </body>
+</html>

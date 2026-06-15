@@ -1,0 +1,29 @@
+Creditos de assets - Brasa (todos CC0 1.0 Universal: uso livre, inclusive comercial,
+sem exigencia de atribuicao; creditamos por boa pratica).
+
+KayKit - Character Pack: Adventurers (Kay Lousberg)
+  Arquivos: Mage.glb (heroi jogavel EM JOGO, rigado), Rogue_Hooded.glb (variante encapuzada).
+  Fonte: https://kaylousberg.itch.io/kaykit-adventurers
+         https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0
+
+Acendedora (modelo proprio do projeto) - acendedora.glb
+  Gerado via Tripo 3D (text-to-model) e limpo no Blender (tools/isolate_acendedora.py:
+  isola uma das figuras, recentra, reexporta). Estatico (sem rig); usado APENAS nas
+  vitrines 3D dos menus (tela-titulo, criacao, Cronica). O heroi EM JOGO segue no KayKit
+  Mage rigado ate existir uma versao riggada da Acendedora. Asset proprio, sem restricao.
+
+KayKit - Character Pack: Skeletons (Kay Lousberg)
+  Arquivos: Skeleton_Warrior.glb, Skeleton_Minion.glb, Skeleton_Mage.glb, Skeleton_Rogue.glb
+            (os mortos despertos; rigados).
+  Fonte: https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0
+
+KayKit - Dungeon Pack (Kay Lousberg)
+  Arquivos: ver public/assets/dungeon_kit/ (wall, wall_corner, pillar, torch, door,
+            barrel, crate, chest, floor*). Sala-cripta modular.
+  Fonte: https://kaylousberg.itch.io/kaykit-dungeon-remastered
+         https://archive.org/details/kaykit_dungeon_pack_1.0
+
+Quaternius - Universal Animation Library
+  Arquivo: AnimationLibrary_Godot_Standard.gltf (biblioteca de animacao / manequim de
+           fallback do HeroModel).
+  Fonte: https://quaternius.com  /  https://github.com/J-Ponzo/gltf-universal-animation-library

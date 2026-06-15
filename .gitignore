@@ -1,0 +1,25 @@
+# Dependencias e builds
+node_modules/
+dist/
+_site/
+*.local
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Segredos (token da API da Tripo etc.) - NUNCA versionar
+*.token
+**/.tripo-token
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Configuracao local do agente (manter so o compartilhavel se desejar)
+.claude/settings.local.json

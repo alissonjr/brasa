@@ -1,0 +1,58 @@
+name: Deploy (GitHub Pages)
+
+# Publica a landing em / e o jogo em /play/ a cada push na branch principal.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Um deploy por vez; nao cancela um em andamento.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: prototipo/package-lock.json
+
+      - name: Instalar dependencias
+        working-directory: prototipo
+        run: npm ci
+
+      - name: Build do jogo
+        working-directory: prototipo
+        run: npm run build
+
+      - name: Montar site (landing + jogo em /play)
+        run: |
+          mkdir -p _site
+          cp -r landing/* _site/
+          mkdir -p _site/play
+          cp -r prototipo/dist/* _site/play/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

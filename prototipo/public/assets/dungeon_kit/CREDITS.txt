@@ -1,0 +1,30 @@
+Creditos de assets - Brasa (CC0 1.0 Universal: uso livre, inclusive comercial,
+sem exigencia de atribuicao; creditamos por boa pratica).
+
+KayKit - Dungeon Remastered Pack (Kay Lousberg)
+  Pacote modular da cripta: paredes, pisos, pilares, portas, tochas, moveis, bauis,
+  barris, caixas, garrafas/pocoes, moedas, chaves, estandartes e props diversos.
+  Atlas unico do pacote (nao explodir em varios materiais).
+  Licenca: CC0 1.0 Universal (dominio publico, uso comercial livre, sem atribuicao).
+  Fonte: https://kaylousberg.itch.io/kaykit-dungeon-remastered
+         https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0
+  Data de download/ingestao: 2026-06-14.
+
+  Lote inicial (33 pecas): wall, wall_broken, wall_corner, wall_deco_a, wall_deco_b,
+    wall_door, wall_gate_door, pillar, pillar_broken, floor, floor_alt, floor_deco,
+    floor_wood, door, torch, torch_wall, trapdoor, stairs_wide, stool, table, bench,
+    chair, bookcase, banner, weapon_rack, barrel, crate, chest, bucket, pots, coins,
+    rubble, skull.
+
+  Lote 2026-06-14 (31 pecas novas, mesmo pacote/atlas) para enriquecer cenarios:
+    Pocoes/alquimia: bottle_A_green, bottle_A_labeled_green, bottle_B_green,
+      bottle_C_brown, candle_triple, candle_lit, shelf_small_candles.
+    Saque/tesouro: chest_gold, coin_stack_large, coin_stack_medium, key, keyring,
+      sword_shield, sword_shield_gold.
+    Mobiliario/dressing: shelf_large, shelves, keg, keg_decorated, trunk_large_A,
+      table_long_tablecloth, plate_food_A.
+    Variacao estrutural: pillar_decorated, column, wall_arched, wall_archedwindow_open,
+      wall_cracked, floor_tile_grate, floor_tile_big_spikes (armadilha), barrier,
+      barrier_corner, stairs_wood.
+  Pipeline: download direto (.glb autocontido do repo, sem Git LFS), validados por
+    validate_gltf.py (Y-up, escala, teto de tris, atlas) - todos RESULTADO OK.
