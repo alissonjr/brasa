@@ -630,3 +630,21 @@ Pendências [A DEFINIR]
 - Código reaproveitado: `prototipo/src/engine/ui/uiManager.ts`, `prototipo/src/game/ui/{hud,combatHud,screens,strings,fonts}.ts` e `theme.css`.
 </content>
 </invoke>
+
+---
+
+## ATUALIZAÇÃO W6 (2026-06-15) - blueprint de polimento
+
+`[DESIGN]` Itens da onda W6 (parte já em implementação pelo autor; aqui fica o alvo):
+
+- **Feedback positivo de combate:** acerto sem dano = flash breve dourado na borda; cura =
+  brilho verde + harmônico; bloqueio bem-sucedido = tintado de bronze; crítico/execução =
+  estouro forte. ~200 ms, sempre som + visual. (O `combatDirector` já dispara burst/shake/som
+  no acerto; falta o overlay de borda positivo.)
+- **HUD da Fagulha em cargas:** trocar a barra contínua por pips discretos (~3), já que cada
+  ember custa ~1/3. Indicador sutil de estado da sala (selada/limpa/acesa).
+- **Variação por run (implementado):** `main.ts` aplica jitter de ângulo/raio nas posições dos
+  inimigos a cada descida (mesma planta, disposição diferente) -> rejogabilidade barata. Próximo:
+  ordem das dádivas ofertadas e um bônus "do dia".
+- **Escurecimento da arena do Guardião** por `brasaLightFraction` (W3): quando a Brasa apaga, a
+  névoa/ambiente da arena escurecem; ao reacender, clareiam. Liga o visual à mecânica de luz.

@@ -567,3 +567,19 @@ Acessibilidade (seção 8):
 Estilo:
 - [ ] Sem travessões, sem emojis em qualquer texto exibido (guia de estilo) [NORMATIVO]
 - [ ] Itens [A DEFINIR] resolvidos ou explicitamente adiados com registro [NORMATIVO]
+
+---
+
+## ATUALIZAÇÃO W6 (2026-06-15) - momentos sonoros prioritários
+
+`[DESIGN]` Alvo de áudio da onda W6 (trilha adaptativa já em implementação: `configureMusic`/
+`setMusicState` com estados frio/combate/quente). Momentos a cobrir:
+
+- **Stingers:** despertar dos mortos (metálico, sobe 1 semitom), Fagulha pega (lira ascendente),
+  avistar o Guardião (grave intimidador), reavivar a Brasa (crescimento dramático).
+- **SFX por tipo de inimigo (assinatura de tell):** minion = swish agudo; warrior = swish +
+  bronze ao erguer; heavy = THOOM grave; conjurador = assobio frio; espreitador = sopro de dash.
+  Essencial porque a sala é escura: a leitura do tell não pode depender só de cor.
+- **Cambaleio do Guardião (W3):** som agudo de "cega" + batida grave ao reacender (sinal de
+  janela de dano dobrado).
+- **Ecos do passado:** voz reverberada (decay ~3,5 s), filtrada (sem graves), legendada no HUD.
