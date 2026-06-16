@@ -530,3 +530,25 @@ Tuning e orçamento (§9, `projeto-brasa.md` §4)
 Processo
 - [ ] Sem travessões, sem emojis em qualquer texto exibido (guia de estilo) [NORMATIVO]
 - [ ] Itens [A DEFINIR] resolvidos ou explicitamente adiados com registro [NORMATIVO]
+
+---
+
+## ATUALIZAÇÃO W2 (2026-06-15) - implementado no código
+
+`[CÓDIGO]` `[NORMATIVO]` Itens da onda W2 do roadmap ([`00-aprofundamento-e-roadmap.md`](00-aprofundamento-e-roadmap.md) 3.1) já no jogo:
+
+- **Fagulha / Golpe de Fogo (ember):** já existia e foi ratificado em `tuning.ts`
+  (`ember`: startup 0.26, active 0.10, recovery 0.42, dano 22, knockback 5, raio 5.5, cone
+  arcCos 0.5; custo 0.34 de Fagulha; regen 0.16/s; recarrega no braseiro). Como cada uso custa
+  ~1/3 da barra, lê-se na prática como ~3 cargas. HUD em pips fica para a W6.
+- **Status Queimadura (novo):** `tuning.ts` bloco `BURN` (2 dano/s, 3 s, até 2 stacks, +10% de
+  dano recebido e +15% de knockback no queimado). O ember aplica; `combatDirector.ts` tica o
+  dano e aplica os bônus no golpe leve/pesado contra alvo queimado. Glow no ator: gancho
+  `setBurning` (visual entra na W6).
+- **Árvore de dádivas (substitui as 5 planas):** 9 dádivas em 3 ramos (Agressão: Golpista,
+  Queimador, Sede da Brasa; Defesa: Revestimento, Fôlego, Pele de Brasa; Utilidade: Fagulha
+  Perene, Ressonância, Braseiro Quente). O braseiro oferece 1 de CADA ramo + a Lasca grátis
+  (curadoria garante 1 ofensiva + 1 defensiva + 1 utilidade). Modificadores em `heroCombat.ts`
+  (`addBurnBoost`, `setDamageCap`, `addMaxStamina`, `addSparkRegenMul`, `enableResonance`,
+  `setBrazierHealFrac`, além dos já existentes).
+- **Ressonância:** acertos encadeados sem apanhar dão até +30% de dano (zera ao tomar dano).

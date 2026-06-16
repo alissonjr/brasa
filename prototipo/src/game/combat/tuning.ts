@@ -81,6 +81,19 @@ export const POTIONS = {
   furia: { dmgBonus: 0.6, durationSec: 8, cost: 6, cap: 2 }, // Elixir de Fúria
 } as const;
 
+/**
+ * QUEIMADURA (status do fogo). Aplicada pelo Golpe de Fogo (ember). Dano por segundo ao
+ * alvo, faz o queimado receber mais dano e mais knockback. Empilha. Dádivas estendem
+ * (Queimador: +duracao, +stack). Ver docs/brasa/00-aprofundamento-e-roadmap.md (3.1).
+ */
+export const BURN = {
+  dps: 2, // dano por segundo
+  durationSec: 3, // duracao base
+  maxStacks: 2, // empilha ate 2 (4 dano/s)
+  dmgTakenBonus: 0.1, // queimado recebe +10% de dano dos golpes do heroi
+  knockbackBonus: 0.15, // e +15% de knockback
+} as const;
+
 export const ABSORB = {
   // Essência: orbe de cura que dropa do morto e se pega andando por cima.
   essencia: { dropChanceBase: 0.5, healFrac: 0.06, lifeSec: 8, pickupRadius: 1.4 },

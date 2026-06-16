@@ -525,3 +525,20 @@ Pendências [A DEFINIR]
 - [ ] Luz-que-recua nas salas opcionais (seção 2.3): ativar no slice ou adiar; decidir após o primeiro teste de sala escura. [DESIGN][A DEFINIR]
 - [ ] Meta-progressão entre descidas (seção 7.2): linear (Opção A) vs. roguelite leve (Opção B); definir após o slice rodar. [DESIGN][A DEFINIR]
 - [ ] Quantas melhorias-assinatura e quais entram no slice (seção 5.2); "Cinza viva" (auto-reacender) pode ser forte demais, testar. [DESIGN][A DEFINIR]
+
+---
+
+## ATUALIZAÇÃO W2 (2026-06-15) - árvore de dádivas no código
+
+`[CÓDIGO]` `[NORMATIVO]` As 5 dádivas planas viraram uma ÁRVORE de 9 em 3 ramos, com oferta
+curada no braseiro (1 de cada ramo + Lasca grátis). Detalhe e custos em
+[`00-aprofundamento-e-roadmap.md`](00-aprofundamento-e-roadmap.md) 3.1.
+
+| Ramo | Dádivas |
+|---|---|
+| Agressão | Golpista (+12% dano), Queimador (Queimadura +2s/+1 stack), Sede da Brasa (roubo de vida) |
+| Defesa | Revestimento (cap de dano 22), Fôlego (+25 stamina), Pele de Brasa (+25 vida) |
+| Utilidade | Fagulha Perene (regen +60%), Ressonância (acertos encadeados +30% dano), Braseiro Quente (cura 60% ao acender) |
+
+Matriz de economia (PF por andar x custo) permanece a referência da seção anterior; a
+curadoria por ramo garante que nenhuma visita ofereça 3 do mesmo tipo.

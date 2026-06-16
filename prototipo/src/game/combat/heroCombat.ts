@@ -23,6 +23,7 @@ const REST = 0.5;
 const WINDUP = -1.2;
 const STRIKE = 1.3;
 const GUARD = -0.2; // pose de bloqueio (lâmina/escudo erguido à frente)
+const PARRY_WINDOW_SEC = 0.18; // janela de deflect ao iniciar o bloqueio (ref. Sekiro ~200ms)
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -39,6 +40,8 @@ export class HeroCombat {
   private activeTuning: AttackTuning = HERO.light;
   private hitConsumed = false;
   private blocking = false;
+  private wasBlocking_ = false; // borda do bloqueio (para abrir a janela de parry)
+  private parryTimer_ = 0; // janela de parry restante (deflect de projétil)
 
   // Combo de leves.
   private comboStep = 0; // 0,1 = leve; 2 = finalizadora
@@ -67,6 +70,18 @@ export class HeroCombat {
   // Buff de dano TEMPORIZADO (Elixir de Fúria): soma ao dmgMul enquanto o timer corre.
   private buffMul = 0;
   private buffTimer = 0;
+
+  // --- W2: árvore de dádivas (ramos Agressão/Defesa/Utilidade) ---
+  private burnDurationBonus_ = 0; // Queimador: +segundos na Queimadura aplicada pelo ember
+  private burnStackBonus_ = 0; // Queimador: +stacks máximos de Queimadura
+  private damageCap_ = 0; // Revestimento: dano recebido acima disto é cortado para isto (0 = sem cap)
+  private sparkRegenMul_ = 1; // Fagulha Perene: multiplica a regeneração de Fagulha
+  private maxStamina_ = HERO.maxStamina; // Fôlego: stamina máxima (mutável)
+  private lightRadiusBonus_ = 0; // Luz da Acendedora: +raio de luz (lido pela sala/iluminação)
+  private brazierHealFrac_ = 0.4; // Braseiro Quente: fração curada ao acender (base 0.25)
+  // Ressonância: acertos encadeados sem apanhar dão dano crescente; zera ao tomar dano.
+  private resonanceOn_ = false;
+  private hitStreak_ = 0;
 
   constructor(scene: Scene, parent: TransformNode) {
     this.pivot = new TransformNode("weaponPivot", scene);
@@ -170,11 +185,16 @@ export class HeroCombat {
     return this.blocking;
   }
 
+  /** Janela de parry ativa (bloqueio recém-iniciado): bloqueio frontal DEVOLVE o projétil. */
+  get parryActive(): boolean {
+    return this.blocking && this.parryTimer_ > 0;
+  }
+
   get healthFraction(): number {
     return this.health.fraction;
   }
   get staminaFraction(): number {
-    return this.stamina / HERO.maxStamina;
+    return this.stamina / this.maxStamina_;
   }
 
   setDamageTakenMultiplier(mul: number): void {
@@ -182,9 +202,25 @@ export class HeroCombat {
   }
 
   // --- Upgrades (dádivas da Brasa) ---
-  /** Multiplicador de dano causado (lido pelo CombatDirector). Inclui o buff temporário. */
+  /** Multiplicador de dano causado (lido pelo CombatDirector). Inclui buff temporário e Ressonância. */
   get damageMul(): number {
-    return this.dmgMul + (this.buffTimer > 0 ? this.buffMul : 0);
+    const resonance = this.resonanceOn_ ? Math.min(0.3, this.hitStreak_ * 0.06) : 0;
+    return this.dmgMul + (this.buffTimer > 0 ? this.buffMul : 0) + resonance;
+  }
+  /** Queimadura aplicada pelo ember: duração e stacks extra das dádivas (lido pelo CombatDirector). */
+  get burnDurationBonus(): number {
+    return this.burnDurationBonus_;
+  }
+  get burnStackBonus(): number {
+    return this.burnStackBonus_;
+  }
+  /** +raio de luz por dádiva (lido pela sala ao acender o braseiro). */
+  get lightRadiusBonus(): number {
+    return this.lightRadiusBonus_;
+  }
+  /** Fração curada ao acender o braseiro (Braseiro Quente sobe de 0.25 para 0.5). */
+  get brazierHealFrac(): number {
+    return this.brazierHealFrac_;
   }
   /** Fração do dano que vira vida no acerto (0 = sem roubo de vida). */
   get lifesteal(): number {
@@ -229,6 +265,37 @@ export class HeroCombat {
   addMaxHealth(n: number): void {
     this.health.raiseMax(n);
   }
+  // --- W2: dádivas da árvore ---
+  /** Queimador: Queimadura do ember dura +seconds e ganha +stacks. */
+  addBurnBoost(seconds: number, stacks: number): void {
+    this.burnDurationBonus_ += seconds;
+    this.burnStackBonus_ += stacks;
+  }
+  /** Revestimento: dano recebido acima de `cap` é cortado para `cap`. */
+  setDamageCap(cap: number): void {
+    this.damageCap_ = cap;
+  }
+  /** Fagulha Perene: multiplica a regeneração de Fagulha. */
+  addSparkRegenMul(factor: number): void {
+    this.sparkRegenMul_ *= factor;
+  }
+  /** Fôlego: aumenta a stamina máxima (e enche). */
+  addMaxStamina(n: number): void {
+    this.maxStamina_ += n;
+    this.stamina = this.maxStamina_;
+  }
+  /** Luz da Acendedora: +raio de luz (a sala lê ao acender). */
+  addLightRadius(m: number): void {
+    this.lightRadiusBonus_ += m;
+  }
+  /** Braseiro Quente: define a fração curada ao acender o braseiro. */
+  setBrazierHealFrac(frac: number): void {
+    this.brazierHealFrac_ = frac;
+  }
+  /** Ressonância: liga o dano crescente por acertos encadeados. */
+  enableResonance(): void {
+    this.resonanceOn_ = true;
+  }
 
   weaponHitPoint(): Vector3 {
     this.hitNode.computeWorldMatrix(true);
@@ -237,6 +304,7 @@ export class HeroCombat {
 
   markHit(): void {
     this.hitConsumed = true;
+    if (this.resonanceOn_) this.hitStreak_ = Math.min(5, this.hitStreak_ + 1); // Ressonância sobe (cap +30%)
   }
 
   /**
@@ -246,7 +314,10 @@ export class HeroCombat {
   takeDamage(amount: number): { applied: boolean; died: boolean } {
     if (this.invulnerable || amount <= 0) return { applied: false, died: false };
     const blockMul = this.blocking ? 0.25 : 1; // bloqueio reduz dano frontal (parry exato fica p/ depois)
-    const { died } = this.health.damage(amount * this.damageTakenMul * blockMul);
+    let dmg = amount * this.damageTakenMul * blockMul;
+    if (this.damageCap_ > 0 && dmg > this.damageCap_) dmg = this.damageCap_; // Revestimento
+    this.hitStreak_ = 0; // apanhar zera a Ressonância
+    const { died } = this.health.damage(dmg);
     return { applied: true, died };
   }
 
@@ -254,7 +325,8 @@ export class HeroCombat {
   revive(): void {
     this.health.reset();
     this.state = "idle";
-    this.stamina = HERO.maxStamina;
+    this.stamina = this.maxStamina_;
+    this.hitStreak_ = 0;
   }
 
   /** Zera todos os upgrades/dádivas (jogo novo): volta o herói ao estado-base. */
@@ -265,6 +337,16 @@ export class HeroCombat {
     this.buffMul = 0;
     this.buffTimer = 0;
     this.health.setMax(HERO.maxHealth);
+    // W2: zera as dádivas da árvore.
+    this.burnDurationBonus_ = 0;
+    this.burnStackBonus_ = 0;
+    this.damageCap_ = 0;
+    this.sparkRegenMul_ = 1;
+    this.maxStamina_ = HERO.maxStamina;
+    this.lightRadiusBonus_ = 0;
+    this.brazierHealFrac_ = 0.4;
+    this.resonanceOn_ = false;
+    this.hitStreak_ = 0;
   }
 
   // --- loop ---
@@ -273,6 +355,13 @@ export class HeroCombat {
     this.regenStamina(deltaSeconds);
     this.regenSpark(deltaSeconds);
     if (this.buffTimer > 0) this.buffTimer = Math.max(0, this.buffTimer - deltaSeconds);
+
+    // Janela de PARRY: ao INICIAR o bloqueio, abre ~0,18 s em que o bloqueio frontal DEVOLVE
+    // o projétil (deflect), em vez de só pará-lo. Spam de bloqueio não renova (precisa soltar).
+    const blockingNow = input.isHeld("block");
+    if (blockingNow && !this.wasBlocking_) this.parryTimer_ = PARRY_WINDOW_SEC;
+    else if (this.parryTimer_ > 0) this.parryTimer_ = Math.max(0, this.parryTimer_ - deltaSeconds);
+    this.wasBlocking_ = blockingNow;
 
     switch (this.state) {
       case "dodging":
@@ -365,7 +454,7 @@ export class HeroCombat {
 
   private regenSpark(dt: number): void {
     if (this.spark < HERO.spark.max) {
-      this.spark = Math.min(HERO.spark.max, this.spark + HERO.spark.regenPerSec * dt);
+      this.spark = Math.min(HERO.spark.max, this.spark + HERO.spark.regenPerSec * this.sparkRegenMul_ * dt);
     }
   }
 
@@ -403,8 +492,8 @@ export class HeroCombat {
       this.regenDelay = Math.max(0, this.regenDelay - dt);
       return;
     }
-    if (this.stamina < HERO.maxStamina) {
-      this.stamina = Math.min(HERO.maxStamina, this.stamina + HERO.staminaRegenPerSec * dt);
+    if (this.stamina < this.maxStamina_) {
+      this.stamina = Math.min(this.maxStamina_, this.stamina + HERO.staminaRegenPerSec * dt);
     }
   }
 

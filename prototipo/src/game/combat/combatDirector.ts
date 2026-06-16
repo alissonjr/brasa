@@ -5,7 +5,7 @@ import type { Acendedora } from "../actors/acendedora";
 import { TrainingDummy } from "../actors/trainingDummy";
 import { Skeleton, type SkeletonKind, type ShotSpec } from "../actors/enemies/skeleton";
 import { Guardiao } from "../actors/enemies/guardiao";
-import { ABSORB } from "./tuning";
+import { ABSORB, BURN } from "./tuning";
 import type { CombatTarget } from "./combatTarget";
 import { ImpactFx } from "./impactFx";
 import { hitThunk, heroHurt, shieldClank } from "./combatSound";
@@ -36,11 +36,15 @@ export class CombatDirector {
   private bossCredited = false;
   private wakeTimer = 0; // "despertar": inimigos ficam parados (erguendo-se) por um instante ao entrar
   // Projeteis em voo (conjuradores): esfera emissiva que viaja e fere o herói ao alcançá-lo.
-  private readonly projectiles: { mesh: Mesh; pos: Vector3; vel: Vector3; life: number; damage: number }[] = [];
+  private readonly projectiles: { mesh: Mesh; pos: Vector3; vel: Vector3; life: number; damage: number; friendly: boolean }[] = [];
   private projMat: StandardMaterial | null = null;
+  private deflectMat: StandardMaterial | null = null; // bola DEVOLVIDA (parry): azul-branca
+  private readonly tmpFacing = new Vector3();
   // Essencias: orbes de cura que dropam do morto e curam ao serem coletadas (absorcao).
   private readonly essences: { mesh: Mesh; pos: Vector3; life: number }[] = [];
   private essMat: StandardMaterial | null = null;
+  // W2: Queimadura por alvo (status do ember). time = segundos restantes; stacks = pilha.
+  private readonly burns = new Map<CombatTarget, { time: number; stacks: number; tick: number }>();
 
   constructor(
     private readonly scene: Scene,
@@ -95,6 +99,7 @@ export class CombatDirector {
     this.projectiles.length = 0;
     for (const e of this.essences) e.mesh.dispose();
     this.essences.length = 0;
+    this.burns.clear();
   }
 
   /** Cria um projetil (esfera de fogo) viajando na direcao do disparo do conjurador. */
@@ -107,7 +112,7 @@ export class CombatDirector {
       mat.disableLighting = true;
       this.projMat = mat;
     }
-    const mesh = MeshBuilder.CreateSphere("projetil", { diameter: 0.45, segments: 8 }, this.scene);
+    const mesh = MeshBuilder.CreateSphere("projetil", { diameter: 0.6, segments: 10 }, this.scene);
     mesh.material = this.projMat;
     mesh.isPickable = false;
     mesh.position.set(s.ox, s.oy, s.oz);
@@ -117,25 +122,93 @@ export class CombatDirector {
       vel: new Vector3(s.dx * s.speed, 0, s.dz * s.speed),
       life: 3.5,
       damage: s.damage,
+      friendly: false,
     });
   }
 
-  /** Move os projeteis, resolve o acerto no heroi (proximidade) e descarta os expirados. */
+  /**
+   * Move os projeteis e resolve contatos. Bola inimiga: o herói pode ESQUIVAR (i-frames, já
+   * em takeDamage), BLOQUEAR de frente (cone ~120 graus -> some sem dano) ou dar PARRY
+   * (bloqueio recém-iniciado -> DEVOLVE a bola, agora "amiga", que fere o conjurador). Bola
+   * amiga (devolvida): ignora o herói e atinge inimigos.
+   */
   private updateProjectiles(dt: number, heroPos: Vector3): void {
     if (dt <= 0 || this.projectiles.length === 0) return;
+    const hc = this.hero.combat;
     for (let i = this.projectiles.length - 1; i >= 0; i--) {
       const p = this.projectiles[i]!;
       p.pos.addInPlace(p.vel.scale(dt));
       p.mesh.position.copyFrom(p.pos);
       p.life -= dt;
+
+      if (p.friendly) {
+        // Bola devolvida: fere o primeiro inimigo que tocar.
+        let struck = false;
+        for (const target of this.targets) {
+          if (!target.health.alive) continue;
+          const hb = target.hurtbox;
+          const ddx = hb.center.x - p.pos.x;
+          const ddz = hb.center.z - p.pos.z;
+          if (ddx * ddx + ddz * ddz < (hb.radius + 0.4) * (hb.radius + 0.4)) {
+            this.tmpDir.set(p.vel.x, 0, p.vel.z).normalize();
+            target.takeHit(p.damage, this.tmpDir, 4, true);
+            this.fx.burst(p.pos, 18);
+            this.hitStop.trigger(3 / 60);
+            hitThunk(true);
+            struck = true;
+            break;
+          }
+        }
+        if (struck || p.life <= 0) {
+          p.mesh.dispose();
+          this.projectiles.splice(i, 1);
+        }
+        continue;
+      }
+
       const dxh = heroPos.x - p.pos.x;
       const dzh = heroPos.z - p.pos.z;
       const hit = dxh * dxh + dzh * dzh < 0.7 * 0.7 && Math.abs(p.pos.y - (heroPos.y + 1.0)) < 1.2;
-      if (hit || p.life <= 0) {
-        if (hit) {
-          this.fx.burst(p.pos, 14);
-          this.onEnemyStrike(p.damage); // aplica i-frames/bloqueio como qualquer golpe inimigo
+      if (hit) {
+        // Frontal? hero encara CONTRA a direção de voo (toward a origem da bola).
+        this.hero.getFacing(this.tmpFacing);
+        const vlen = Math.hypot(p.vel.x, p.vel.z) || 1;
+        const frontal = (this.tmpFacing.x * p.vel.x + this.tmpFacing.z * p.vel.z) / vlen < -0.5;
+        if (hc.isBlocking && frontal && hc.parryActive) {
+          // PARRY: devolve a bola (azul-branca), mais rápida e com mais dano. Vira "amiga".
+          if (!this.deflectMat) {
+            const m = new StandardMaterial("deflectMat", this.scene);
+            m.emissiveColor = Color3.FromHexString("#bfe6ff");
+            m.diffuseColor = Color3.Black();
+            m.specularColor = Color3.Black();
+            m.disableLighting = true;
+            this.deflectMat = m;
+          }
+          p.mesh.material = this.deflectMat;
+          p.vel.scaleInPlace(-1.8);
+          p.damage = p.damage * 2 + 10;
+          p.friendly = true;
+          p.life = 2.5;
+          this.fx.burst(p.pos, 20);
+          this.hitStop.trigger(5 / 60);
+          this.camera.shake(0.06);
+          shieldClank();
+          continue; // não consome a bola: ela volta voando
         }
+        if (hc.isBlocking && frontal) {
+          // BLOQUEIO frontal: a bola some sem dano (escudo). Feedback metálico.
+          this.fx.burst(p.pos, 10);
+          this.camera.shake(0.03);
+          shieldClank();
+        } else {
+          this.fx.burst(p.pos, 14);
+          this.onEnemyStrike(p.damage); // esquiva (i-frames) ainda anula em takeDamage
+        }
+        p.mesh.dispose();
+        this.projectiles.splice(i, 1);
+        continue;
+      }
+      if (p.life <= 0) {
         p.mesh.dispose();
         this.projectiles.splice(i, 1);
       }
@@ -196,6 +269,7 @@ export class CombatDirector {
       }
     }
     this.updateEssences(combatDt, heroPos);
+    this.tickBurns(combatDt);
 
     return combatDt;
   }
@@ -218,7 +292,10 @@ export class CombatDirector {
       this.tmpDir.normalize();
 
       const heavy = tuning.hitStopFrames >= 8; // pesado quebra a guarda frontal
-      const { guarded } = target.takeHit(tuning.damage * hc.damageMul, this.tmpDir, tuning.knockback, heavy);
+      const burning = this.burns.has(target); // alvo queimado: leva mais dano e mais knockback
+      const dmgMul = hc.damageMul * (burning ? 1 + BURN.dmgTakenBonus : 1);
+      const kb = tuning.knockback * (burning ? 1 + BURN.knockbackBonus : 1);
+      const { guarded } = target.takeHit(tuning.damage * dmgMul, this.tmpDir, kb, heavy);
       if (guarded) {
         // Bloqueado pela guarda: feedback metálico curto (ensina a flanquear / usar o pesado).
         this.hitStop.trigger(2 / 60);
@@ -267,6 +344,7 @@ export class CombatDirector {
         this.tmpDir.copyFrom(fwd);
       }
       target.takeHit(t.damage, this.tmpDir, t.knockback, true); // guardBreak: o fogo ignora o escudo
+      this.applyBurn(target); // o fogo deixa Queimadura
     }
     // Estouro de fogo + feedback (dispara mesmo sem alvo).
     const fxPoint = origin.add(fwd.scale(2.2));
@@ -276,6 +354,50 @@ export class CombatDirector {
     this.fx.burst(fxPoint, 34);
     hitThunk(true);
     hc.markEmber();
+  }
+
+  /** Aplica/renova Queimadura num alvo (Golpe de Fogo). Dádiva Queimador estende. */
+  private applyBurn(target: CombatTarget): void {
+    const hc = this.hero.combat;
+    const dur = BURN.durationSec + hc.burnDurationBonus;
+    const maxStacks = BURN.maxStacks + hc.burnStackBonus;
+    const cur = this.burns.get(target);
+    if (cur) {
+      cur.time = dur;
+      cur.stacks = Math.min(maxStacks, cur.stacks + 1);
+    } else {
+      this.burns.set(target, { time: dur, stacks: 1, tick: 0 });
+      this.setBurning(target, true);
+    }
+  }
+
+  /** Tick da Queimadura: a cada 1 s aplica dano (dps * stacks), sem knockback, ignora escudo. */
+  private tickBurns(dt: number): void {
+    if (dt <= 0 || this.burns.size === 0) return;
+    for (const [target, b] of this.burns) {
+      if (!target.health.alive) {
+        this.setBurning(target, false);
+        this.burns.delete(target);
+        continue;
+      }
+      b.time -= dt;
+      b.tick += dt;
+      if (b.tick >= 1) {
+        b.tick -= 1;
+        this.tmpDir.set(0, 0, 1);
+        target.takeHit(BURN.dps * b.stacks, this.tmpDir, 0, true);
+        this.fx.burst(target.hurtbox.center, 6);
+      }
+      if (b.time <= 0) {
+        this.setBurning(target, false);
+        this.burns.delete(target);
+      }
+    }
+  }
+
+  /** Liga/desliga o brilho de Queimadura no ator, se ele suportar (Skeleton). */
+  private setBurning(target: CombatTarget, on: boolean): void {
+    (target as { setBurning?: (on: boolean) => void }).setBurning?.(on);
   }
 
   /** Chance de o morto soltar uma essência (orbe de cura), escalada pelo seu valor. */

@@ -327,21 +327,35 @@ async function main(): Promise<void> {
 
   // Dádivas da Brasa: compradas no braseiro (custam Fagulha). Cada descida oferece 3 do
   // acervo + a "Lasca de Brasa" GRÁTIS (garante progresso mesmo com a bolsa vazia).
-  interface Boon { name: string; desc: string; cost: number; apply: () => void; }
+  // Árvore de dádivas da Brasa (W2): três ramos (Agressão / Defesa / Utilidade). A oferta
+  // do braseiro é CURADA: 1 de cada ramo (garante sempre 1 ofensiva + 1 defensiva + 1 de
+  // utilidade) + a Lasca grátis. Ver docs/brasa/00-aprofundamento-e-roadmap.md (3.1).
+  type Ramo = "agressao" | "defesa" | "utilidade";
+  interface Boon { name: string; desc: string; cost: number; ramo: Ramo; apply: () => void; }
   const BOONS: Boon[] = [
-    { name: "Brasa Ardente", desc: "+35% de dano em cada golpe.", cost: 9, apply: () => hero.combat.addDamageMul(0.35) },
-    { name: "Coração de Brasa", desc: "+25 de vida máxima (e cura).", cost: 9, apply: () => hero.combat.addMaxHealth(25) },
-    { name: "Alcance da Chama", desc: "+0,3 m no alcance do golpe.", cost: 7, apply: () => hero.combat.addReach(0.3) },
-    { name: "Vigor", desc: "+20% de dano e +10 de vida.", cost: 11, apply: () => { hero.combat.addDamageMul(0.2); hero.combat.addMaxHealth(10); } },
-    { name: "Fôlego da Acendedora", desc: "+15 de vida e +0,15 m de alcance.", cost: 8, apply: () => { hero.combat.addMaxHealth(15); hero.combat.addReach(0.15); } },
-    { name: "Sede da Brasa", desc: `Cada golpe rouba ${Math.round(ABSORB.sedeDaBrasa.lifestealFrac * 100)}% do dano em vida.`, cost: 10, apply: () => hero.combat.addLifesteal(ABSORB.sedeDaBrasa.lifestealFrac) },
+    // Agressão
+    { name: "Golpista", desc: "+12% de dano em cada golpe.", cost: 8, ramo: "agressao", apply: () => hero.combat.addDamageMul(0.12) },
+    { name: "Queimador", desc: "A Queimadura do fogo dura mais e empilha mais.", cost: 9, ramo: "agressao", apply: () => hero.combat.addBurnBoost(2, 1) },
+    { name: "Sede da Brasa", desc: `Cada golpe rouba ${Math.round(ABSORB.sedeDaBrasa.lifestealFrac * 100)}% do dano em vida.`, cost: 10, ramo: "agressao", apply: () => hero.combat.addLifesteal(ABSORB.sedeDaBrasa.lifestealFrac) },
+    // Defesa
+    { name: "Revestimento", desc: "Nenhum golpe tira mais de 22 de vida.", cost: 10, ramo: "defesa", apply: () => hero.combat.setDamageCap(22) },
+    { name: "Fôlego", desc: "+25 de stamina máxima.", cost: 8, ramo: "defesa", apply: () => hero.combat.addMaxStamina(25) },
+    { name: "Pele de Brasa", desc: "+25 de vida máxima (e cura).", cost: 9, ramo: "defesa", apply: () => hero.combat.addMaxHealth(25) },
+    // Utilidade
+    { name: "Fagulha Perene", desc: "A Fagulha regenera 60% mais rápido.", cost: 9, ramo: "utilidade", apply: () => hero.combat.addSparkRegenMul(1.6) },
+    { name: "Ressonância", desc: "Acertos encadeados sem apanhar dão até +30% de dano.", cost: 9, ramo: "utilidade", apply: () => hero.combat.enableResonance() },
+    { name: "Braseiro Quente", desc: "Acender o braseiro cura 60% da vida (em vez de 40%).", cost: 8, ramo: "utilidade", apply: () => hero.combat.setBrazierHealFrac(0.6) },
   ];
-  const FREE_BOON: Boon = { name: "Lasca de Brasa", desc: "+10 de vida. Sempre disponível.", cost: 0, apply: () => hero.combat.addMaxHealth(10) };
+  const FREE_BOON: Boon = { name: "Lasca de Brasa", desc: "+10 de vida. Sempre disponível.", cost: 0, ramo: "defesa", apply: () => hero.combat.addMaxHealth(10) };
+  const pickFromRamo = (r: Ramo): Boon => {
+    const pool = BOONS.filter((b) => b.ramo === r);
+    return pool[Math.floor(Math.random() * pool.length)]!;
+  };
 
   const chooseBoon = (): Promise<void> =>
     new Promise((resolve) => {
-      // Oferta de dádivas fixa nesta visita (não re-sorteia ao comprar poção).
-      const offer = [...[...BOONS].sort(() => Math.random() - 0.5).slice(0, 3), FREE_BOON];
+      // Oferta CURADA e fixa nesta visita: 1 de cada ramo + a Lasca grátis.
+      const offer = [pickFromRamo("agressao"), pickFromRamo("defesa"), pickFromRamo("utilidade"), FREE_BOON];
       const panel = el("div", { class: "menu-panel" });
       const overlay = el("div", { class: "menu-backdrop" }, panel);
       overlay.style.zIndex = "60";
@@ -427,7 +441,7 @@ async function main(): Promise<void> {
       runActive = false; // run concluída: não retomar
       void doAutosave();
     } else {
-      hero.combat.healByMax(0.4); // acender o braseiro cura (respiro)
+      hero.combat.healByMax(hero.combat.brazierHealFrac); // acender o braseiro cura (respiro; Braseiro Quente sobe)
       await chooseBoon(); // gasta Fagulha numa dádiva (tela preta atrás)
       enterRoom(floorIndex + 1);
       void doAutosave(); // checkpoint = braseiro aceso: grava a run (andar/Fagulha/dádivas)

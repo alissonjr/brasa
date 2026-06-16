@@ -462,7 +462,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     const ix = Math.abs(t.x) >= HALFX - 0.6 ? -Math.sign(t.x) * 0.25 : 0;
     const iz = Math.abs(t.z) >= HALFZ - 0.6 ? -Math.sign(t.z) * 0.25 : 0;
     placeProp(P.torch_wall!, { x: t.x, z: t.z, y: 2.4, rotY: t.rotY, cast: false });
-    makeFlame(new Vector3(t.x + ix, 2.75, t.z + iz), 0.7, 1.2, true);
+    makeFlame(new Vector3(t.x + ix, 2.75, t.z + iz), 0.7, 0, false);
     placeProp(P.torch_wall!, { x: t.x, z: t.z, y: 6.0, rotY: t.rotY, cast: false });
     makeFlame(new Vector3(t.x + ix, 6.35, t.z + iz), 0.6, 0, false);
   }
@@ -489,7 +489,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       const a = (i / 4) * Math.PI * 2;
       placeProp(P.candle_triple!, { x: cxp + Math.cos(a) * 0.66, z: czp + Math.sin(a) * 0.66, y: ringY, rotY: a, scale: 0.8, cast: false });
     }
-    makeFlame(new Vector3(cxp, ringY + 0.5, czp), 1.0, 2.2, true); // luz quente pendente (pisca)
+    makeFlame(new Vector3(cxp, ringY + 0.5, czp), 1.0, 0.5, true); // luz quente pendente, suave (pisca)
   };
   // Eixo central, fora do altar (norte) e da passagem; densidade cresce com a profundidade da sala.
   hangChandelier(0, 0);

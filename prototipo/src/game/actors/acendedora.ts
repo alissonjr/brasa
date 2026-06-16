@@ -17,6 +17,7 @@ import { HeroCombat } from "../combat/heroCombat";
 // modelo próprio do Tripo fica só nos menus (estático): o auto-rig dele deforma como
 // gelatina e a malha saiu com defeito, inadequado para o personagem jogável.
 const ACENDEDORA_MODEL = "/models/Rogue_Hooded.glb";
+const FORWARD = new Vector3(0, 0, 1); // eixo local "frente" do modelo (para getFacing)
 
 /** Input de locomoção zerado: usado enquanto o combate trava o ator (golpe comprometido). */
 const FROZEN_INPUT: InputSource = {
@@ -61,6 +62,16 @@ export class Acendedora {
     return this.combat_;
   }
 
+  /** Direção horizontal que a heroína encara (forward do modelo). Usado para defesa frontal. */
+  getFacing(out: Vector3): Vector3 {
+    this.model.root.getDirectionToRef(FORWARD, out);
+    out.y = 0;
+    const len = Math.hypot(out.x, out.z) || 1;
+    out.x /= len;
+    out.z /= len;
+    return out;
+  }
+
   /** Chamar de scene.onAfterPhysicsObservable. */
   update(deltaSeconds: number, input: CombatInputSource, camera: ThirdPersonCamera): void {
     this.combat_.update(deltaSeconds, input);
@@ -82,7 +93,10 @@ export class Acendedora {
     // modelo) apontaria para a última direção andada e o golpe de frente erraria. Re-mira a
     // cada golpe do combo e trava ao ficar ativo; durante o ataque o ator não anda
     // (FROZEN_INPUT), logo o syncVisual do controller não sobrescreve.
-    if (this.combat_.aiming) {
+    if (this.combat_.aiming || this.combat_.isBlocking) {
+      // Mira do golpe E do BLOQUEIO: encara para onde a câmera olha (aponta o escudo na
+      // ameaça). Sem isso o herói bloqueia para a última direção andada e a defesa frontal
+      // contra projétil não funcionaria.
       camera.getYawOrientation(this.aimQuat);
       const root = this.model.root;
       if (root.rotationQuaternion) root.rotationQuaternion.copyFrom(this.aimQuat);

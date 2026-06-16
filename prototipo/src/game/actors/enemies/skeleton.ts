@@ -98,10 +98,12 @@ const STATS: Record<SkeletonKind, SkelStats> = {
     behavior: "skirmisher", faceOffset: Math.PI,
   },
   // Conjurador: mantem distancia e DISPARA um projetil de fogo telegrafado. Forca fechar espaco.
+  // Projetil JUSTO (design de bullet legivel): antecipacao longa (cast 0.95s), tiro LENTO
+  // (esquivavel a pe ou com a esquiva) e cadencia espacada (cooldown 1.8s) para nao saturar.
   conjurador: {
-    model: "/models/quaternius_monsters/mushroomking.glb", height: 2.1, hp: 70, moveSpeed: 1.8, attackRange: 9, approachUntil: 8, cooldownSec: 1.1,
-    overhead: { startup: 0.7, active: 0.12, recovery: 0.6, damage: 14, knockback: 1, hitStopFrames: 6 }, damage: 14, guards: false, reward: 10,
-    behavior: "ranged", projectileSpeed: 9, faceOffset: Math.PI,
+    model: "/models/quaternius_monsters/mushroomking.glb", height: 2.1, hp: 70, moveSpeed: 1.8, attackRange: 11, approachUntil: 9, cooldownSec: 1.8,
+    overhead: { startup: 0.95, active: 0.12, recovery: 0.7, damage: 14, knockback: 1, hitStopFrames: 6 }, damage: 14, guards: false, reward: 10,
+    behavior: "ranged", projectileSpeed: 6.5, faceOffset: Math.PI,
   },
 };
 

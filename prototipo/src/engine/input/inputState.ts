@@ -42,6 +42,7 @@ export type InputAction =
   | "dodge"
   | "block"
   | "ember"
+  | "execute"
   | "lockOn"
   | "potion1"
   | "potion2"
