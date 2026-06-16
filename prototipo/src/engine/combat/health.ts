@@ -50,4 +50,10 @@ export class Health {
   reset(to: number = this.max): void {
     this._current = Math.max(0, Math.min(this.max, to));
   }
+
+  /** Define a vida máxima de volta a um valor-base (jogo novo: descarta upgrades) e cura. */
+  setMax(to: number): void {
+    this._max = Math.max(1, to);
+    this._current = this._max;
+  }
 }

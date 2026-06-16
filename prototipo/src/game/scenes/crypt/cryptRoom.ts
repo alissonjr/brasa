@@ -18,6 +18,7 @@ import {
 } from "@babylonjs/core";
 import type { AbstractMesh, AssetContainer, Camera, IDisposable, Observer, Scene } from "@babylonjs/core";
 import { loadContainer } from "@engine";
+import { pickLayout } from "./cryptLayouts";
 
 /**
  * CAMADA JOGO (Brasa). Sala-cripta de referencia (KayKit Dungeon, CC0) montada para o
@@ -36,12 +37,14 @@ import { loadContainer } from "@engine";
 
 const K = "/assets/dungeon_kit/"; // KayKit Dungeon Remastered (mesmo atlas)
 const KH = "/assets/halloween_kit/"; // KayKit Halloween Bits (atlas proprio, mesmo estilo)
-const HALF = 12; // salao 24x24
 const WALL_H = 4;
+const ROOM_H = WALL_H * 2; // 8: sala alta (catedral-cripta) com teto e candelabros
 
 export interface CryptCtx {
   shadow: ShadowGenerator;
   glow: GlowLayer;
+  ambient: HemisphericLight; // luz fria ambiente (modulada na virada frio->quente)
+  key: DirectionalLight; // luz-chave (sombra); cai um pouco ao acender o braseiro
 }
 
 export type RoomKind = "guarda" | "salao" | "cisterna" | "santuario" | "guardiao";
@@ -57,8 +60,11 @@ export interface Room {
   def: RoomDef;
   spawn: Vector3; // onde a Acendedora entra
   exit: { x: number; z: number; radius: number }; // a PASSAGEM (alçapão): pisar = descer
+  enemyAnchor: { x: number; z: number }; // centro em torno do qual os inimigos surgem
   brazier: Vector3;
-  /** Abre a passagem (sala limpa): acende o feixe de luz do alçapão. */
+  /** Vira a luz da sala de fria (t=0) para quente (t=1): acende o braseiro + reaquece a cena. */
+  setBrazierLit(t: number): void;
+  /** Abre a passagem (alçapão): chamado após a Brasa ser acesa. */
   setCleared(open: boolean): void;
   dispose(): void;
 }
@@ -139,17 +145,25 @@ export function setupCryptScene(scene: Scene, camera: Camera): CryptCtx {
   pipe.grain.intensity = 4;
   pipe.grain.animated = true;
 
-  return { shadow, glow };
+  return { shadow, glow, ambient, key };
 }
 
 /** Constroi UM andar (descartavel). Precisa que ensureCryptPieces tenha rodado antes. */
 export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room {
   const P = cache!;
+  // PLANTA do andar (forma/dimensoes). A geometria abaixo deriva dela; o dressing por
+  // tipo (clusters) se ajusta a HALFX/HALFZ e ao z do altar (AZ).
+  const L = pickLayout(def);
+  const HALFX = L.halfX;
+  const HALFZ = L.halfZ;
+  const AZ = L.altar.z; // z do altar/braseiro (fundo da sala)
   const roomRoot = new TransformNode("room_" + def.index, scene);
   const lights: IDisposable[] = [];
   const aggregates: PhysicsAggregate[] = [];
   const casters: AbstractMesh[] = [];
-  const flames: { mesh: Mesh; light: PointLight | null; base: number; seed: number }[] = [];
+  // ignite (0..1): fator de aceso. Tochas de parede nascem 1 (sempre acesas); o BRASEIRO
+  // nasce 0 (apagado) e sobe na virada frio->quente ao ser aceso.
+  const flames: { mesh: Mesh; light: PointLight | null; base: number; seed: number; ignite: number }[] = [];
   const rng = (i: number) => Math.abs((Math.sin((i + def.index * 100) * 12.9898) * 43758.5453) % 1);
 
   const track = (m: AbstractMesh): AbstractMesh => {
@@ -178,9 +192,9 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     return merged;
   }
 
-  function kitInstances(base: Mesh, placements: { x: number; z: number; rotY?: number }[]): void {
+  function kitInstances(base: Mesh, placements: { x: number; z: number; rotY?: number }[], y = 0, pitch = 0): void {
     base.thinInstanceAdd(
-      placements.map((p) => Matrix.Compose(Vector3.One(), Quaternion.RotationYawPitchRoll(p.rotY ?? 0, 0, 0), new Vector3(p.x, 0, p.z)))
+      placements.map((p) => Matrix.Compose(Vector3.One(), Quaternion.RotationYawPitchRoll(p.rotY ?? 0, pitch, 0), new Vector3(p.x, y, p.z)))
     );
   }
 
@@ -215,14 +229,14 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     const cz = (b.min.z + b.max.z) / 2;
     root.position.set(o.x - cx, (o.y ?? 0) - b.min.y, o.z - cz);
     root.parent = roomRoot;
-    if (o.collider) colliderBox(root, 0.85);
+    if (o.collider) colliderBox(root, 0.65); // pegada enxuta: mais espaço de caminhada entre props
     if (o.cast !== false) for (const m of root.getChildMeshes(false)) { ctx.shadow.addShadowCaster(m as AbstractMesh); casters.push(m as AbstractMesh); }
     return root;
   }
 
   function wallCollider(cx: number, cz: number, w: number, d: number): void {
-    const box = MeshBuilder.CreateBox("colisor_parede", { width: w, height: WALL_H, depth: d }, scene);
-    box.position.set(cx, WALL_H / 2, cz);
+    const box = MeshBuilder.CreateBox("colisor_parede", { width: w, height: ROOM_H, depth: d }, scene);
+    box.position.set(cx, ROOM_H / 2, cz);
     box.isVisible = false;
     box.isPickable = false;
     box.checkCollisions = true;
@@ -286,8 +300,8 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
         if (!p.collider) continue;
         const s = p.scale ?? 1;
         const swap = Math.abs(Math.round((p.rotY ?? 0) / (Math.PI / 2))) % 2 === 1;
-        const w = (swap ? ez : ex) * s * 0.85;
-        const d = (swap ? ex : ez) * s * 0.85;
+        const w = (swap ? ez : ex) * s * 0.65;
+        const d = (swap ? ex : ez) * s * 0.65;
         const h = ey * s;
         if (w <= 0 || h <= 0 || d <= 0) continue;
         const box = MeshBuilder.CreateBox("colisor", { width: w, height: h, depth: d }, scene);
@@ -301,7 +315,8 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     }
   }
 
-  function makeFlame(pos: Vector3, scale: number, lightInt: number, withLight: boolean): void {
+  type Flame = { mesh: Mesh; light: PointLight | null; base: number; seed: number; ignite: number };
+  function makeFlame(pos: Vector3, scale: number, lightInt: number, withLight: boolean): Flame {
     const mat = new StandardMaterial("flameMat", scene);
     mat.emissiveColor = Color3.FromHexString("#ff7a1c");
     mat.diffuseColor = Color3.Black();
@@ -322,11 +337,13 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       light.shadowEnabled = false;
       lights.push(light);
     }
-    flames.push({ mesh: flame, light, base: lightInt, seed: flames.length * 1.7 });
+    const entry: Flame = { mesh: flame, light, base: lightInt, seed: flames.length * 1.7, ignite: 1 };
+    flames.push(entry);
+    return entry;
   }
 
   // --- Piso fisico invisivel ---
-  const ground = MeshBuilder.CreateGround("piso_fisico", { width: HALF * 2 + 2, height: HALF * 2 + 2 }, scene);
+  const ground = MeshBuilder.CreateGround("piso_fisico", { width: HALFX * 2 + 2, height: HALFZ * 2 + 2 }, scene);
   ground.isVisible = false;
   ground.checkCollisions = true;
   ground.parent = roomRoot;
@@ -335,10 +352,11 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // --- Piso ladrilhado (xadrez + rotacao) + medalhao + tabuas ---
   const tilesA: { x: number; z: number; rotY: number }[] = [];
   const tilesB: { x: number; z: number; rotY: number }[] = [];
-  const coords = [-9, -3, 3, 9];
-  for (let ix = 0; ix < coords.length; ix++)
-    for (let iz = 0; iz < coords.length; iz++) {
-      const t = { x: coords[ix]!, z: coords[iz]!, rotY: ((ix * 7 + iz * 3) % 4) * (Math.PI / 2) };
+  const coordsX = L.floorX;
+  const coordsZ = L.floorZ;
+  for (let ix = 0; ix < coordsX.length; ix++)
+    for (let iz = 0; iz < coordsZ.length; iz++) {
+      const t = { x: coordsX[ix]!, z: coordsZ[iz]!, rotY: ((ix * 7 + iz * 3) % 4) * (Math.PI / 2) };
       ((ix + iz) % 2 === 0 ? tilesA : tilesB).push(t);
     }
   const fa = kitBase(P.floor!, "floor");
@@ -350,46 +368,46 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   const fw = kitBase(P.floor_wood!, "floor");
   if (fw) kitInstances(fw, [{ x: -7, z: -3 }, { x: -7, z: -6 }]);
 
-  // --- Paredes (thin instances) + variacao quebrada ---
-  const segC = [-10, -6, -2, 2, 6, 10];
-  const wp: { x: number; z: number; rotY?: number }[] = [];
-  const bpos: { x: number; z: number; rotY?: number }[] = [];
-  for (const c of segC) {
-    wp.push({ x: c, z: HALF });
-    wp.push({ x: HALF, z: c, rotY: Math.PI / 2 });
-    wp.push({ x: -HALF, z: c, rotY: Math.PI / 2 });
-    if (c !== -2 && c !== 6) wp.push({ x: c, z: -HALF });
-  }
-  bpos.push({ x: -2, z: -HALF }, { x: 6, z: -HALF });
+  // --- Paredes (thin instances) + variacao quebrada (da planta) ---
   const wallBase = kitBase(P.wall!, "base");
   const brokenBase = kitBase(P.wall_broken!, "base");
-  if (wallBase) kitInstances(wallBase, wp);
-  if (brokenBase) kitInstances(brokenBase, bpos);
+  if (wallBase) kitInstances(wallBase, L.walls);
+  if (brokenBase && L.broken.length) kitInstances(brokenBase, L.broken);
+  // 2a fileira de parede (sala alta): leva a parede de 4m para 8m (ROOM_H).
+  if (wallBase) kitInstances(wallBase, L.walls, WALL_H);
+  if (brokenBase && L.broken.length) kitInstances(brokenBase, L.broken, WALL_H);
   if (wallBase) { ctx.shadow.addShadowCaster(wallBase); casters.push(wallBase); }
 
-  wallCollider(0, HALF, HALF * 2, 0.8);
-  wallCollider(0, -HALF, HALF * 2, 0.8);
-  wallCollider(HALF, 0, 0.8, HALF * 2);
-  wallCollider(-HALF, 0, 0.8, HALF * 2);
+  // --- TETO: lajes de piso INVERTIDAS no topo (pedra de verdade, não vazio preto) ---
+  const ceilBase = kitBase(P.floor!, "floor");
+  if (ceilBase) {
+    kitInstances(ceilBase, [...tilesA, ...tilesB], ROOM_H, Math.PI);
+    ceilBase.receiveShadows = false;
+  }
+  // Colisor de teto: impede a câmera de escapar por cima ao dar zoom out.
+  const ceilCol = MeshBuilder.CreateBox("colisor_teto", { width: HALFX * 2, height: 0.6, depth: HALFZ * 2 }, scene);
+  ceilCol.position.set(0, ROOM_H + 0.3, 0);
+  ceilCol.isVisible = false;
+  ceilCol.isPickable = false;
+  ceilCol.checkCollisions = true;
+  track(ceilCol);
 
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) placeProp(P.wall_corner!, { x: sx * HALF, z: sz * HALF });
-  placeProp(P.door!, { x: 2, z: -HALF + 0.4 });
+  for (const c of L.wallColliders) wallCollider(c.cx, c.cz, c.w, c.d);
+  for (const c of L.corners) placeProp(P.wall_corner!, { x: c.x, z: c.z });
+  placeProp(P.door!, { x: 2, z: -HALFZ + 0.4 });
 
-  // --- Pilares (inteiros + quebrados) - instanciados (1 draw call por tipo) ---
-  batch("pillar", { x: -8, z: 0, collider: true }, true);
-  batch("pillar", { x: 8, z: 0, collider: true }, true);
-  batch("pillar", { x: -8, z: 6, collider: true }, true);
-  batch("pillar", { x: 8, z: 6, collider: true }, true);
-  batch("pillar_broken", { x: -8, z: -6, collider: true }, true);
-  batch("pillar_broken", { x: 8, z: -6, rotY: 1.2, collider: true }, true);
+  // --- Pilares (inteiros + quebrados) da planta - instanciados (1 draw call por tipo) ---
+  for (const p of L.pillars) {
+    batch(p.broken ? "pillar_broken" : "pillar", { x: p.x, z: p.z, rotY: p.rotY, collider: true }, true);
+  }
 
   // --- Altar ao fundo (norte): estrado + degrau + braseiro (a Brasa) ---
   const daisMat = new StandardMaterial("matEstrado", scene);
   daisMat.diffuseColor = Color3.FromHexString("#363b43");
   daisMat.specularColor = Color3.Black();
-  const daisScale = def.boss ? 1.25 : 1;
+  const daisScale = L.daisScale;
   const dais = MeshBuilder.CreateBox("estrado", { width: 8 * daisScale, height: 0.9, depth: 4.5 }, scene);
-  dais.position.set(0, 0.45, 9.2);
+  dais.position.set(0, 0.45, AZ);
   dais.material = daisMat;
   dais.checkCollisions = true;
   dais.receiveShadows = true;
@@ -398,27 +416,33 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   ctx.shadow.addShadowCaster(dais);
   casters.push(dais);
   const stepM = MeshBuilder.CreateBox("degrau", { width: 4.5, height: 0.45, depth: 1.3 }, scene);
-  stepM.position.set(0, 0.225, 6.6);
+  stepM.position.set(0, 0.225, AZ - 2.6);
   stepM.material = daisMat;
   stepM.checkCollisions = true;
   stepM.receiveShadows = true;
   stepM.parent = roomRoot;
   aggregates.push(new PhysicsAggregate(stepM, PhysicsShapeType.BOX, { mass: 0 }, scene));
 
-  placeProp(P.torch!, { x: 0, z: 9.2, y: 0.9, collider: true });
-  const brazier = new Vector3(0, 0.9, 9.2);
-  makeFlame(new Vector3(0, 2.2, 9.2), def.boss ? 2.1 : 1.6, def.boss ? 3.0 : 2.4, true);
+  placeProp(P.torch!, { x: 0, z: AZ, y: 0.9, collider: true });
+  const brazier = new Vector3(0, 0.9, AZ);
+  // A BRASA do altar nasce APAGADA: só acende (frio->quente) quando a sala é limpa e a
+  // Acendedora a reacende (setBrazierLit). As duas chamas laterais (offering) acompanham.
+  const brazierFlame = makeFlame(new Vector3(0, 2.2, AZ), def.boss ? 2.1 : 1.6, def.boss ? 3.0 : 2.4, true);
   // Anel de caveiras do altar (sempre presente; instanciado via clusterGrime no flush).
   for (let i = 0; i < 8; i++) {
     const a = (i / 8) * Math.PI * 2;
-    batch("skull", { x: Math.cos(a) * 1.7, z: 9.2 + Math.sin(a) * 1.1, y: 0.9, rotY: a + 1.2, scale: 0.32 });
+    batch("skull", { x: Math.cos(a) * 1.7, z: AZ + Math.sin(a) * 1.1, y: 0.9, rotY: a + 1.2, scale: 0.32 });
   }
-  makeFlame(new Vector3(-2.7, 1.05, 9.2), 0.4, 0, false);
-  makeFlame(new Vector3(2.7, 1.05, 9.2), 0.4, 0, false);
+  const offerL = makeFlame(new Vector3(-2.7, 1.05, AZ), 0.4, 0, false);
+  const offerR = makeFlame(new Vector3(2.7, 1.05, AZ), 0.4, 0, false);
+  // Braseiro e oferendas começam apagados (a sala nasce fria).
+  brazierFlame.ignite = 0;
+  offerL.ignite = 0;
+  offerR.ignite = 0;
 
   // --- A PASSAGEM (alçapão) em frente ao altar: pisar nela (sala limpa) desce de andar.
   //     Selada enquanto há inimigos; ao limpar, o feixe de luz acende (setCleared).
-  placeProp(P.trapdoor!, { x: 0, z: 6, cast: false });
+  placeProp(P.trapdoor!, { x: L.exit.x, z: L.exit.z, cast: false });
   const beamMat = new StandardMaterial("feixe", scene);
   beamMat.emissiveColor = Color3.FromHexString("#ffd089");
   beamMat.diffuseColor = Color3.Black();
@@ -427,22 +451,50 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   beamMat.disableLighting = true;
   const beam = MeshBuilder.CreateCylinder("feixe_passagem", { diameterTop: 0.5, diameterBottom: 1.7, height: 6.5, tessellation: 14 }, scene);
   beam.material = beamMat;
-  beam.position.set(0, 3.2, 6);
+  beam.position.set(L.exit.x, 3.2, L.exit.z);
   beam.isPickable = false;
   beam.parent = roomRoot;
   beam.setEnabled(false);
   ctx.glow.addIncludedOnlyMesh(beam);
 
-  // --- Tochas de parede (emissivas) ---
-  const torchPlaces: [number, number, number][] = [
-    [-HALF + 0.5, -2, -Math.PI / 2], [HALF - 0.5, -2, Math.PI / 2],
-    [-HALF + 0.5, 6, -Math.PI / 2], [HALF - 0.5, 6, Math.PI / 2],
-    [-6, HALF - 0.5, Math.PI], [6, HALF - 0.5, Math.PI],
-  ];
-  for (const [x, z, rotY] of torchPlaces) {
-    placeProp(P.torch_wall!, { x, z, y: 2.4, rotY, cast: false });
-    makeFlame(new Vector3(x + Math.sign(x || 0) * -0.25, 2.75, z), 0.7, 0, false);
+  // --- Tochas/luminárias de parede (emissivas): fileira baixa + fileira alta (parede dupla) ---
+  for (const t of L.torches) {
+    const ix = Math.abs(t.x) >= HALFX - 0.6 ? -Math.sign(t.x) * 0.25 : 0;
+    const iz = Math.abs(t.z) >= HALFZ - 0.6 ? -Math.sign(t.z) * 0.25 : 0;
+    placeProp(P.torch_wall!, { x: t.x, z: t.z, y: 2.4, rotY: t.rotY, cast: false });
+    makeFlame(new Vector3(t.x + ix, 2.75, t.z + iz), 0.7, 1.2, true);
+    placeProp(P.torch_wall!, { x: t.x, z: t.z, y: 6.0, rotY: t.rotY, cast: false });
+    makeFlame(new Vector3(t.x + ix, 6.35, t.z + iz), 0.6, 0, false);
   }
+
+  // --- CANDELABROS pendentes do teto (anel de metal + velas reais + luz quente que pisca) ---
+  const chandMat = new StandardMaterial("matCandelabro", scene);
+  chandMat.diffuseColor = Color3.FromHexString("#2a2620");
+  chandMat.specularColor = Color3.FromHexString("#6b5a3a"); // leve brilho de metal
+  const hangChandelier = (cxp: number, czp: number): void => {
+    const ringY = ROOM_H - 1.8; // ~6.2: acima da câmera de jogo (~5.7), não atrapalha
+    const chain = MeshBuilder.CreateCylinder("corrente", { diameter: 0.07, height: ROOM_H - ringY, tessellation: 6 }, scene);
+    chain.position.set(cxp, (ROOM_H + ringY) / 2, czp);
+    chain.material = chandMat;
+    chain.isPickable = false;
+    track(chain);
+    const ring = MeshBuilder.CreateTorus("anel_candelabro", { diameter: 1.5, thickness: 0.12, tessellation: 18 }, scene);
+    ring.position.set(cxp, ringY, czp);
+    ring.material = chandMat;
+    ring.isPickable = false;
+    track(ring);
+    ctx.shadow.addShadowCaster(ring);
+    casters.push(ring);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      placeProp(P.candle_triple!, { x: cxp + Math.cos(a) * 0.66, z: czp + Math.sin(a) * 0.66, y: ringY, rotY: a, scale: 0.8, cast: false });
+    }
+    makeFlame(new Vector3(cxp, ringY + 0.5, czp), 1.0, 2.2, true); // luz quente pendente (pisca)
+  };
+  // Eixo central, fora do altar (norte) e da passagem; densidade cresce com a profundidade da sala.
+  hangChandelier(0, 0);
+  hangChandelier(0, -(HALFZ - 6));
+  if (HALFZ >= 18) hangChandelier(0, HALFZ - 9);
 
   // --- DRESSING por TIPO DE SALA (def.kind) ---
   // Clusters tematicos; cada tipo de sala (RoomDef.kind) liga um subconjunto. Pecas
@@ -450,14 +502,17 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // Reusa as coordenadas ja testadas: a variacao e QUAIS clusters aparecem, nao o layout-base.
   const seedRot = (i: number): number => rng(i) * Math.PI * 2;
 
+  // Os clusters referenciam HALFX/HALFZ (paredes) e AZ (z do altar). Calibrados para que a
+  // planta quadrada 24x24 (HALFX=HALFZ=12, AZ=9.2) fique IDENTICA a versao anterior; nas
+  // demais formas os props seguem as paredes/altar reais em vez de coordenadas fixas.
   function clusterBanners(count: number): void {
     const spots: Spot[] = [
-      { x: -3.8, z: HALF - 0.5, y: 1.4 }, { x: 3.8, z: HALF - 0.5, y: 1.4 },
-      { x: -HALF + 0.5, z: 2, y: 1.4, rotY: Math.PI / 2 }, { x: HALF - 0.5, z: -6, y: 1.4, rotY: -Math.PI / 2 },
+      { x: -3.8, z: HALFZ - 0.5, y: 1.4 }, { x: 3.8, z: HALFZ - 0.5, y: 1.4 },
+      { x: -HALFX + 0.5, z: 2, y: 1.4, rotY: Math.PI / 2 }, { x: HALFX - 0.5, z: -6, y: 1.4, rotY: -Math.PI / 2 },
     ];
     spots.slice(0, count).forEach((s) => batch("banner", s));
-    batch("wall_deco_a", { x: -4, z: HALF - 0.3 });
-    if (count > 2) batch("wall_deco_a", { x: 10, z: -HALF + 0.3 });
+    batch("wall_deco_a", { x: -4, z: HALFZ - 0.3 });
+    if (count > 2) batch("wall_deco_a", { x: HALFX - 2, z: -HALFZ + 0.3 });
   }
 
   function clusterMess(): void {
@@ -466,71 +521,73 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     placeProp(P.bench!, { x: -7.5, z: -4.4, rotY: 0.2, collider: true });
     batch("chair", { x: -6, z: -2.2, rotY: -1.2, collider: true }, true);
     batch("chair", { x: -8.8, z: -2, rotY: 0.6, collider: true }, true);
-    placeProp(P.weapon_rack!, { x: -2, z: -HALF + 0.7, collider: true });
+    placeProp(P.weapon_rack!, { x: -2, z: -HALFZ + 0.7, collider: true });
     placeProp(P.bucket!, { x: -6.6, z: -1.2, rotY: 0.4 });
     placeProp(P.plate_food_A!, { x: -7.2, z: -3.1, cast: false });
     placeProp(P.sword_shield!, { x: -3.0, z: -6.5, rotY: -0.6, cast: false });
   }
 
   function clusterStorage(keg: boolean): void {
-    // Armazem: barris, caixas, potes.
-    batch("barrel", { x: -HALF + 1.2, z: -8, collider: true }, true);
-    batch("barrel", { x: -HALF + 2.1, z: -8.4, collider: true }, true);
-    batch("barrel", { x: -HALF + 1.6, z: -7.2, y: 1.0 }, true);
-    batch("crate", { x: HALF - 1.4, z: -7, rotY: 0.4, collider: true }, true);
-    batch("crate", { x: HALF - 1.5, z: -8.5, rotY: -0.3, collider: true }, true);
-    batch("crate", { x: HALF - 1.4, z: -7.4, y: 1.0, rotY: 0.9 }, true);
+    // Armazem: barris, caixas, potes (encostados na parede sul, qualquer que seja seu z).
+    const zS = -(HALFZ - 4);
+    batch("barrel", { x: -HALFX + 1.2, z: zS, collider: true }, true);
+    batch("barrel", { x: -HALFX + 2.1, z: zS - 0.4, collider: true }, true);
+    batch("barrel", { x: -HALFX + 1.6, z: zS + 0.8, y: 1.0 }, true);
+    batch("crate", { x: HALFX - 1.4, z: zS + 1, rotY: 0.4, collider: true }, true);
+    batch("crate", { x: HALFX - 1.5, z: zS - 0.5, rotY: -0.3, collider: true }, true);
+    batch("crate", { x: HALFX - 1.4, z: zS + 0.6, y: 1.0, rotY: 0.9 }, true);
     batch("pots", { x: 7, z: 3, rotY: 0.5 });
     batch("pots", { x: -3, z: 4, rotY: 1.4 });
-    if (keg) placeProp(P.keg!, { x: -HALF + 1.1, z: -6.0, rotY: 0.3, collider: true });
+    if (keg) placeProp(P.keg!, { x: -HALFX + 1.1, z: zS + 2, rotY: 0.3, collider: true });
   }
 
   function clusterAlchemy(): void {
-    // Estantes + pocoes (parede leste).
-    placeProp(P.bookcase!, { x: HALF - 0.7, z: 5.5, rotY: -Math.PI / 2, collider: true });
-    placeProp(P.bookcase!, { x: HALF - 0.7, z: 2.5, rotY: -Math.PI / 2, collider: true });
-    placeProp(P.bookcase!, { x: -HALF + 0.7, z: 4, rotY: Math.PI / 2, collider: true });
-    placeProp(P.shelf_small_candles!, { x: HALF - 0.7, z: 7.4, rotY: -Math.PI / 2, collider: true });
-    placeProp(P.bottle_A_green!, { x: HALF - 1.0, z: 6.2, cast: false });
-    placeProp(P.bottle_B_green!, { x: HALF - 1.0, z: 5.95, cast: false });
-    placeProp(P.bottle_C_brown!, { x: HALF - 1.0, z: 6.45, cast: false });
+    // Estantes + pocoes (parede leste, na faixa entre o centro e o altar).
+    const zb = Math.min(AZ - 3.7, HALFZ - 4.5);
+    placeProp(P.bookcase!, { x: HALFX - 0.7, z: zb, rotY: -Math.PI / 2, collider: true });
+    placeProp(P.bookcase!, { x: HALFX - 0.7, z: zb - 3, rotY: -Math.PI / 2, collider: true });
+    placeProp(P.bookcase!, { x: -HALFX + 0.7, z: zb - 1.5, rotY: Math.PI / 2, collider: true });
+    placeProp(P.shelf_small_candles!, { x: HALFX - 0.7, z: zb + 1.9, rotY: -Math.PI / 2, collider: true });
+    placeProp(P.bottle_A_green!, { x: HALFX - 1.0, z: zb + 0.7, cast: false });
+    placeProp(P.bottle_B_green!, { x: HALFX - 1.0, z: zb + 0.45, cast: false });
+    placeProp(P.bottle_C_brown!, { x: HALFX - 1.0, z: zb + 0.95, cast: false });
   }
 
   function clusterCatacomb(full: boolean): void {
     // Caixoes e tumulos encostados na parede oeste (le a sala como catacumba).
-    placeProp(P.coffin!, { x: -HALF + 1.0, z: 1.4, rotY: Math.PI / 2, collider: true });
-    placeProp(P.coffin_decorated!, { x: -HALF + 1.0, z: -1.4, rotY: Math.PI / 2, collider: true });
-    placeProp(P.gravestone!, { x: -HALF + 0.9, z: 8.6, rotY: Math.PI / 2 });
-    placeProp(P.grave_A!, { x: -HALF + 1.6, z: 10.4, rotY: Math.PI / 2, cast: false });
-    if (full) placeProp(P.gravemarker_A!, { x: -HALF + 1.1, z: -8.2, rotY: Math.PI / 2 });
+    placeProp(P.coffin!, { x: -HALFX + 1.0, z: 1.4, rotY: Math.PI / 2, collider: true });
+    placeProp(P.coffin_decorated!, { x: -HALFX + 1.0, z: -1.4, rotY: Math.PI / 2, collider: true });
+    placeProp(P.gravestone!, { x: -HALFX + 0.9, z: AZ - 0.6, rotY: Math.PI / 2 });
+    placeProp(P.grave_A!, { x: -HALFX + 1.6, z: AZ + 1.2, rotY: Math.PI / 2, cast: false });
+    if (full) placeProp(P.gravemarker_A!, { x: -HALFX + 1.1, z: -(HALFZ - 3.8), rotY: Math.PI / 2 });
   }
 
   function clusterRitual(): void {
-    // Candelabros sobre o estrado, relicario, placa votiva, lanterna.
-    batch("candle_triple", { x: -2.3, z: 9.4, y: 0.9 });
-    batch("candle_triple", { x: 2.3, z: 9.4, y: 0.9 });
-    placeProp(P.skull_candle!, { x: 1.3, z: 8.5, y: 0.9, scale: 0.9, cast: false });
-    placeProp(P.shrine_candles!, { x: -5.2, z: 9.4, rotY: 0.4, collider: true });
-    placeProp(P.plaque_candles!, { x: 4.0, z: HALF - 0.3, y: 1.6, cast: false });
-    placeProp(P.lantern_standing!, { x: -8.0, z: 2.6 });
+    // Candelabros sobre o estrado, relicario, placa votiva, lanterna (relativos ao altar).
+    batch("candle_triple", { x: -2.3, z: AZ + 0.2, y: 0.9 });
+    batch("candle_triple", { x: 2.3, z: AZ + 0.2, y: 0.9 });
+    placeProp(P.skull_candle!, { x: 1.3, z: AZ - 0.7, y: 0.9, scale: 0.9, cast: false });
+    placeProp(P.shrine_candles!, { x: -5.2, z: AZ + 0.2, rotY: 0.4, collider: true });
+    placeProp(P.plaque_candles!, { x: 4.0, z: HALFZ - 0.3, y: 1.6, cast: false });
+    placeProp(P.lantern_standing!, { x: -(HALFX - 4), z: 2.6 });
   }
 
   function clusterTreasure(gold: boolean): void {
-    placeProp(P.chest!, { x: 3, z: 7, rotY: -0.5, collider: true });
-    batch("coins", { x: 3.6, z: 6.3, rotY: 0.3 });
-    batch("coins", { x: -2.6, z: 7.2, rotY: 1.1 });
+    placeProp(P.chest!, { x: 3, z: AZ - 2.2, rotY: -0.5, collider: true });
+    batch("coins", { x: 3.6, z: AZ - 2.9, rotY: 0.3 });
+    batch("coins", { x: -2.6, z: AZ - 2.0, rotY: 1.1 });
     if (gold) {
       // Recompensa do chefe: bau dourado + pilhas de moeda + chave (lado leste do estrado).
-      placeProp(P.chest_gold!, { x: 6.0, z: 8.2, rotY: -0.5, collider: true });
-      placeProp(P.coin_stack_large!, { x: 6.9, z: 7.6, rotY: 0.5 });
-      placeProp(P.coin_stack_medium!, { x: 5.2, z: 7.5, rotY: -0.3 });
-      placeProp(P.key!, { x: 6.2, z: 6.9, rotY: 0.2 });
+      placeProp(P.chest_gold!, { x: 6.0, z: AZ - 1.0, rotY: -0.5, collider: true });
+      placeProp(P.coin_stack_large!, { x: 6.9, z: AZ - 1.6, rotY: 0.5 });
+      placeProp(P.coin_stack_medium!, { x: 5.2, z: AZ - 1.7, rotY: -0.3 });
+      placeProp(P.key!, { x: 6.2, z: AZ - 2.3, rotY: 0.2 });
     }
   }
 
   function clusterGrime(density: number): void {
     // Caveiras, escombros e ossadas. density (0..1) escala a quantidade.
-    const rubblePts: [number, number, number][] = [[-3.5, -7, 0.9], [8.5, 8.5, 1], [4, -4, 0.8], [-9.2, 9.4, 0.9]];
+    const rubblePts: [number, number, number][] = [[-3.5, -7, 0.9], [8.5, 8.5, 1], [4, -4, 0.8], [-9.2, AZ + 0.2, 0.9]];
     rubblePts.slice(0, Math.max(2, Math.round(density * 4))).forEach(([x, z, s], i) =>
       batch("rubble", { x: x + (rng(i) - 0.5), z: z + (rng(i + 5) - 0.5), rotY: seedRot(i), scale: s })
     );
@@ -542,7 +599,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     );
     const pile = Math.round(density * 7);
     for (let i = 0; i < pile; i++)
-      batch("skull", { x: -9.4 + rng(i + 30) * 1.6, z: 8.6 + rng(i + 40) * 1.6, y: rng(i + 50) * 0.25, rotY: seedRot(i), scale: 0.3 + rng(i + 10) * 0.1 });
+      batch("skull", { x: -(HALFX - 2.6) + rng(i + 30) * 1.6, z: (AZ - 0.6) + rng(i + 40) * 1.6, y: rng(i + 50) * 0.25, rotY: seedRot(i), scale: 0.3 + rng(i + 10) * 0.1 });
     if (density > 0.6) {
       placeProp(P.bone_A!, { x: 5.5, z: 2.5, rotY: 0.8, cast: false });
       placeProp(P.bone_B!, { x: -4.5, z: 5.5, rotY: 2.1, cast: false });
@@ -583,13 +640,15 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     if (typeof mm.maxSimultaneousLights === "number") mm.maxSimultaneousLights = 6;
   }
 
-  // Tremular das chamas.
+  // Tremular das chamas (escala por `ignite`: apagada some, acesa tremula normal).
   const flicker: Observer<Scene> = scene.onBeforeRenderObservable.add(() => {
     const t = performance.now() / 1000;
     for (const f of flames) {
       const fl = 0.85 + 0.15 * Math.sin(t * 11 + f.seed) + 0.06 * Math.sin(t * 23 + f.seed * 2);
-      if (f.light) f.light.intensity = f.base * fl;
-      f.mesh.scaling.y = 0.9 + 0.18 * Math.sin(t * 13 + f.seed);
+      if (f.light) f.light.intensity = f.base * fl * f.ignite;
+      const on = f.ignite > 0.02;
+      if (f.mesh.isEnabled() !== on) f.mesh.setEnabled(on);
+      f.mesh.scaling.y = (0.9 + 0.18 * Math.sin(t * 13 + f.seed)) * (0.4 + 0.6 * f.ignite);
     }
     if (beam.isEnabled()) {
       beam.rotation.y = t * 0.5;
@@ -599,11 +658,30 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     }
   });
 
+  // Alvos de cor da virada frio->quente (a cena vive entre estes dois estados).
+  const COLD_FOG = Color3.FromHexString("#1a2636");
+  const WARM_FOG = Color3.FromHexString("#241a14");
+  const COLD_AMB = Color3.FromHexString("#8aa6c6");
+  const WARM_AMB = Color3.FromHexString("#a98f6e");
+  const setBrazierLit = (t: number): void => {
+    const k = t < 0 ? 0 : t > 1 ? 1 : t;
+    brazierFlame.ignite = k;
+    offerL.ignite = k;
+    offerR.ignite = k;
+    scene.fogColor = Color3.Lerp(COLD_FOG, WARM_FOG, k);
+    ctx.ambient.intensity = 0.62 - 0.22 * k; // o quente passa a vir do braseiro, não do "céu"
+    ctx.ambient.diffuse = Color3.Lerp(COLD_AMB, WARM_AMB, k);
+    ctx.key.intensity = 1.0 - 0.3 * k;
+  };
+  setBrazierLit(0); // a sala nasce FRIA (braseiro apagado)
+
   return {
     def,
-    spawn: new Vector3(0, 1.0, -9),
-    exit: { x: 0, z: 6, radius: 2.6 }, // a passagem (alçapão): pisar nela = descer
+    spawn: L.spawn,
+    exit: L.exit, // a passagem (alçapão): pisar nela = descer
+    enemyAnchor: L.enemyAnchor,
     brazier,
+    setBrazierLit,
     setCleared(open: boolean): void {
       beam.setEnabled(open);
     },

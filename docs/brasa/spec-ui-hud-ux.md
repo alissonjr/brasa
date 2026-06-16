@@ -286,29 +286,34 @@ e toque (já no `uiManager`: foco preso, setas, ponte de gamepad). Reaproveita `
 e `theme.css` re-tematizados (ver seção 8).
 
 ### 5.1 Tela-título
-- `[NORMATIVO]`: arte low-poly da boca do poço-cripta: uma escada de pedra descendo para o
-  breu azul, com a fagulha como único ponto quente ao fundo (`direcao-de-arte.md` 250).
-- Título "Brasa" em fonte lapidar (Cinzel), com leve brilho de brasa (emissivo sutil) na
-  letra.
-- Botões como selos de pedra com fechadura de bronze: "Continuar / Nova Descida / Opções /
-  Idioma / Sair". Seletor PT/EN visível.
-- `[NORMATIVO]`: o item em foco é o único realçado em laranja-brasa (o resto fica em bronze
-  frio), reforçando "a fagulha escolhe".
-- `[CÓDIGO]` `[NORMATIVO]` (implementado): a tela-título é um **diorama 3D vivo** (vitrine
-  `ModelStage` na variante `backdrop`, ver 5.6): a Acendedora gira no escuro do poço à
-  direita, painel de bronze à esquerda, scrim escurecendo a esquerda para legibilidade. A
-  antiga arte estática de deserto (resíduo do tema de Josué) foi removida.
+- `[CÓDIGO]` `[NORMATIVO]` (implementado): a tela-título é **CINEMATOGRÁFICA DIEGÉTICA, o
+  menu É a cena** (`titleScene.ts`). Não há tabuleta/painel: uma cena 3D full-bleed mostra a
+  Acendedora de pé diante da **Brasa** moribunda no escuro frio da cripta, com fog,
+  **brasas subindo** (partículas), **luz volumétrica/god rays** saindo da Brasa, glow, e a
+  Brasa **piscando** como fogo vivo. A **câmera tem deriva lenta** (parallax). Decisão de
+  direção tomada com o usuário (escola Elden Ring / God of War / The Last of Us); substitui
+  o painel de bronze e a antiga arte estática de deserto (resíduo de Josué).
+- `[CÓDIGO]` `[NORMATIVO]` o texto FLUTUA sobre a cena: título "Brasa" gravado (Cinzel, com
+  gradiente e brilho de brasa) no topo; as opções (Continuar / Nova Descida / Carregar /
+  Perfil / Opções) são **texto puro, sem caixa**, em bronze frio apagado, que **acende em
+  brasa** (cor quente + glow + flama ✦ nas laterais) ao foco/hover. Reforça "a fagulha
+  escolhe". Navegação por teclado/gamepad preservada (são `<button>` estilizados como texto).
+- `[CÓDIGO]` `[NORMATIVO]` a Acendedora é iluminada pelo fogo que carrega (key/fill quente),
+  legível e não silhueta; recorte frio atrás para separar do breu. Respeita "reduzir
+  movimento" (sem deriva de câmera nem partículas voando).
 - `[CÓDIGO]` `[NORMATIVO]` menu evolutivo: a brasa é o ponto quente de sempre, mas a cor de
   destaque do diorama (luz de recorte + brilho do chão) INTENSIFICA de brasa-baixa (ember
   escuro) a brasa-plena (laranja-ouro) conforme o progresso da campanha (`descentAccent` em
   `screens.ts`), refletindo a Brasa reacesa sem pedir input e sem perder a assinatura quente.
   Atende à tendência de "menus que reagem ao progresso" das franquias campeãs.
-- `[CÓDIGO]` `[NORMATIVO]` modelo: o diorama usa um **modelo próprio da Acendedora**
-  (`/models/acendedora.glb`, gerado no Tripo e limpo no Blender), não mais o KayKit Mage
-  genérico. Estático (sem rig), o que basta para a vitrine (a câmera é que orbita). O herói
-  EM JOGO segue no KayKit Mage rigado até existir uma Acendedora riggada (ver
-  `personagens.md` 1.2). Há, portanto, uma diferença temporária entre a Acendedora dos
-  menus e a do jogo, assumida como passo intermediário.
+- `[CÓDIGO]` `[NORMATIVO]` modelo: os menus usam um **modelo próprio da Acendedora**
+  (`/models/acendedora.glb`, gerado no Tripo e limpo no Blender), estático (sem rig), o que
+  basta para a vitrine (a câmera é que orbita). O herói EM JOGO usa o KayKit **Rogue_Hooded**
+  (encapuzado, lê como a Acendedora, com rig/pesos/animações limpos). Tentamos riggar o
+  modelo próprio via auto-rig do Tripo para o jogo, mas deformava como gelatina (pesos ruins)
+  e a malha saiu com defeito; descartado para gameplay (ver `personagens.md` 1.2). Logo, há
+  diferença temporária entre a Acendedora dos menus (própria, estática) e a do jogo
+  (Rogue_Hooded), até existir um rig de qualidade do modelo próprio.
 - `[CÓDIGO]` `[NORMATIVO]` áudio: a tela-título tem um **ambiente procedural de brasa**
   (`titleAmbience.ts`, WebAudio, sem asset): drone grave quente com respiração (LFO) e
   estalos de ember, gated pelo volume de música (master x música) e lido ao vivo. Toca no

@@ -63,6 +63,10 @@ export class HeroCombat {
   // Modificadores de UPGRADE (dádivas da Brasa adquiridas entre andares).
   private dmgMul = 1;
   private extraReach_ = 0;
+  private lifesteal_ = 0; // fração do dano causado que vira vida (dádiva "Sede da Brasa")
+  // Buff de dano TEMPORIZADO (Elixir de Fúria): soma ao dmgMul enquanto o timer corre.
+  private buffMul = 0;
+  private buffTimer = 0;
 
   constructor(scene: Scene, parent: TransformNode) {
     this.pivot = new TransformNode("weaponPivot", scene);
@@ -95,6 +99,15 @@ export class HeroCombat {
   /** Está conjurando o golpe de fogo? (o ator escolhe a animação de cast). */
   get casting(): boolean {
     return this.state === "ember";
+  }
+
+  /**
+   * Em ANTECIPAÇÃO de um golpe (windup, antes do ativo). O ator usa isto para reorientar
+   * a heroína para onde a câmera olha: a hitbox fica à frente do modelo, então sem isso o
+   * golpe de frente erraria (o modelo só gira na direção do movimento). Trava ao ficar ativo.
+   */
+  get aiming(): boolean {
+    return this.busy && this.attack.current === "startup";
   }
 
   /** Fração da Fagulha (0..1) para o HUD. */
@@ -169,9 +182,38 @@ export class HeroCombat {
   }
 
   // --- Upgrades (dádivas da Brasa) ---
-  /** Multiplicador de dano causado (lido pelo CombatDirector). */
+  /** Multiplicador de dano causado (lido pelo CombatDirector). Inclui o buff temporário. */
   get damageMul(): number {
-    return this.dmgMul;
+    return this.dmgMul + (this.buffTimer > 0 ? this.buffMul : 0);
+  }
+  /** Fração do dano que vira vida no acerto (0 = sem roubo de vida). */
+  get lifesteal(): number {
+    return this.lifesteal_;
+  }
+  /** Pode beber poção agora? (fora de golpe/conjuração; idle ou aproximação). */
+  get canDrink(): boolean {
+    return this.state === "idle";
+  }
+  /** Elixir de Fúria: soma um multiplicador de dano por uma duração. */
+  applyDamageBuff(mul: number, seconds: number): void {
+    this.buffMul = mul;
+    this.buffTimer = seconds;
+  }
+  /** Soma roubo de vida (dádiva "Sede da Brasa"). */
+  addLifesteal(frac: number): void {
+    this.lifesteal_ += frac;
+  }
+  /** Cura ao conectar um golpe (chamado pelo CombatDirector se houver roubo de vida). */
+  lifestealHeal(damageDealt: number): void {
+    if (this.lifesteal_ > 0) this.health.heal(damageDealt * this.lifesteal_);
+  }
+  /** Cura uma quantidade absoluta de vida (essência coletada / poção). */
+  heal(amount: number): void {
+    if (amount > 0) this.health.heal(amount);
+  }
+  /** Vida máxima atual (para curar por fração na poção). */
+  get maxHealth(): number {
+    return this.health.max;
   }
   /** Alcance extra do golpe (somado ao raio da hitbox no CombatDirector). */
   get extraReach(): number {
@@ -215,11 +257,22 @@ export class HeroCombat {
     this.stamina = HERO.maxStamina;
   }
 
+  /** Zera todos os upgrades/dádivas (jogo novo): volta o herói ao estado-base. */
+  resetUpgrades(): void {
+    this.dmgMul = 1;
+    this.extraReach_ = 0;
+    this.lifesteal_ = 0;
+    this.buffMul = 0;
+    this.buffTimer = 0;
+    this.health.setMax(HERO.maxHealth);
+  }
+
   // --- loop ---
 
   update(deltaSeconds: number, input: CombatInputSource): void {
     this.regenStamina(deltaSeconds);
     this.regenSpark(deltaSeconds);
+    if (this.buffTimer > 0) this.buffTimer = Math.max(0, this.buffTimer - deltaSeconds);
 
     switch (this.state) {
       case "dodging":

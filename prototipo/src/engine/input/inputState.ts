@@ -42,7 +42,10 @@ export type InputAction =
   | "dodge"
   | "block"
   | "ember"
-  | "lockOn";
+  | "lockOn"
+  | "potion1"
+  | "potion2"
+  | "interact";
 
 /** Mapa ação -> lista de codes (KeyboardEvent.code ou Mouse0/1/2). O primeiro é o "principal". */
 export type KeyBindings = Record<InputAction, string[]>;
@@ -60,10 +63,13 @@ export const INPUT_ACTIONS: InputAction[] = [
   "block",
   "ember",
   "lockOn",
+  "potion1",
+  "potion2",
+  "interact",
 ];
 
 /** Ações consumidas por toque (não por estado contínuo). */
-const EDGE_ACTIONS: InputAction[] = ["jump", "attack", "heavy", "dodge", "ember", "lockOn"];
+const EDGE_ACTIONS: InputAction[] = ["jump", "attack", "heavy", "dodge", "ember", "lockOn", "potion1", "potion2"];
 
 export const DEFAULT_BINDINGS: KeyBindings = {
   forward: ["KeyW", "ArrowUp"],
@@ -80,6 +86,9 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   block: ["KeyQ"],
   ember: ["KeyE", "KeyF"], // golpe de fogo (gasta Fagulha)
   lockOn: ["KeyT"],
+  potion1: ["Digit1"], // beber Poção de Recuperação
+  potion2: ["Digit2"], // beber Elixir de Fúria
+  interact: ["KeyR", "Enter"], // segurar para acender a Brasa (hold)
 };
 
 export class InputState implements CombatInputSource {

@@ -20,6 +20,7 @@ async function main(): Promise<void> {
   const ctx = setupCryptScene(scene, camera.camera);
   await ensureCryptPieces(scene);
   let room = buildCryptRoom(scene, ctx, { index: 0, kind: "guarda", enemies: 0 });
+  room.setBrazierLit(1); // preview mostra a sala já acesa (estado quente)
   room.setCleared(true); // mostra a passagem aberta (sem gerenciador no preview)
   let floorIdx = 0;
   const KINDS = ["guarda", "salao", "cisterna", "santuario", "guardiao"] as const;
@@ -34,6 +35,11 @@ async function main(): Promise<void> {
     new Skeleton(scene, new Vector3(-1.5, 0, 0.5), { kind: "warrior" }),
     new Skeleton(scene, new Vector3(1.5, 0, 0.5), { kind: "rogue" }),
     new Skeleton(scene, new Vector3(4.5, 0, 0.5), { kind: "heavy" }),
+    // Fileira Quaternius (verificacao de orientacao/escala vs KayKit). Idle, parados.
+    new Skeleton(scene, new Vector3(-4.5, 0, 4.0), { kind: "demonio" }),
+    new Skeleton(scene, new Vector3(-1.5, 0, 4.0), { kind: "brutamonte" }),
+    new Skeleton(scene, new Vector3(1.5, 0, 4.0), { kind: "espreitador" }),
+    new Skeleton(scene, new Vector3(4.5, 0, 4.0), { kind: "conjurador" }),
   ];
 
   // Herói projeta sombra assim que o modelo termina de carregar (async).
@@ -69,11 +75,13 @@ async function main(): Promise<void> {
   w.__scene = scene;
   w.__engine = engine;
   w.__orbit = orbit;
+  w.__setLit = (t: number) => room.setBrazierLit(t); // dev: ver a virada frio<->quente
   // Testa o descarte: joga a sala atual fora e constroi a proxima (uma sala por vez).
   w.__rebuild = () => {
     room.dispose();
     floorIdx = (floorIdx + 1) % KINDS.length;
     room = buildCryptRoom(scene, ctx, { index: floorIdx, kind: KINDS[floorIdx]!, enemies: 0, boss: floorIdx === 4 });
+    room.setBrazierLit(1);
     room.setCleared(true);
   };
 

@@ -5,6 +5,7 @@ import type { DialogueSpeed, Quality } from "@platform";
 import { T, setLanguage } from "./strings";
 import { uiHover, uiClick } from "./uiSound";
 import { ModelStage } from "./modelStage";
+import { TitleScene } from "./titleScene";
 import type { UiContext } from "./uiContext";
 import { LANDMARKS, WORLD_HALF, type LandmarkKind } from "../content/map";
 import { CAMPAIGN, chapterName, currentObjective, findChapter, progressPercent } from "../content/campaign";
@@ -65,16 +66,6 @@ const ICONS = {
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13M10 11v6M14 11v6"/></svg>',
   save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5a1 1 0 0 1 1-1h10l4 4v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><path d="M8 4v5h7M8 20v-6h8v6"/></svg>',
 } as const;
-
-/** Selo solar ornamental exibido acima do título na tela-título. */
-const TITLE_EMBLEM =
-  '<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="32" cy="32" r="11"/><circle cx="32" cy="32" r="4.5" fill="currentColor" stroke="none"/><path d="M32 6v8M32 50v8M6 32h8M50 32h8M13 13l5.6 5.6M45.4 45.4 51 51M51 13l-5.6 5.6M18.6 45.4 13 51"/></svg>';
-
-function titleEmblem(): HTMLElement {
-  const e = el("div", { class: "title-emblem" });
-  e.innerHTML = TITLE_EMBLEM;
-  return e;
-}
 
 /** Glifo padrão para rótulos de navegação comuns (Voltar/Fechar), em qualquer idioma. */
 function autoGlyph(label: string): string | undefined {
@@ -162,7 +153,7 @@ export class AlertDialog implements Screen {
 
 // --- Menu principal ---
 
-/** Modelo da Acendedora nas vitrines de menu (modelo próprio gerado p/ Brasa). */
+/** Modelo próprio da Acendedora nas vitrines de menu (estático; a câmera é que orbita). */
 const ACENDEDORA_PREVIEW_MODEL = "/models/acendedora.glb";
 
 /**
@@ -179,60 +170,73 @@ function descentAccent(pct: number): string {
   return "#" + mix.map((v) => v.toString(16).padStart(2, "0")).join("");
 }
 
+/** Opção da tela-título: texto puro (sem caixa) que acende em brasa ao focar/hover. */
+function cineOption(
+  label: string,
+  onClick: () => void,
+  opts?: { disabled?: boolean; primary?: boolean }
+): HTMLButtonElement {
+  const cls = "title-cine-opt" + (opts?.primary ? " primary" : "");
+  const b = el("button", { class: cls }, el("span", { class: "title-cine-opt-label", text: label }));
+  if (opts?.disabled) b.disabled = true;
+  b.addEventListener("pointerenter", uiHover);
+  b.addEventListener("click", uiClick);
+  b.addEventListener("click", onClick);
+  return b;
+}
+
 export class MainMenuScreen implements Screen {
   readonly element: HTMLElement;
-  private readonly stage: ModelStage;
+  private readonly scene: TitleScene;
 
   constructor(ctx: UiContext) {
-    // Diorama vivo de fundo: a Acendedora girando no escuro do poço, com a brasa
-    // como ponto quente. Substitui a antiga arte estática (cena de deserto, do tema
-    // anterior) por uma tela-título de verdade (ver docs/brasa/spec-ui-hud-ux.md 5.1).
-    this.stage = new ModelStage({
+    // Tela-título CINEMATOGRÁFICA DIEGÉTICA: a Acendedora diante da Brasa na cripta;
+    // o menu é texto que flutua sobre a cena e acende em brasa ao focar (ver
+    // titleScene.ts e docs/brasa/spec-ui-hud-ux.md 5.1). Sem tabuletas.
+    this.scene = new TitleScene({
       modelUrl: ACENDEDORA_PREVIEW_MODEL,
-      variant: "backdrop",
-      interactive: false, // a tela-título gira sozinha; sem arrastar
-      autoRotate: !ctx.settings.get().reducedMotion,
       accent: descentAccent(progressPercent(ctx.progression.state())),
+      reducedMotion: ctx.settings.get().reducedMotion,
     });
 
-    // CTA iluminado: Continuar quando há autosave; senão, Novo Jogo.
-    const panel = el(
+    const head = el(
       "div",
-      { class: "menu-panel cinematic" },
-      titleEmblem(),
-      el("h1", { class: "menu-title", text: T.title }),
-      el("p", { class: "menu-subtitle", text: T.subtitle }),
-      el("div", { class: "menu-divider" }),
-      btn(T.continuar, () => void ctx.continueGame(), {
-        disabled: !ctx.hasAutosave,
-        variant: ctx.hasAutosave ? "primary" : undefined,
-        glyph: ICONS.play,
-      }),
-      btn(T.novoJogo, () => void ctx.newGame(), {
-        variant: ctx.hasAutosave ? undefined : "primary",
-        glyph: ICONS.sun,
-      }),
-      btn(T.carregar, () => ctx.ui.push(new SavesScreen(ctx)), { glyph: ICONS.layers }),
-      btn(T.perfil, () => ctx.ui.push(new ProfileScreen(ctx)), { glyph: ICONS.person }),
-      btn(T.opcoes, () => ctx.ui.push(new OptionsScreen(ctx)), { glyph: ICONS.gear }),
-      el("p", { class: "menu-verse", text: T.menuVerso })
+      { class: "title-cine-head" },
+      el("h1", { class: "title-cine-name", text: T.title }),
+      el("p", { class: "title-cine-sub", text: T.subtitle })
     );
 
-    this.element = el(
-      "div",
-      { class: "menu-backdrop cinematic title-screen" },
-      this.stage.element,
-      el("div", { class: "title-scrim" }),
-      panel
+    // CTA iluminado: Continuar quando há autosave; senão, Nova Descida.
+    const menu = el(
+      "nav",
+      { class: "title-cine-menu" },
+      cineOption(T.continuar, () => void ctx.continueGame(), {
+        disabled: !ctx.hasAutosave,
+        primary: ctx.hasAutosave,
+      }),
+      cineOption(T.novoJogo, () => void ctx.newGame(), { primary: !ctx.hasAutosave }),
+      cineOption(T.carregar, () => ctx.ui.push(new SavesScreen(ctx))),
+      cineOption(T.perfil, () => ctx.ui.push(new ProfileScreen(ctx))),
+      cineOption(T.opcoes, () => ctx.ui.push(new OptionsScreen(ctx)))
     );
+
+    const overlay = el(
+      "div",
+      { class: "title-cine-overlay" },
+      head,
+      menu,
+      el("p", { class: "title-cine-verse", text: T.menuVerso })
+    );
+
+    this.element = el("div", { class: "menu-backdrop title-cinematic" }, this.scene.element, overlay);
   }
 
   onShow(): void {
-    this.stage.start();
+    this.scene.start();
   }
 
   onHide(): void {
-    this.stage.dispose();
+    this.scene.dispose();
   }
 }
 
@@ -752,6 +756,9 @@ const ACTION_LABEL: Record<InputAction, () => string> = {
   block: () => T.acBloqueio,
   ember: () => T.acFagulha,
   lockOn: () => T.acLockon,
+  potion1: () => "Poção: Recuperação",
+  potion2: () => "Poção: Fúria",
+  interact: () => "Acender / Interagir",
 };
 
 /** Mescla o remapeamento salvo (parcial) sobre o padrão da engine. */

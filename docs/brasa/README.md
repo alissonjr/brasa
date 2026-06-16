@@ -8,6 +8,11 @@ Documento mestre (canon): [`../projeto-brasa.md`](../projeto-brasa.md) - premiss
 mundo, loop sala-a-sala, orçamento de performance NORMATIVO, plano de assets KayKit,
 mapeamento sobre o motor e roadmap.
 
+Aprofundamento e roadmap de elevação: [`00-aprofundamento-e-roadmap.md`](00-aprofundamento-e-roadmap.md)
+- auditoria doc x código, decisões de canon a fechar, aprofundamento por área (poderes,
+inimigos/chefe, história, personagens, chão/teto/paredes, progressão, UI/áudio) e roadmap
+em ondas (W1-W6) com DoD. Comece por aqui para a próxima fase de qualidade.
+
 Convenção de todo o corpus: pt-BR, sem travessões, sem emojis. Procedência
 `[DESIGN]`/`[CÓDIGO]`/`[ASSET]`; exigência `[NORMATIVO]`/`[ASPIRACIONAL]`/`[A DEFINIR]`;
 cada doc de elemento termina com checklist de aceite (DoD).

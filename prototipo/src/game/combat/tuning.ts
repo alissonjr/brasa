@@ -19,7 +19,7 @@ export interface AttackTuning extends AttackTiming {
 }
 
 export const HERO = {
-  maxHealth: 100, // morre em ~5-6 golpes inimigos (§6)
+  maxHealth: 140, // sobrevive a ~8-9 golpes (subido de 100; a vida estava curta na descida)
   maxStamina: 100,
   staminaRegenPerSec: 40,
   staminaRegenDelaySec: 1.0,
@@ -70,6 +70,22 @@ export const DEFENDER = {
   cooldownSec: 0.5, // pausa após a recuperação (parte da janela de punição)
   // Golpe de cima: antecipação LONGA e legível -> ativo curto -> recuperação punível.
   overhead: { startup: 0.6, active: 0.12, recovery: 0.75, damage: 16, knockback: 0, hitStopFrames: 6 } as AttackTuning,
+} as const;
+
+/**
+ * POÇÕES (consumíveis comprados na banca do alquimista) e ABSORÇÃO (vida tirada dos
+ * inimigos). Ver docs/brasa/spec-pocoes-e-absorcao.md. Números de partida; ajustar no playtest.
+ */
+export const POTIONS = {
+  vida: { healFrac: 0.45, cost: 4, cap: 3 }, // Poção de Recuperação
+  furia: { dmgBonus: 0.6, durationSec: 8, cost: 6, cap: 2 }, // Elixir de Fúria
+} as const;
+
+export const ABSORB = {
+  // Essência: orbe de cura que dropa do morto e se pega andando por cima.
+  essencia: { dropChanceBase: 0.5, healFrac: 0.06, lifeSec: 8, pickupRadius: 1.4 },
+  // Dádiva "Sede da Brasa": cada golpe cura esta fração do dano causado (por compra).
+  sedeDaBrasa: { lifestealFrac: 0.12 },
 } as const;
 
 /** Multiplicador de dano RECEBIDO pela Acendedora por dificuldade (criação -> §7). */

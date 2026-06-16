@@ -24,6 +24,11 @@ bloqueia), `[A DEFINIR]` (decisão pendente).
 
 Snapshot: 2026-06-14.
 
+Canon narrativo fechado em 2026-06-15 (heroina Cinza movida pela mentora Marta; Guardiao = a
+Primeira Acendedora; final = Sacrificio com ciencia; a Brasa exige uma guarda viva). Ver
+[`brasa/narrativa-e-historia.md`](brasa/narrativa-e-historia.md) secao 0 e o plano de
+aprofundamento [`brasa/00-aprofundamento-e-roadmap.md`](brasa/00-aprofundamento-e-roadmap.md).
+
 ---
 
 ## 1. Premissa e mundo

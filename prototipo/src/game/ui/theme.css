@@ -1266,6 +1266,181 @@
    Mantém a tabuleta de bronze (mesmo "quadrado" da pausa) para destacar-se do
    3D do jogo, porém mais imponente: fundo dramático, moldura reforçada, emblema
    e entrada encadeada dos itens. Os botões reaproveitam o estilo bronze evoluído. */
+/* ===========================================================================
+   Tela-título CINEMATOGRÁFICA DIEGÉTICA (titleScene.ts): a cena É o menu.
+   Sem tabuleta: a cena 3D ocupa a tela toda e o texto flutua por cima,
+   acendendo em brasa ao focar. Ver spec-ui-hud-ux 5.1.
+   =========================================================================== */
+.menu-backdrop.title-cinematic {
+  display: block;
+  padding: 0;
+  background: #05070c;
+  backdrop-filter: none;
+}
+.title-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+.title-scene-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  opacity: 0;
+  transition: opacity 1.1s ease;
+  outline: none;
+}
+.title-scene.title-scene-ready .title-scene-canvas {
+  opacity: 1;
+}
+/* Vinheta cinematográfica sobre a cena (foca o centro, escurece bordas/topo/base). */
+.title-cinematic::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 52%, transparent 40%, rgba(3, 5, 9, 0.72) 100%),
+    linear-gradient(180deg, rgba(3, 5, 9, 0.7) 0%, transparent 22%, transparent 64%, rgba(3, 5, 9, 0.82) 100%);
+}
+/* Camada de texto do menu (título em cima, opções embaixo). */
+.title-cine-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: clamp(40px, 8vh, 96px) 24px clamp(36px, 7vh, 80px);
+  pointer-events: none;
+  animation: fadeIn 1.2s ease both;
+}
+.title-cine-head {
+  text-align: center;
+  pointer-events: none;
+}
+.title-cine-name {
+  margin: 0;
+  font-family: "Cinzel", Georgia, serif;
+  font-weight: 700;
+  font-size: clamp(46px, 9vw, 104px);
+  letter-spacing: clamp(6px, 1.4vw, 18px);
+  background: linear-gradient(180deg, #ffe9c4 0%, #ffb259 52%, #c9722a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* Brilho de brasa gravado na letra. */
+  filter: drop-shadow(0 0 22px rgba(255, 140, 60, 0.45)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.7));
+  animation: titleNameIn 1.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.title-cine-sub {
+  margin: 10px 0 0;
+  font-family: "EB Garamond", Georgia, serif;
+  font-style: italic;
+  font-size: clamp(14px, 1.7vw, 20px);
+  letter-spacing: 1px;
+  color: rgba(214, 225, 235, 0.74);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+  animation: fadeIn 2s ease 0.5s both;
+}
+/* Menu: lista de texto puro, centralizada na base. */
+.title-cine-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(8px, 1.4vh, 16px);
+  pointer-events: auto;
+}
+.title-cine-opt {
+  appearance: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 10px;
+  font-family: "Cinzel", Georgia, serif;
+  font-weight: 600;
+  font-size: clamp(17px, 2vw, 23px);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: rgba(196, 178, 150, 0.62); /* bronze frio, apagado */
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+  transition: color 0.25s ease, letter-spacing 0.25s ease, text-shadow 0.25s ease, transform 0.25s ease;
+  animation: cineOptIn 1s ease both;
+}
+.title-cine-opt:nth-child(1) { animation-delay: 0.7s; }
+.title-cine-opt:nth-child(2) { animation-delay: 0.8s; }
+.title-cine-opt:nth-child(3) { animation-delay: 0.9s; }
+.title-cine-opt:nth-child(4) { animation-delay: 1.0s; }
+.title-cine-opt:nth-child(5) { animation-delay: 1.1s; }
+.title-cine-opt:hover,
+.title-cine-opt:focus-visible {
+  outline: none;
+  color: #ffd9a0;
+  letter-spacing: 5px;
+  text-shadow: 0 0 18px rgba(255, 150, 70, 0.85), 0 0 4px rgba(255, 200, 130, 0.9);
+  transform: translateY(-1px);
+}
+/* A opção em foco "acende" como a fagulha: marcador de chama nas laterais. */
+.title-cine-opt:hover::before,
+.title-cine-opt:focus-visible::before,
+.title-cine-opt:hover::after,
+.title-cine-opt:focus-visible::after {
+  content: "✦";
+  font-size: 0.6em;
+  color: #ff9a4e;
+  vertical-align: middle;
+  opacity: 0.9;
+  text-shadow: 0 0 10px rgba(255, 150, 70, 0.9);
+}
+.title-cine-opt::before { margin-right: 12px; content: ""; }
+.title-cine-opt::after { margin-left: 12px; content: ""; }
+.title-cine-opt.primary {
+  color: #ffca7a;
+  text-shadow: 0 0 14px rgba(255, 150, 70, 0.6);
+  animation: cineOptIn 1s ease both, cinePrimaryPulse 3.4s ease-in-out 1.4s infinite;
+}
+.title-cine-opt:disabled {
+  color: rgba(150, 150, 160, 0.28);
+  cursor: default;
+  text-shadow: none;
+}
+.title-cine-opt:disabled:hover {
+  letter-spacing: 3px;
+  transform: none;
+  color: rgba(150, 150, 160, 0.28);
+  text-shadow: none;
+}
+.title-cine-verse {
+  margin: 0;
+  font-family: "EB Garamond", Georgia, serif;
+  font-style: italic;
+  font-size: clamp(12px, 1.4vw, 15px);
+  color: rgba(170, 184, 200, 0.5);
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.85);
+  pointer-events: none;
+  animation: fadeIn 2.4s ease 1.2s both;
+}
+@keyframes titleNameIn {
+  from { opacity: 0; transform: translateY(14px); letter-spacing: 24px; filter: drop-shadow(0 0 40px rgba(255, 140, 60, 0.1)); }
+  to { opacity: 1; }
+}
+@keyframes cineOptIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; }
+}
+@keyframes cinePrimaryPulse {
+  0%, 100% { text-shadow: 0 0 14px rgba(255, 150, 70, 0.55); }
+  50% { text-shadow: 0 0 22px rgba(255, 170, 90, 0.95); }
+}
+.ui-root.reduce-motion .title-cine-overlay,
+.ui-root.reduce-motion .title-cine-name,
+.ui-root.reduce-motion .title-cine-opt { animation: none; }
+.ui-root.reduce-motion .title-cine-opt.primary { animation: none; }
+
 .menu-backdrop.cinematic {
   /* Base escura de poço-cripta. O diorama 3D vivo (a Acendedora girando) entra por
      cima via <canvas>; este gradiente é o que aparece atrás do painel à esquerda. */

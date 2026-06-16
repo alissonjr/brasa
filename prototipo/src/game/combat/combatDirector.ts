@@ -1,9 +1,11 @@
-import { Vector3 } from "@babylonjs/core";
-import type { Scene } from "@babylonjs/core";
+import { Color3, MeshBuilder, StandardMaterial, Vector3 } from "@babylonjs/core";
+import type { Mesh, Scene } from "@babylonjs/core";
 import { HitStop, overlapSpheres, type EventBus, type ThirdPersonCamera } from "@engine";
 import type { Acendedora } from "../actors/acendedora";
 import { TrainingDummy } from "../actors/trainingDummy";
-import { Skeleton, type SkeletonKind } from "../actors/enemies/skeleton";
+import { Skeleton, type SkeletonKind, type ShotSpec } from "../actors/enemies/skeleton";
+import { Guardiao } from "../actors/enemies/guardiao";
+import { ABSORB } from "./tuning";
 import type { CombatTarget } from "./combatTarget";
 import { ImpactFx } from "./impactFx";
 import { hitThunk, heroHurt, shieldClank } from "./combatSound";
@@ -30,6 +32,15 @@ export class CombatDirector {
   private readonly tmpDir = new Vector3();
   private readonly dead = new Set<Skeleton>(); // inimigos já creditados (1 drop de Fagulha cada)
   private heroDead = false;
+  private boss: Guardiao | null = null; // chefe Guardião (andar final); slot próprio
+  private bossCredited = false;
+  private wakeTimer = 0; // "despertar": inimigos ficam parados (erguendo-se) por um instante ao entrar
+  // Projeteis em voo (conjuradores): esfera emissiva que viaja e fere o herói ao alcançá-lo.
+  private readonly projectiles: { mesh: Mesh; pos: Vector3; vel: Vector3; life: number; damage: number }[] = [];
+  private projMat: StandardMaterial | null = null;
+  // Essencias: orbes de cura que dropam do morto e curam ao serem coletadas (absorcao).
+  private readonly essences: { mesh: Mesh; pos: Vector3; life: number }[] = [];
+  private essMat: StandardMaterial | null = null;
 
   constructor(
     private readonly scene: Scene,
@@ -52,22 +63,97 @@ export class CombatDirector {
     return d;
   }
 
+  /** Despertar: segura a IA dos inimigos por `seconds` ao entrar na câmara (encenação). */
+  wake(seconds: number): void {
+    this.wakeTimer = seconds;
+  }
+
+  /** Instancia o chefe Guardião na arena (andar final). */
+  addBoss(spawn: Vector3): Guardiao {
+    this.boss = new Guardiao(this.scene, spawn);
+    this.bossCredited = false;
+    return this.boss;
+  }
+
+  /** Fração de vida do chefe (barra de chefe no HUD); -1 se não há chefe ativo. */
+  get bossFraction(): number {
+    return this.boss && this.boss.health.alive ? this.boss.fraction : -1;
+  }
+  get bossActive(): boolean {
+    return !!this.boss && this.boss.health.alive;
+  }
+
   /** Descarta todos os inimigos atuais (ao trocar de andar da cripta). */
   clearEnemies(): void {
     for (const e of this.enemies) e.dispose();
     this.enemies.length = 0;
     this.dead.clear();
+    this.boss?.dispose();
+    this.boss = null;
+    this.bossCredited = false;
+    for (const p of this.projectiles) p.mesh.dispose();
+    this.projectiles.length = 0;
+    for (const e of this.essences) e.mesh.dispose();
+    this.essences.length = 0;
+  }
+
+  /** Cria um projetil (esfera de fogo) viajando na direcao do disparo do conjurador. */
+  private spawnProjectile(s: ShotSpec): void {
+    if (!this.projMat) {
+      const mat = new StandardMaterial("projMat", this.scene);
+      mat.emissiveColor = Color3.FromHexString("#ff8a2c");
+      mat.diffuseColor = Color3.Black();
+      mat.specularColor = Color3.Black();
+      mat.disableLighting = true;
+      this.projMat = mat;
+    }
+    const mesh = MeshBuilder.CreateSphere("projetil", { diameter: 0.45, segments: 8 }, this.scene);
+    mesh.material = this.projMat;
+    mesh.isPickable = false;
+    mesh.position.set(s.ox, s.oy, s.oz);
+    this.projectiles.push({
+      mesh,
+      pos: new Vector3(s.ox, s.oy, s.oz),
+      vel: new Vector3(s.dx * s.speed, 0, s.dz * s.speed),
+      life: 3.5,
+      damage: s.damage,
+    });
+  }
+
+  /** Move os projeteis, resolve o acerto no heroi (proximidade) e descarta os expirados. */
+  private updateProjectiles(dt: number, heroPos: Vector3): void {
+    if (dt <= 0 || this.projectiles.length === 0) return;
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const p = this.projectiles[i]!;
+      p.pos.addInPlace(p.vel.scale(dt));
+      p.mesh.position.copyFrom(p.pos);
+      p.life -= dt;
+      const dxh = heroPos.x - p.pos.x;
+      const dzh = heroPos.z - p.pos.z;
+      const hit = dxh * dxh + dzh * dzh < 0.7 * 0.7 && Math.abs(p.pos.y - (heroPos.y + 1.0)) < 1.2;
+      if (hit || p.life <= 0) {
+        if (hit) {
+          this.fx.burst(p.pos, 14);
+          this.onEnemyStrike(p.damage); // aplica i-frames/bloqueio como qualquer golpe inimigo
+        }
+        p.mesh.dispose();
+        this.projectiles.splice(i, 1);
+      }
+    }
   }
 
   /** Quantos inimigos ainda estão vivos (a sala "limpa" quando chega a zero). */
   get enemiesAlive(): number {
     let n = 0;
     for (const e of this.enemies) if (e.health.alive) n++;
+    if (this.boss && this.boss.health.alive) n++;
     return n;
   }
 
   private get targets(): CombatTarget[] {
-    return [...this.dummies, ...this.enemies];
+    const t: CombatTarget[] = [...this.dummies, ...this.enemies];
+    if (this.boss) t.push(this.boss);
+    return t;
   }
 
   /**
@@ -84,16 +170,32 @@ export class CombatDirector {
     for (const d of this.dummies) d.update(combatDt);
 
     const heroPos = this.hero.position;
+    // Despertar: enquanto o timer corre, os inimigos ficam parados (erguendo-se).
+    if (this.wakeTimer > 0) this.wakeTimer = Math.max(0, this.wakeTimer - combatDt);
+    const sleeping = this.wakeTimer > 0;
     for (const e of this.enemies) {
-      if (e.update(combatDt, heroPos)) this.onEnemyStrike(e.attackDamage);
+      if (!sleeping && e.update(combatDt, heroPos)) this.onEnemyStrike(e.attackDamage);
+      const shot = sleeping ? null : e.takeShot();
+      if (shot) this.spawnProjectile(shot);
     }
-    // Credita Fagulha por morto recém-derrotado (uma vez cada).
+    this.updateProjectiles(combatDt, heroPos);
+    // Chefe Guardião (slot próprio): avança, resolve seu golpe e credita ao morrer.
+    if (this.boss) {
+      if (!sleeping && this.boss.update(combatDt, heroPos)) this.onEnemyStrike(this.boss.attackDamage);
+      if (!this.boss.health.alive && !this.bossCredited) {
+        this.bossCredited = true;
+        this.events.emit("enemy:died", { reward: this.boss.reward });
+      }
+    }
+    // Credita Fagulha por morto recém-derrotado (uma vez cada) + chance de soltar essência.
     for (const e of this.enemies) {
       if (!e.health.alive && !this.dead.has(e)) {
         this.dead.add(e);
         this.events.emit("enemy:died", { reward: e.reward });
+        this.maybeDropEssence(e);
       }
     }
+    this.updateEssences(combatDt, heroPos);
 
     return combatDt;
   }
@@ -128,6 +230,7 @@ export class CombatDirector {
         this.camera.shake(0.05 + tuning.hitStopFrames * 0.004);
         this.fx.burst(point, heavy ? 26 : 16);
         hitThunk(heavy);
+        hc.lifestealHeal(tuning.damage * hc.damageMul); // "Sede da Brasa": golpe rouba vida
       }
       this.events.emit("combat:hit", {
         damage: tuning.damage,
@@ -173,6 +276,49 @@ export class CombatDirector {
     this.fx.burst(fxPoint, 34);
     hitThunk(true);
     hc.markEmber();
+  }
+
+  /** Chance de o morto soltar uma essência (orbe de cura), escalada pelo seu valor. */
+  private maybeDropEssence(e: Skeleton): void {
+    const chance = Math.min(0.9, ABSORB.essencia.dropChanceBase + e.reward * 0.02);
+    if (Math.random() > chance) return;
+    if (!this.essMat) {
+      const mat = new StandardMaterial("essMat", this.scene);
+      mat.emissiveColor = Color3.FromHexString("#ffd27a");
+      mat.diffuseColor = Color3.Black();
+      mat.specularColor = Color3.Black();
+      mat.disableLighting = true;
+      this.essMat = mat;
+    }
+    const c = e.hurtbox.center;
+    const mesh = MeshBuilder.CreateSphere("essencia", { diameter: 0.5, segments: 8 }, this.scene);
+    mesh.material = this.essMat;
+    mesh.isPickable = false;
+    const pos = new Vector3(c.x, 0.8, c.z);
+    mesh.position.copyFrom(pos);
+    this.essences.push({ mesh, pos, life: ABSORB.essencia.lifeSec });
+  }
+
+  /** Coleta de essência por proximidade (cura) + expiração. */
+  private updateEssences(dt: number, heroPos: Vector3): void {
+    if (dt <= 0 || this.essences.length === 0) return;
+    const rr = ABSORB.essencia.pickupRadius * ABSORB.essencia.pickupRadius;
+    for (let i = this.essences.length - 1; i >= 0; i--) {
+      const e = this.essences[i]!;
+      e.life -= dt;
+      e.mesh.position.y = 0.8 + 0.12 * Math.sin(e.life * 6); // leve flutuacao
+      const dx = heroPos.x - e.pos.x;
+      const dz = heroPos.z - e.pos.z;
+      const got = dx * dx + dz * dz < rr;
+      if (got) {
+        this.hero.combat.heal(this.hero.combat.maxHealth * ABSORB.essencia.healFrac);
+        this.fx.burst(e.pos, 10);
+      }
+      if (got || e.life <= 0) {
+        e.mesh.dispose();
+        this.essences.splice(i, 1);
+      }
+    }
   }
 
   /** Um inimigo conectou o golpe no herói: aplica o dano DELE (i-frames anulam, bloqueio reduz) + feedback. */

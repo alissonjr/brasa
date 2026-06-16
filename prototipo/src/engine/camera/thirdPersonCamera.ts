@@ -12,6 +12,7 @@ export class ThirdPersonCamera {
   private readonly canvas: HTMLCanvasElement;
   private readonly smoothedTarget: Vector3;
   private readonly targetHeight = 1.2;
+  private readonly defaultRadius = 6; // distância padrão (reaplicada a cada sala, view consistente)
 
   // Sensibilidade do mouse (rad por pixel).
   private readonly lookSensitivity = 0.0028;
@@ -121,6 +122,25 @@ export class ThirdPersonCamera {
       this.shakeAmp = 0;
       this.camera.setTarget(this.smoothedTarget);
     }
+  }
+
+  /**
+   * Cola a câmera atrás do herói IMEDIATAMENTE (sem suavização). Usar ao trocar de sala /
+   * teleportar: sem isso, o alvo só interpola e, no salto entre andares, a câmera varre o
+   * cenário com colisão e acaba do lado de fora da parede até se reassentar. Por padrão
+   * reenquadra "atrás do herói, olhando para dentro da sala".
+   */
+  snap(targetPosition: Vector3, faceInto = true): void {
+    this.smoothedTarget.copyFrom(targetPosition);
+    this.smoothedTarget.y += this.targetHeight;
+    this.shakeAmp = 0;
+    if (faceInto) {
+      // Enquadramento PADRÃO: idêntico em toda sala (atrás do herói, mesma distância/ângulo).
+      this.camera.alpha = -Math.PI / 2; // atrás do herói
+      this.camera.beta = 1.05; // levemente de cima
+      this.camera.radius = this.defaultRadius; // reseta o zoom: view consistente a cada andar
+    }
+    this.camera.setTarget(this.smoothedTarget);
   }
 
   /** Dispara um kick de câmera (impacto). Amplitude em unidades de mundo; pega o maior pedido. */

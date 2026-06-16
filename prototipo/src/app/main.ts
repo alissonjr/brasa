@@ -32,11 +32,18 @@ import {
   configureTitleAmbience,
   startTitleAmbience,
   stopTitleAmbience,
+  configureMusic,
+  startMusic,
+  stopMusic,
+  setMusicState,
   CombatDirector,
   CombatHud,
   DIFFICULTY_DAMAGE_TAKEN,
+  POTIONS,
+  ABSORB,
   type UiContext,
   type CharacterSave,
+  type RunSave,
 } from "@game";
 import { SAVE_SCHEMA_VERSION, requestPersistentStorage } from "@platform";
 import type { Quality, SaveData } from "@platform";
@@ -77,6 +84,10 @@ async function main(): Promise<void> {
   configureUiSound(sfxVolume);
   configureCombatSound(sfxVolume);
   configureTitleAmbience(() => {
+    const s = platform.settings.get();
+    return s.masterVolume * s.musicVolume;
+  });
+  configureMusic(() => {
     const s = platform.settings.get();
     return s.masterVolume * s.musicVolume;
   });
@@ -141,9 +152,24 @@ async function main(): Promise<void> {
   let descending = false;
   let descentDone = false;
   let roomCleared = false;
+  // Acender a Brasa: ao limpar a sala, a Acendedora canaliza no altar (channelT) e a luz
+  // vira de fria a quente (lightT); só então o alçapão libera (passageOpen). Ver spec-top5.
+  let channelT = 0;
+  let lightT = 0;
+  let passageOpen = false;
+  const CHANNEL_SEC = 1.3; // tempo segurando [R] no altar
+  const LIGHT_SEC = 1.0; // duração da virada frio->quente
   let fagulhas = 0; // moeda: cinza quente dos mortos, gasta nas dádivas do braseiro
+  let runActive = false; // há uma descida em andamento (para persistência/retomar)
+  const purchasedBoons: string[] = []; // nomes das dádivas compradas (reaplicadas ao carregar)
   let defeated = false; // derrota: a fagulha apagou (vida zerou)
+  // Declarado cedo: restoreRun() roda no boot e chama updateFagulhaHud/updatePotionHud,
+  // que leem gameActive. Se ficasse lá embaixo, daria TDZ ("before initialization").
+  let gameActive = false; // simulação ativa (fora de menu/pausa/transição)
   const CLEAR_BONUS = 6;
+  // Inventário de poções (cargas; comprado na banca do braseiro, usado com Digit1/Digit2).
+  // Persiste na run. Começa com 1 Poção de Recuperação (ensina o recurso).
+  const inv = { vida: 1, furia: 0 };
 
   // Contador de Fagulhas (moeda) no HUD.
   const fagulhaEl = document.createElement("div");
@@ -162,14 +188,84 @@ async function main(): Promise<void> {
     updateFagulhaHud();
   });
 
+  // Contador de poções no HUD (cargas de cada tipo; esmaece o que estiver em 0).
+  const potionsEl = document.createElement("div");
+  potionsEl.style.cssText =
+    "position:fixed;right:16px;top:48px;z-index:35;padding:6px 14px;border-radius:14px;" +
+    "background:rgba(12,17,24,0.78);color:#cfe;font:600 14px Cinzel,serif;border:1px solid #4a5a6e;" +
+    "pointer-events:none;text-shadow:0 1px 2px #000;display:none;white-space:nowrap;";
+  document.body.appendChild(potionsEl);
+  const updatePotionHud = (): void => {
+    const dim = (n: number): string => (n > 0 ? "#cfe" : "#5a6a78");
+    potionsEl.innerHTML =
+      `<span style="color:${dim(inv.vida)}">[1] Recuperação x${inv.vida}</span>` +
+      `&nbsp;&nbsp;<span style="color:${dim(inv.furia)}">[2] Fúria x${inv.furia}</span>`;
+    potionsEl.style.display = gameActive ? "" : "none";
+  };
+
   // Aviso na tela quando a câmara é limpa e a passagem abre.
   const promptEl = document.createElement("div");
   promptEl.style.cssText =
     "position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:35;padding:10px 20px;border-radius:8px;" +
     "background:rgba(12,17,24,0.8);color:#ffcf8a;font:600 16px Cinzel,serif;border:1px solid #6e5a3a;opacity:0;" +
     "transition:opacity .3s ease;pointer-events:none;text-shadow:0 1px 2px #000;white-space:nowrap;";
-  promptEl.textContent = "Câmara limpa — pise no feixe de luz para acender o braseiro e descer";
+  promptEl.textContent = "Câmara limpa: vá ao altar e segure [R] para acender a Brasa";
   document.body.appendChild(promptEl);
+
+  // Barra de progresso da canalização do acender (aparece só enquanto canaliza).
+  const channelBar = document.createElement("div");
+  channelBar.style.cssText =
+    "position:fixed;left:50%;bottom:64px;transform:translateX(-50%);z-index:35;width:220px;height:8px;" +
+    "border-radius:6px;background:rgba(12,17,24,0.7);border:1px solid #6e5a3a;overflow:hidden;opacity:0;" +
+    "transition:opacity .15s ease;pointer-events:none;";
+  const channelFill = document.createElement("div");
+  channelFill.style.cssText = "height:100%;width:0%;background:linear-gradient(90deg,#ff7a1c,#ffd089);";
+  channelBar.appendChild(channelFill);
+  document.body.appendChild(channelBar);
+
+  // Barra do CHEFE (Guardião): topo-centro, aparece só quando o chefe está ativo.
+  const bossWrap = document.createElement("div");
+  bossWrap.style.cssText =
+    "position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:36;width:440px;max-width:80vw;" +
+    "opacity:0;transition:opacity .3s ease;pointer-events:none;text-align:center;";
+  const bossName = document.createElement("div");
+  bossName.style.cssText = "color:#e7d2b0;font:600 15px Cinzel,serif;text-shadow:0 1px 3px #000;margin-bottom:4px;letter-spacing:1px;";
+  bossName.textContent = "O GUARDIÃO";
+  const bossTrack = document.createElement("div");
+  bossTrack.style.cssText = "height:12px;border-radius:7px;background:rgba(8,10,14,0.8);border:1px solid #7a2a1c;overflow:hidden;";
+  const bossFill = document.createElement("div");
+  bossFill.style.cssText = "height:100%;width:100%;background:linear-gradient(90deg,#c8401c,#ff8a2c);transition:width .12s linear;";
+  bossTrack.appendChild(bossFill);
+  bossWrap.append(bossName, bossTrack);
+  document.body.appendChild(bossWrap);
+
+  // Texto de cena (set-pieces): abertura, ecos por andar, reavivar. Fade in/out.
+  const storyEl = document.createElement("div");
+  storyEl.style.cssText =
+    "position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);z-index:38;max-width:80vw;text-align:center;" +
+    "color:#e7d2b0;font:600 26px Cinzel,serif;text-shadow:0 2px 10px #000,0 0 24px rgba(255,138,44,0.35);" +
+    "opacity:0;transition:opacity 1s ease;pointer-events:none;letter-spacing:1px;";
+  document.body.appendChild(storyEl);
+  let storyTimer = 0;
+  const showStory = (text: string, holdMs: number, big = true): void => {
+    window.clearTimeout(storyTimer);
+    storyEl.textContent = text;
+    storyEl.style.fontSize = big ? "26px" : "18px";
+    storyEl.style.opacity = "1";
+    storyTimer = window.setTimeout(() => {
+      storyEl.style.opacity = "0";
+    }, holdMs);
+  };
+  // Um eco/memória por andar (sussurro do passado encenado ao entrar; biblia-narrativa).
+  const ECHOES = [
+    "A última brasa desce ao poço. O frio reclama o que foi nosso.",
+    "Aqui dormem os que zelavam a chama. Agora dormem famintos.",
+    "A água subiu e a luz desceu. Ninguém mais reacende as lâmpadas.",
+    "Eu carreguei fogo por estes salões. Não me lembro de apagá-los.",
+    "Reze ao calor, dizia o velho. O calor não responde mais.",
+    "Quanto mais fundo, mais antigo o escuro. E mais faminto.",
+    "No fundo, algo guarda a primeira Brasa. Não quer devolvê-la.",
+  ];
 
   // Overlay preto para o fade entre andares.
   const fadeEl = document.createElement("div");
@@ -188,28 +284,45 @@ async function main(): Promise<void> {
     const def = DESCENT[i]!;
     currentRoom = buildCryptRoom(scene, cryptCtx, def);
     floorIndex = i;
+    runActive = true; // há uma descida em andamento (persistível)
     roomCleared = false; // passagem selada até limpar a câmara
+    channelT = 0; // canalização do acender (0..1)
+    lightT = 0; // virada de luz frio->quente (0..1)
+    passageOpen = false; // alçapão só libera após acender a Brasa
     hero.teleport(currentRoom.spawn);
+    camera.snap(currentRoom.spawn); // cola a câmera atrás do herói na nova sala (sem varrer o cenário)
     hero.combat.refillSpark(); // entra no andar com a fagulha cheia
     // Mortos despertos do andar: mistura de tipos que endurece com a profundidade
-    // (morte permanente: a sala "limpa" ao derrotá-los). Bestiário: minion/warrior/rogue/heavy.
-    // Composição que endurece com a profundidade (teto ~8 esqueletos/sala, spec-vertical-slice §3).
+    // (morte permanente: a sala "limpa" ao derrotá-los). Os arquétipos entram em ESCADA,
+    // cada um introduzindo um COMPORTAMENTO novo (não só stats): demônio (melee agressivo),
+    // espreitador (hit-and-run), conjurador (à distância, força fechar espaço), brutamonte
+    // (tanque enorme). Teto ~8 inimigos/sala (spec-vertical-slice §3).
     const ROSTER: SkeletonKind[][] = [
       ["minion"], // 0 abertura: 1 fraco (ensina o laço)
-      ["minion", "rogue", "warrior"], // 1
-      ["warrior", "minion", "rogue", "minion", "warrior"], // 2 pico (5)
-      ["warrior", "rogue", "antigo", "minion", "warrior", "minion"], // 3 pico (6) - surge o Antigo
-      ["heavy", "antigo", "rogue", "minion"], // 4 santuário (4)
-      ["sentinela", "rogue", "warrior", "minion", "rogue"], // 5 (5) - Sentinela elite pré-chefe
-      ["heavy", "antigo", "warrior", "rogue"], // 6 Guardião placeholder (4)
+      ["minion", "minion", "demonio"], // 1 estreia o demônio (silhueta nova, pressão leve)
+      ["warrior", "espreitador", "rogue", "minion"], // 2 estreia o espreitador (hit-and-run)
+      ["warrior", "conjurador", "antigo", "espreitador", "minion"], // 3 pico - estreia o conjurador (à distância)
+      ["brutamonte", "conjurador", "rogue", "demonio"], // 4 estreia o brutamonte (tanque enorme)
+      ["sentinela", "espreitador", "conjurador", "warrior", "rogue"], // 5 elite + pressão mista
+      ["brutamonte", "antigo", "conjurador", "demonio"], // 6 (sobra: o andar 6 é do CHEFE)
     ];
-    const kinds = ROSTER[i] ?? ["warrior"];
-    kinds.forEach((kind, e) => {
-      const a = (e / Math.max(1, kinds.length)) * Math.PI * 2;
-      combat.addSkeleton(new Vector3(Math.cos(a) * 4.5, 0, 2.5 + Math.sin(a) * 3), { kind, respawns: false });
-    });
-    platform.events.emit("crypt:floor", { index: i, kind: def.kind });
-    console.log(`[descida] andar ${i + 1}/${DESCENT.length} (${def.kind}): ${kinds.join(", ")}`);
+    const anchor = currentRoom.enemyAnchor; // centro do spawn (varia com a planta)
+    if (def.boss) {
+      // Andar do Guardião: 1 contra 1 na arena (surge à frente do altar).
+      combat.addBoss(new Vector3(anchor.x, 0, anchor.z + 4));
+      platform.events.emit("crypt:floor", { index: i, kind: def.kind });
+      console.log(`[descida] andar ${i + 1}/${DESCENT.length} (${def.kind}): GUARDIÃO`);
+    } else {
+      const kinds = ROSTER[i] ?? ["warrior"];
+      kinds.forEach((kind, e) => {
+        const a = (e / Math.max(1, kinds.length)) * Math.PI * 2;
+        combat.addSkeleton(new Vector3(anchor.x + Math.cos(a) * 4.5, 0, anchor.z + Math.sin(a) * 3), { kind, respawns: false });
+      });
+      platform.events.emit("crypt:floor", { index: i, kind: def.kind });
+      console.log(`[descida] andar ${i + 1}/${DESCENT.length} (${def.kind}): ${kinds.join(", ")}`);
+    }
+    combat.wake(0.9); // despertar: os mortos ficam parados por um instante ao entrar
+    if (gameActive) showStory(ECHOES[i] ?? "", 4200, false); // eco/memória do andar
   };
 
   // Dádivas da Brasa: compradas no braseiro (custam Fagulha). Cada descida oferece 3 do
@@ -221,47 +334,85 @@ async function main(): Promise<void> {
     { name: "Alcance da Chama", desc: "+0,3 m no alcance do golpe.", cost: 7, apply: () => hero.combat.addReach(0.3) },
     { name: "Vigor", desc: "+20% de dano e +10 de vida.", cost: 11, apply: () => { hero.combat.addDamageMul(0.2); hero.combat.addMaxHealth(10); } },
     { name: "Fôlego da Acendedora", desc: "+15 de vida e +0,15 m de alcance.", cost: 8, apply: () => { hero.combat.addMaxHealth(15); hero.combat.addReach(0.15); } },
+    { name: "Sede da Brasa", desc: `Cada golpe rouba ${Math.round(ABSORB.sedeDaBrasa.lifestealFrac * 100)}% do dano em vida.`, cost: 10, apply: () => hero.combat.addLifesteal(ABSORB.sedeDaBrasa.lifestealFrac) },
   ];
   const FREE_BOON: Boon = { name: "Lasca de Brasa", desc: "+10 de vida. Sempre disponível.", cost: 0, apply: () => hero.combat.addMaxHealth(10) };
 
   const chooseBoon = (): Promise<void> =>
     new Promise((resolve) => {
+      // Oferta de dádivas fixa nesta visita (não re-sorteia ao comprar poção).
       const offer = [...[...BOONS].sort(() => Math.random() - 0.5).slice(0, 3), FREE_BOON];
-      const cards = offer.map((bn) => {
-        const afford = fagulhas >= bn.cost;
-        const priceTxt = bn.cost === 0 ? "grátis" : `✦ ${bn.cost}`;
-        const c = el(
+      const panel = el("div", { class: "menu-panel" });
+      const overlay = el("div", { class: "menu-backdrop" }, panel);
+      overlay.style.zIndex = "60";
+      const close = (): void => {
+        document.body.removeChild(overlay);
+        resolve();
+      };
+
+      // Banca do alquimista: comprar cargas de poção (repetível; respeita saldo e capacidade).
+      const shopItem = (label: string, cost: number, cap: number, get: () => number, inc: () => void): HTMLElement => {
+        const full = get() >= cap;
+        const afford = fagulhas >= cost;
+        const note = full ? "cheio" : afford ? `✦ ${cost}` : `✦ ${cost} (sem Fagulha)`;
+        const b = el(
           "button",
           { class: "choice" },
-          el("strong", { text: bn.name }),
-          el("span", { text: bn.desc }),
-          el("span", { text: afford ? priceTxt : `${priceTxt} (sem Fagulha)`, style: `color:${afford ? "#ffcf8a" : "#8c9aa8"};font-weight:600` })
+          el("strong", { text: `${label}  (x${get()}/${cap})` }),
+          el("span", { text: note, style: `color:${full ? "#8c9aa8" : afford ? "#ffcf8a" : "#8c9aa8"};font-weight:600` })
         );
-        if (!afford) {
-          c.style.opacity = "0.45";
-        } else {
-          c.addEventListener("click", () => {
-            fagulhas -= bn.cost;
-            bn.apply();
+        if (full || !afford) b.style.opacity = "0.45";
+        else
+          b.addEventListener("click", () => {
+            fagulhas -= cost;
+            inc();
             updateFagulhaHud();
-            document.body.removeChild(overlay);
-            resolve();
+            updatePotionHud();
+            render();
           });
-        }
-        return c;
-      });
-      const overlay = el(
-        "div",
-        { class: "menu-backdrop" },
-        el(
-          "div",
-          { class: "menu-panel" },
+        return b;
+      };
+
+      const render = (): void => {
+        panel.innerHTML = "";
+        const boonCards = offer.map((bn) => {
+          const afford = fagulhas >= bn.cost;
+          const priceTxt = bn.cost === 0 ? "grátis" : `✦ ${bn.cost}`;
+          const c = el(
+            "button",
+            { class: "choice" },
+            el("strong", { text: bn.name }),
+            el("span", { text: bn.desc }),
+            el("span", { text: afford ? priceTxt : `${priceTxt} (sem Fagulha)`, style: `color:${afford ? "#ffcf8a" : "#8c9aa8"};font-weight:600` })
+          );
+          if (!afford) c.style.opacity = "0.45";
+          else
+            c.addEventListener("click", () => {
+              if (fagulhas < bn.cost) return; // saldo pode ter mudado comprando poções
+              fagulhas -= bn.cost;
+              bn.apply();
+              purchasedBoons.push(bn.name); // persiste a dádiva (reaplicada ao retomar a run)
+              updateFagulhaHud();
+              close();
+            });
+          return c;
+        });
+        panel.append(
           el("h2", { class: "menu-title", text: "Acender o braseiro" }),
-          el("p", { class: "menu-subtitle", text: `A chama curou suas feridas. Gaste a Fagulha (você tem ✦ ${fagulhas}):` }),
-          el("div", { class: "choice-group" }, ...cards)
-        )
-      );
-      overlay.style.zIndex = "60";
+          el("p", { class: "menu-subtitle", text: `A chama curou suas feridas. Você tem ✦ ${fagulhas}.` }),
+          el("p", { class: "menu-subtitle", text: "Banca do alquimista (poções para a descida):" }),
+          el(
+            "div",
+            { class: "choice-group" },
+            shopItem("Poção de Recuperação", POTIONS.vida.cost, POTIONS.vida.cap, () => inv.vida, () => (inv.vida += 1)),
+            shopItem("Elixir de Fúria", POTIONS.furia.cost, POTIONS.furia.cap, () => inv.furia, () => (inv.furia += 1))
+          ),
+          el("p", { class: "menu-subtitle", text: "Escolha uma dádiva para descer:" }),
+          el("div", { class: "choice-group" }, ...boonCards)
+        );
+      };
+
+      render();
       document.body.appendChild(overlay);
     });
 
@@ -273,10 +424,13 @@ async function main(): Promise<void> {
     await fadeTo(1);
     if (floorIndex + 1 >= DESCENT.length) {
       descentDone = true; // fim do slice: a Brasa foi reavivada
+      runActive = false; // run concluída: não retomar
+      void doAutosave();
     } else {
       hero.combat.healByMax(0.4); // acender o braseiro cura (respiro)
       await chooseBoon(); // gasta Fagulha numa dádiva (tela preta atrás)
       enterRoom(floorIndex + 1);
+      void doAutosave(); // checkpoint = braseiro aceso: grava a run (andar/Fagulha/dádivas)
     }
     await fadeTo(0);
     gameActive = true;
@@ -286,9 +440,40 @@ async function main(): Promise<void> {
   /** Chamado no loop: desce quando a sala está limpa e a Acendedora alcança o braseiro. */
   const tryDescend = (): void => {
     if (descending || descentDone || defeated || !currentRoom) return;
-    if (combat.enemiesAlive > 0) return;
+    if (!passageOpen) return; // só desce depois de acender a Brasa
     const ex = currentRoom.exit;
     if (Math.hypot(hero.position.x - ex.x, hero.position.z - ex.z) <= ex.radius) void advance();
+  };
+
+  // Acender a Brasa: roda TODO frame (não no throttle do HUD) para canalização/virada suaves.
+  // Fase 1: limpa a sala -> canaliza segurando [R] perto do altar (channelT). Fase 2: vira a
+  // luz de fria a quente (lightT) e abre o alçapão (passageOpen).
+  const updateIgnite = (dtSec: number): void => {
+    if (!currentRoom || !roomCleared || passageOpen || descending || defeated) {
+      channelBar.style.opacity = "0";
+      return;
+    }
+    if (channelT < 1) {
+      const b = currentRoom.brazier;
+      const near = Math.hypot(hero.position.x - b.x, hero.position.z - b.z) <= 3.2;
+      if (near && input.isHeld("interact")) channelT = Math.min(1, channelT + dtSec / CHANNEL_SEC);
+      else channelT = Math.max(0, channelT - dtSec / CHANNEL_SEC); // decai se soltar/afastar
+      promptEl.textContent = near
+        ? "Segure [R] para acender a Brasa"
+        : "Vá até o altar para acender a Brasa";
+      channelBar.style.opacity = channelT > 0.01 ? "1" : "0";
+      channelFill.style.width = `${Math.round(channelT * 100)}%`;
+    } else {
+      // Virada de luz frio->quente; ao completar, abre a passagem.
+      channelBar.style.opacity = "0";
+      lightT = Math.min(1, lightT + dtSec / LIGHT_SEC);
+      currentRoom.setBrazierLit(lightT);
+      if (lightT >= 1) {
+        currentRoom.setCleared(true);
+        passageOpen = true;
+        promptEl.textContent = "A Brasa arde: pise no feixe de luz para descer";
+      }
+    }
   };
 
   // Botão simples no estilo do tema (para os overlays raw-DOM de derrota).
@@ -337,13 +522,59 @@ async function main(): Promise<void> {
     showDefeat();
   });
 
-  enterRoom(0);
+  // Retoma a descida salva (Fagulha, dádivas, poções, andar) ou começa do topo.
+  const restoreRun = (run: RunSave): void => {
+    fagulhas = run.fagulhas;
+    inv.vida = run.pocaoVida;
+    inv.furia = run.pocaoFuria;
+    purchasedBoons.length = 0;
+    const all = [...BOONS, FREE_BOON];
+    for (const name of run.upgrades) {
+      const bn = all.find((b) => b.name === name);
+      if (bn) {
+        bn.apply();
+        purchasedBoons.push(name);
+      }
+    }
+    hero.combat.revive(); // descanso no braseiro: vida cheia (após reaplicar dádivas)
+    enterRoom(Math.min(run.floorIndex, DESCENT.length - 1));
+    updateFagulhaHud();
+    updatePotionHud();
+  };
+  // Zera a run (jogo novo): Fagulha, poções, dádivas e o herói voltam ao estado-base.
+  const resetRun = (): void => {
+    fagulhas = 0;
+    inv.vida = 1;
+    inv.furia = 0;
+    purchasedBoons.length = 0;
+    descentDone = false;
+    defeated = false;
+    hero.combat.resetUpgrades();
+    updateFagulhaHud();
+    updatePotionHud();
+  };
+  if (gameSave?.run.active) restoreRun(gameSave.run);
+  else enterRoom(0);
 
-  let gameActive = false;
+  // Beber poção (Digit1 = Recuperação, Digit2 = Fúria). Consome o toque sempre; só aplica
+  // o efeito se houver carga e o herói puder beber (fora de golpe/conjuração).
+  const tryPotions = (): void => {
+    if (input.consumePressed("potion1") && inv.vida > 0 && hero.combat.canDrink) {
+      inv.vida -= 1;
+      hero.combat.heal(hero.combat.maxHealth * POTIONS.vida.healFrac);
+      updatePotionHud();
+    }
+    if (input.consumePressed("potion2") && inv.furia > 0 && hero.combat.canDrink) {
+      inv.furia -= 1;
+      hero.combat.applyDamageBuff(POTIONS.furia.dmgBonus, POTIONS.furia.durationSec);
+      updatePotionHud();
+    }
+  };
 
   scene.onAfterPhysicsObservable.add(() => {
     if (!gameActive) return;
     const dt = (scene.deltaTime ?? 0) / 1000;
+    tryPotions();
     // O diretor avança hit stop + alvos e devolve o dt de combate (0 no freeze) do herói.
     const combatDt = combat.update(dt);
     hero.update(combatDt, input, camera);
@@ -422,6 +653,14 @@ async function main(): Promise<void> {
         inkState: "",
         achievements: platform.achievements.all(),
         character,
+        run: {
+          active: runActive,
+          floorIndex,
+          fagulhas,
+          pocaoVida: inv.vida,
+          pocaoFuria: inv.furia,
+          upgrades: purchasedBoons,
+        },
       },
     };
   };
@@ -464,7 +703,12 @@ async function main(): Promise<void> {
     gameHud.setVisible(true);
     input.clearPressed();
     stopTitleAmbience(); // o ambiente da tela-título só toca fora do jogo
+    startMusic(); // trilha dinâmica da descida (frio/combate/quente)
     ui.clear();
+    updateFagulhaHud();
+    updatePotionHud(); // semeia o HUD de poções com as cargas atuais
+    combat.wake(1.0); // despertar do andar atual ao (re)entrar no jogo
+    showStory(ECHOES[floorIndex] ?? "", floorIndex === 0 ? 5200 : 4200, floorIndex === 0);
   }
   function pauseGame(): void {
     if (pausedOpen) return;
@@ -483,6 +727,7 @@ async function main(): Promise<void> {
     document.exitPointerLock();
     hud.hidden = true;
     void doAutosave();
+    stopMusic(); // a trilha da descida só toca em jogo
     ui.replaceAll(new MainMenuScreen(ctx));
     startTitleAmbience(); // retoma o ambiente ao voltar para o título
   }
@@ -510,6 +755,8 @@ async function main(): Promise<void> {
       platform.score.reset(0);
       platform.progression.load({ chapterId: DEFAULT_CHAPTER, checkpointId: "", objectivesDone: [] });
       platform.achievements.load([]);
+      resetRun(); // descida do zero
+      enterRoom(0);
       startGame();
     },
     setQuality: (q) => applyQuality(q),
@@ -528,6 +775,11 @@ async function main(): Promise<void> {
           objectivesDone: g.objectives,
         });
         platform.achievements.load(g.achievements);
+        if (g.run.active) restoreRun(g.run);
+        else {
+          resetRun();
+          enterRoom(0);
+        }
       }
       startGame();
     },
@@ -587,23 +839,38 @@ async function main(): Promise<void> {
     combatHud.setVisible(gameActive);
     promptEl.style.opacity = gameActive && roomCleared && !descending && !descentDone ? "1" : "0";
     fagulhaEl.style.display = gameActive && !descending ? "" : "none";
+    potionsEl.style.display = gameActive && !descending ? "" : "none";
+    const bf = combat.bossFraction;
+    if (gameActive && !descending && bf >= 0) {
+      bossWrap.style.opacity = "1";
+      bossFill.style.width = `${Math.round(bf * 100)}%`;
+    } else {
+      bossWrap.style.opacity = "0";
+    }
+    if (gameActive) {
+      // Trilha por estado: combate (inimigos vivos) -> quente (Brasa acesa) -> frio (explorando).
+      setMusicState(combat.enemiesAlive > 0 ? "combate" : passageOpen ? "quente" : "frio");
+    }
     if (gameActive) combatHud.update(hero.combat.healthFraction, hero.combat.staminaFraction, hero.combat.sparkFraction, dt / 1000);
+    if (gameActive) updateIgnite(dt / 1000); // canalização/virada de luz: todo frame
     if (acc > 250) {
       fpsEl.textContent = `${engine.getFps().toFixed(0)} fps`;
       acc = 0;
     }
     if (gameActive && hudAcc > 90) {
       checkObjectives();
-      // Câmara limpa: abre a passagem (acende o feixe de luz do alçapão).
+      // Câmara limpa: libera a CANALIZAÇÃO do acender (a passagem só abre ao acender a Brasa).
       if (currentRoom && !roomCleared && combat.enemiesAlive === 0) {
         roomCleared = true;
-        currentRoom.setCleared(true);
         fagulhas += CLEAR_BONUS; // recompensa por limpar a câmara
         updateFagulhaHud();
       }
       tryDescend();
       if (descentDone && !winShown) {
         winShown = true;
+        setMusicState("quente"); // crossfade para o tema morno (reavivar)
+        currentRoom?.setBrazierLit(1); // a luz vira plena
+        showStory("A Brasa voltou a arder. O frio recua.", 7000, true);
         gameHud.notify("A Brasa foi reavivada", "Você alcançou o fundo do poço e devolveu a luz.");
       }
       gameHud.update({

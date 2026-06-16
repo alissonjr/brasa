@@ -1,5 +1,6 @@
 import { CharacterController, type CombatInputSource, type InputSource, type ThirdPersonCamera } from "@engine";
-import type { Scene, Vector3 } from "@babylonjs/core";
+import { Color3, PointLight, Quaternion, Vector3 } from "@babylonjs/core";
+import type { Scene } from "@babylonjs/core";
 import { HeroModel, type HeroAction } from "./heroModel";
 import { HeroCombat } from "../combat/heroCombat";
 
@@ -11,9 +12,11 @@ import { HeroCombat } from "../combat/heroCombat";
  * HeroModel nem o combate.
  */
 
-// KayKit - Character Pack: Adventurers (CC0). Trocável por Rogue_Hooded.glb para a
-// silhueta encapuzada, ou pelo modelo final na passada de arte.
-const ACENDEDORA_MODEL = "/models/Mage.glb";
+// KayKit - Adventurers: Rogue_Hooded (CC0). Silhueta ENCAPUZADA (lê como a Acendedora,
+// melhor que o Mage genérico) e, crucial p/ jogo, com rig/pesos/animações LIMPOS. O
+// modelo próprio do Tripo fica só nos menus (estático): o auto-rig dele deforma como
+// gelatina e a malha saiu com defeito, inadequado para o personagem jogável.
+const ACENDEDORA_MODEL = "/models/Rogue_Hooded.glb";
 
 /** Input de locomoção zerado: usado enquanto o combate trava o ator (golpe comprometido). */
 const FROZEN_INPUT: InputSource = {
@@ -27,11 +30,21 @@ export class Acendedora {
   readonly model: HeroModel;
   private readonly controller: CharacterController;
   private readonly combat_: HeroCombat;
+  private readonly aimQuat = new Quaternion();
 
   constructor(scene: Scene, spawn: Vector3, gravity: Vector3) {
     this.model = new HeroModel(scene, { modelUrl: ACENDEDORA_MODEL, name: "acendedora" });
     this.controller = new CharacterController(scene, spawn, gravity, this.model);
     this.combat_ = new HeroCombat(scene, this.model.root);
+    // Luz-fagulha: bolha de visibilidade quente que acompanha a Acendedora (sem sombra).
+    // É a única luz quente na sala fria, antes de o braseiro ser aceso.
+    const spark = new PointLight("luz_fagulha", new Vector3(0, 1.2, 0), scene);
+    spark.diffuse = Color3.FromHexString("#ffa63d");
+    spark.specular = Color3.Black();
+    spark.intensity = 0.45;
+    spark.range = 4.5;
+    spark.shadowEnabled = false;
+    spark.parent = this.model.root;
   }
 
   get position(): Vector3 {
@@ -64,6 +77,17 @@ export class Acendedora {
               : "light"
             : "idle";
     this.model.setAction(action);
+    // Durante a ANTECIPAÇÃO do golpe, encara para onde a câmera olha (a mira). Parado, o
+    // controller só gira o modelo na direção do movimento, então a hitbox (à frente do
+    // modelo) apontaria para a última direção andada e o golpe de frente erraria. Re-mira a
+    // cada golpe do combo e trava ao ficar ativo; durante o ataque o ator não anda
+    // (FROZEN_INPUT), logo o syncVisual do controller não sobrescreve.
+    if (this.combat_.aiming) {
+      camera.getYawOrientation(this.aimQuat);
+      const root = this.model.root;
+      if (root.rotationQuaternion) root.rotationQuaternion.copyFrom(this.aimQuat);
+      else root.rotationQuaternion = this.aimQuat.clone();
+    }
     // Esquiva = dash (override de movimento); golpe = locomoção travada (comprometimento);
     // senão, input normal.
     const moveInput: InputSource = this.combat_.moveOverride ?? (this.combat_.busy ? FROZEN_INPUT : input);

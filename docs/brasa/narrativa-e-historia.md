@@ -20,7 +20,38 @@ foi escrito para ser contado SEM cutscene pesada: o mundo se explica pela descid
 pelos braseiros e pelos restos. Onde a ficção poderia inflar o escopo técnico, ela recua: a
 limitação (uma sala por vez, escuro que recua) virou a própria premissa.
 
-Snapshot: 2026-06-14.
+Snapshot: 2026-06-14. Canon fechado em 2026-06-15 (ver bloco abaixo).
+
+---
+
+## 0. Canon fechado (2026-06-15) `[NORMATIVO]`
+
+Decisoes autorais que estavam `[A DEFINIR]` e agora valem como canon. Fecham o arco e
+destravam producao. Detalhamento e roadmap em
+[`00-aprofundamento-e-roadmap.md`](00-aprofundamento-e-roadmap.md).
+
+- **A heroina e Cinza.** "Acendedora" e o titulo herdado; o nome proprio dela e **Cinza**.
+  Voz quase muda (1 frase rara por andar). Veste o capuz (Rogue_Hooded).
+- **Motivacao concreta:** Cinza desce porque **Marta**, a mentora que a criou (Acendedora da
+  geracao passada), voltou gasta demais para descer de novo e agora **esta morrendo do frio na
+  superficie**. Cinza desce para reavivar a Brasa E para entender o que houve com quem desceu
+  antes dela. O dever deixa de ser automatico: vira busca pessoal sob emergencia.
+- **O Guardiao e a Primeira Acendedora.** Desceu ha geracoes, venceu, e descobriu que a Brasa
+  so arde se alguem fica presa dentro dela alimentando-a com a propria fagulha. Escolheu ficar;
+  o tempo a consumiu. Nao e maldade: testa Cinza porque precisa saber se deve passar o fardo ou
+  impedi-la de repetir o erro. Antes de atacar, fala uma frase; ao cair, sussurra a verdade.
+- **A verdade (Ato III):** reavivar a Brasa exige uma guarda viva. O custo do reino e uma vida
+  por geracao. Nao ha vilao cosmico; a tragedia e o preco.
+- **O final do slice e o Sacrificio com ciencia:** Cinza, sabendo do custo, escolhe ficar e
+  vira a proxima Guardia (ou um corte sobrio que deixa a pergunta). Recusa/Quebra do ciclo ficam
+  `[A DEFINIR]` para expansao.
+- **Lore-raiz:** o frio eterno e o estado natural do mundo; a Brasa e a excecao mantida por
+  sacrificio. Os mortos selados sao o proprio povo, sepultado na pedra quente; quando a luz
+  recua, o escuro os reocupa.
+- **Estrutura:** descida de 7 salas terminando no Guardiao (ver `DESCENT` no codigo). Cada andar
+  carrega 1 beat de revelacao encenado por inscricao + eco + visual (tabela no doc de roadmap, 3.3).
+
+As secoes abaixo que ainda dizem `[A DEFINIR]` sobre estes pontos ficam SUPERADAS por este bloco.
 
 ---
 

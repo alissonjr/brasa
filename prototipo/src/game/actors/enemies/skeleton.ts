@@ -6,19 +6,31 @@ import { type AttackTuning } from "../../combat/tuning";
 import { HealthBar3D } from "../../combat/healthBar3d";
 
 /**
- * CAMADA JOGO (Brasa). Morto desperto: inimigo do KayKit Skeletons (CC0), rigado, com
- * 95 animacoes embutidas. Quatro TIPOS (bestiario docs/brasa/biblia-bestiario.md), cada
- * um com modelo, stats e comportamento proprios sobre a MESMA FSM (aproxima -> telegrafa
- * golpe -> ativo -> recuperacao + cooldown):
- *  - minion: rapido e fraco (enxame).
- *  - warrior: base equilibrado.
- *  - rogue: muito rapido, golpe curto.
- *  - heavy: lento, tanque, golpe pesado e LENTO de ler, BLOQUEIA golpe leve frontal (escudo).
+ * CAMADA JOGO (Brasa). Inimigo desperto (bestiario docs/brasa/biblia-bestiario.md). Dois
+ * catalogos de modelo CC0 sobre a MESMA FSM (aproxima -> telegrafa -> ativo -> recuperacao
+ * + cooldown): os mortos do KayKit Skeletons e os monstros do Quaternius Ultimate Monsters.
+ * Cada TIPO tem modelo, stats E um COMPORTAMENTO (nao so numeros):
+ *  - melee (minion/warrior/rogue/heavy/antigo/sentinela/demonio/brutamonte): fecha distancia e golpeia.
+ *  - skirmisher (espreitador): golpeia e RECUA (hit-and-run); pune ganancia.
+ *  - ranged (conjurador): mantem distancia e DISPARA projetil telegrafado; forca fechar espaco.
  * A janela de acerto e o dano vem dos stats do tipo (desacoplados da animacao).
  */
 type Mode = "approach" | "attacking" | "cooldown" | "dead";
 
-export type SkeletonKind = "minion" | "warrior" | "rogue" | "heavy" | "antigo" | "sentinela";
+export type SkeletonKind =
+  | "minion" | "warrior" | "rogue" | "heavy" | "antigo" | "sentinela"
+  | "demonio" | "brutamonte" | "espreitador" | "conjurador";
+
+/** Como o inimigo se comporta na FSM (ver cabecalho). default: melee. */
+type Behavior = "melee" | "skirmisher" | "ranged";
+
+/** Projetil disparado por um inimigo ranged, lido e resolvido pelo CombatDirector. */
+export interface ShotSpec {
+  ox: number; oy: number; oz: number; // origem (mundo)
+  dx: number; dz: number; // direcao horizontal normalizada
+  speed: number;
+  damage: number;
+}
 
 interface SkelStats {
   model: string;
@@ -32,6 +44,9 @@ interface SkelStats {
   damage: number; // dano causado no heroi
   guards: boolean; // bloqueia golpe leve frontal (escudo)
   reward: number; // Fagulha (cinza quente) que dropa ao morrer
+  behavior?: Behavior; // default melee
+  projectileSpeed?: number; // ranged: m/s do projetil
+  faceOffset?: number; // correcao de orientacao do modelo (Quaternius vs KayKit), radianos
 }
 
 const STATS: Record<SkeletonKind, SkelStats> = {
@@ -51,15 +66,42 @@ const STATS: Record<SkeletonKind, SkelStats> = {
     model: "/models/Skeleton_Warrior.glb", height: 2.45, hp: 130, moveSpeed: 1.5, attackRange: 2.7, approachUntil: 2.3, cooldownSec: 0.85,
     overhead: { startup: 0.95, active: 0.15, recovery: 0.85, damage: 28, knockback: 3, hitStopFrames: 10 }, damage: 28, guards: true, reward: 8,
   },
-  // Antigo: morto de profundidade (mago esqueleto), mais vida e golpe forte. Bestiário §3.
+  // Antigo: morto de profundidade, mais vida e golpe forte. Bestiário §3. (Repontado para
+  // orc_skull do Quaternius: Skeleton_Mage.glb nunca existiu em disco e o tipo falhava ao carregar.)
   antigo: {
-    model: "/models/Skeleton_Mage.glb", height: 1.95, hp: 95, moveSpeed: 2.2, attackRange: 2.4, approachUntil: 2.1, cooldownSec: 0.6,
-    overhead: { startup: 0.7, active: 0.13, recovery: 0.8, damage: 21, knockback: 2, hitStopFrames: 8 }, damage: 21, guards: false, reward: 9,
+    model: "/models/quaternius_monsters/orc_skull.glb", height: 2.0, hp: 95, moveSpeed: 2.2, attackRange: 2.4, approachUntil: 2.1, cooldownSec: 0.6,
+    overhead: { startup: 0.7, active: 0.13, recovery: 0.8, damage: 21, knockback: 2, hitStopFrames: 8 }, damage: 21, guards: false, reward: 9, faceOffset: Math.PI,
   },
   // Sentinela: elite pré-chefe, enorme, tanque, bloqueia; drop alto. Bestiário §3.
   sentinela: {
     model: "/models/Skeleton_Warrior.glb", height: 2.7, hp: 200, moveSpeed: 1.7, attackRange: 2.9, approachUntil: 2.5, cooldownSec: 0.8,
     overhead: { startup: 0.85, active: 0.15, recovery: 0.85, damage: 32, knockback: 4, hitStopFrames: 12 }, damage: 32, guards: true, reward: 20,
+  },
+
+  // --- Monstros Quaternius (Ultimate Monsters, CC0): variedade de silhueta + COMPORTAMENTO ---
+  // Demonio: melee agressivo de meia-distancia, rapido, dano medio (pressao constante).
+  demonio: {
+    model: "/models/quaternius_monsters/demon.glb", height: 1.95, hp: 70, moveSpeed: 3.0, attackRange: 2.1, approachUntil: 1.9, cooldownSec: 0.45,
+    overhead: { startup: 0.4, active: 0.1, recovery: 0.5, damage: 16, knockback: 2, hitStopFrames: 6 }, damage: 16, guards: false, reward: 6,
+    behavior: "melee", faceOffset: Math.PI,
+  },
+  // Brutamonte: tanque lento e ENORME, golpe pesado lento de ler, bloqueia leve frontal.
+  brutamonte: {
+    model: "/models/quaternius_monsters/yeti.glb", height: 2.5, hp: 150, moveSpeed: 1.6, attackRange: 2.8, approachUntil: 2.4, cooldownSec: 0.8,
+    overhead: { startup: 0.9, active: 0.15, recovery: 0.8, damage: 30, knockback: 4, hitStopFrames: 11 }, damage: 30, guards: true, reward: 12,
+    behavior: "melee", faceOffset: Math.PI,
+  },
+  // Espreitador: veloz, golpeia e RECUA (hit-and-run). Pune quem persegue cegamente.
+  espreitador: {
+    model: "/models/quaternius_monsters/ninja.glb", height: 1.8, hp: 40, moveSpeed: 4.2, attackRange: 2.0, approachUntil: 1.7, cooldownSec: 0.55,
+    overhead: { startup: 0.28, active: 0.08, recovery: 0.35, damage: 12, knockback: 1, hitStopFrames: 5 }, damage: 12, guards: false, reward: 6,
+    behavior: "skirmisher", faceOffset: Math.PI,
+  },
+  // Conjurador: mantem distancia e DISPARA um projetil de fogo telegrafado. Forca fechar espaco.
+  conjurador: {
+    model: "/models/quaternius_monsters/mushroomking.glb", height: 2.1, hp: 70, moveSpeed: 1.8, attackRange: 9, approachUntil: 8, cooldownSec: 1.1,
+    overhead: { startup: 0.7, active: 0.12, recovery: 0.6, damage: 14, knockback: 1, hitStopFrames: 6 }, damage: 14, guards: false, reward: 10,
+    behavior: "ranged", projectileSpeed: 9, faceOffset: Math.PI,
   },
 };
 
@@ -102,9 +144,11 @@ export class Skeleton implements CombatTarget {
   private readonly knock = new Vector3();
   private readonly center_ = new Vector3();
   private hitHeroThisSwing = false;
+  private shot: ShotSpec | null = null;
   private flash = 0;
   private squash = 0;
   private respawn = 0;
+  private deadElapsed = 0; // tempo desde a morte (para a dissolução em morte permanente)
   private torsoY = 0.9;
   private loaded = false;
   private readonly respawns: boolean;
@@ -127,6 +171,13 @@ export class Skeleton implements CombatTarget {
   /** Fagulha (cinza quente) que este morto credita ao ser derrotado. */
   get reward(): number {
     return this.stats.reward;
+  }
+
+  /** Projetil disparado neste frame (inimigo ranged), consumido pelo CombatDirector. null = nada. */
+  takeShot(): ShotSpec | null {
+    const s = this.shot;
+    this.shot = null;
+    return s;
   }
 
   dispose(): void {
@@ -183,7 +234,7 @@ export class Skeleton implements CombatTarget {
     this.anims = {
       idle: find(/^Idle$/i) ?? find(/idle/i),
       walk: find(/^Walking_A$/i) ?? find(/walk/i),
-      attack: find(/1H_Melee_Attack_Slice_Diagonal/i) ?? find(/1H_Melee_Attack_Chop/i) ?? find(/melee_attack/i),
+      attack: find(/1H_Melee_Attack_Slice_Diagonal/i) ?? find(/1H_Melee_Attack_Chop/i) ?? find(/melee_attack/i) ?? find(/^Punch$/i),
       hit: find(/^Hit_A$/i) ?? find(/hit/i),
       death: find(/^Death_A$/i) ?? find(/death/i),
       awaken: find(/Skeletons_Awaken_Standing/i) ?? find(/awaken/i),
@@ -225,6 +276,7 @@ export class Skeleton implements CombatTarget {
     this.hpBar?.set(this.health.fraction);
     if (died) {
       this.respawn = this.respawns ? RESPAWN_SEC : -1;
+      this.deadElapsed = 0;
       this.sm.to("dead");
       this.setAnim(this.anims.death, false);
     } else if (!blocked && this.sm.is("approach")) {
@@ -251,16 +303,30 @@ export class Skeleton implements CombatTarget {
     const dz = heroPos.z - root.position.z;
     const dist = Math.hypot(dx, dz) || 1e-3;
 
+    const fo = this.stats.faceOffset ?? 0;
+    const beh = this.stats.behavior ?? "melee";
+
     let struck = false;
     if (this.sm.is("attacking")) {
-      root.rotation.y = Math.atan2(this.attackDir.x, this.attackDir.z);
+      root.rotation.y = Math.atan2(this.attackDir.x, this.attackDir.z) + fo;
       const wasBusy = this.attack.isBusy;
       this.attack.advance(combatDt);
-      if (this.attack.isActive && !this.hitHeroThisSwing && dist <= this.stats.attackRange) {
-        const inCone = (dx / dist) * this.attackDir.x + (dz / dist) * this.attackDir.z > 0.5;
-        if (inCone) {
-          struck = true;
+      if (this.attack.isActive && !this.hitHeroThisSwing) {
+        if (beh === "ranged") {
+          // Dispara UM projetil, mirando o heroi no instante do disparo (o feixe e resolvido
+          // pelo CombatDirector, que aplica i-frames/bloqueio como qualquer golpe).
           this.hitHeroThisSwing = true;
+          this.shot = {
+            ox: root.position.x, oy: root.position.y + this.torsoY, oz: root.position.z,
+            dx: dx / dist, dz: dz / dist,
+            speed: this.stats.projectileSpeed ?? 9, damage: this.stats.damage,
+          };
+        } else if (dist <= this.stats.attackRange) {
+          const inCone = (dx / dist) * this.attackDir.x + (dz / dist) * this.attackDir.z > 0.5;
+          if (inCone) {
+            struck = true;
+            this.hitHeroThisSwing = true;
+          }
         }
       }
       if (wasBusy && !this.attack.isBusy) {
@@ -268,10 +334,20 @@ export class Skeleton implements CombatTarget {
         this.setAnim(this.anims.idle, true);
       }
     } else if (this.sm.is("cooldown")) {
-      root.rotation.y = Math.atan2(dx, dz);
+      root.rotation.y = Math.atan2(dx, dz) + fo;
+      // Hit-and-run (skirmisher) ou manter distancia (ranged perto demais): RECUA no cooldown.
+      const retreat = beh === "skirmisher" || (beh === "ranged" && dist < this.stats.approachUntil * 0.7);
+      if (retreat) {
+        const step = this.stats.moveSpeed * combatDt;
+        root.position.x -= (dx / dist) * step;
+        root.position.z -= (dz / dist) * step;
+        this.setAnim(this.anims.walk, true);
+      } else {
+        this.setAnim(this.anims.idle, true);
+      }
       if (this.sm.time >= this.stats.cooldownSec) this.sm.to("approach");
     } else {
-      root.rotation.y = Math.atan2(dx, dz);
+      root.rotation.y = Math.atan2(dx, dz) + fo;
       if (dist > this.stats.approachUntil) {
         const step = this.stats.moveSpeed * combatDt;
         root.position.x += (dx / dist) * step;
@@ -319,7 +395,20 @@ export class Skeleton implements CombatTarget {
   }
 
   private updateDead(dt: number): void {
-    if (this.respawn < 0) return;
+    if (this.respawn < 0) {
+      // Morte PERMANENTE (descida): deixa a queda tocar ~0,6s e então DISSOLVE (afunda +
+      // some por visibility, que é por-malha, sem afetar irmãos que compartilham material).
+      this.deadElapsed += dt;
+      const t = (this.deadElapsed - 0.6) / 0.9;
+      if (t > 0) {
+        const root = this.rootNode!;
+        const k = t > 1 ? 1 : t;
+        root.position.y = this.base.y - 0.7 * k;
+        const vis = 1 - k;
+        for (const m of root.getChildMeshes(false)) (m as AbstractMesh).visibility = vis;
+      }
+      return;
+    }
     const root = this.rootNode!;
     this.respawn = Math.max(0, this.respawn - dt);
     const k = this.respawn / RESPAWN_SEC;
