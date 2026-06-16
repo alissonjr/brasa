@@ -761,6 +761,7 @@ const ACTION_LABEL: Record<InputAction, () => string> = {
   interact: () => "Acender / Interagir",
   execute: () => "Executar",
   ultimate: () => "Ultimate (Erupção)",
+  pickup: () => "Pegar arma",
 };
 
 /** Mescla o remapeamento salvo (parcial) sobre o padrão da engine. */

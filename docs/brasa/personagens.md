@@ -428,3 +428,36 @@ mínimos de ficha de personagem na seção 2.2 do mesmo documento.
 - [`spec-set-pieces.md`](spec-set-pieces.md) - acender a Brasa, despertares, queda.
 </content>
 </invoke>
+
+---
+
+## CANON FECHADO W1/W5 (2026-06-15) - fichas ratificadas
+
+Fecha os `[A DEFINIR]` de identidade. Detalhe e roadmap em
+[`00-aprofundamento-e-roadmap.md`](00-aprofundamento-e-roadmap.md). Encenação já no código
+(ecos por andar, falas do confronto): ver `narrativa-e-historia.md` seção 0.
+
+### Cinza (a Acendedora)
+`[NORMATIVO]` "Acendedora" é o título herdado; o NOME próprio é **Cinza**. Voz quase muda: 1
+frase rara por andar (ex.: "Outro braseiro. Mais um andar."). Veste o capuz (Rogue_Hooded).
+Linguagem corporal cansada mas firme. Motivação: desce porque **Marta** (a mentora) não pôde
+descer de novo e morre do frio na superfície; busca reavivar a Brasa E saber o que houve com
+quem desceu antes dela.
+
+### Marta (a Voz do Poço)
+`[NORMATIVO]` Mentora idosa de Cinza, Acendedora da geração passada. Voltou gasta demais para
+descer outra vez; agora morre do frio lá em cima. So AUDIO (sem rig). Marca o tempo: a cada
+braseiro aceso, relata o frio recuando. Frase-âncora: "Se não eu, então tu." Da urgência
+emocional sem cutscene. `[A DEFINIR]`: quantas falas entram no slice (proposta: 2-3 chave).
+
+### O Guardião (a Primeira Acendedora)
+`[NORMATIVO]` Antes: a primeira a descer, venceu e reacendeu a Brasa. Sacrifício: descobriu que
+a chama só arde com uma guarda viva dentro dela; escolheu ficar. Agora: corpo consumido pelo
+fogo eterno, esperando libertação ou sucessora. Não é maldade: testa Cinza para saber se deve
+passar o fardo ou impedi-la. Encenação (já no código): fala ao surgir ("Esperei tanto que
+esqueci meu nome. Qual é o teu?") e sussurra ao cair ("Vai. Acende a Brasa... e não a deixes
+sozinha, como eu fiquei.").
+
+### Vozes do passado (ecos)
+`[DESIGN]` 3-4 arquétipos com frase-assinatura (a Primeira, a que Falhou, a Cartógrafa, a
+Última-antes-de-você). Os ecos por andar (`ECHOES` em `main.ts`) encenam o arco de revelação.

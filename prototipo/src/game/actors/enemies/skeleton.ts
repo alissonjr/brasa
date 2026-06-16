@@ -155,14 +155,24 @@ export class Skeleton implements CombatTarget {
   private loaded = false;
   private readonly respawns: boolean;
 
+  private readonly kind_: SkeletonKind;
+
   /** opts.kind: tipo do morto (default warrior). opts.respawns: renasce (treino) ou fica caido (descida). */
   constructor(scene: Scene, spawn: Vector3, opts?: { kind?: SkeletonKind; respawns?: boolean }) {
     this.scene = scene;
     this.base = spawn.clone();
-    this.stats = STATS[opts?.kind ?? "warrior"];
+    this.kind_ = opts?.kind ?? "warrior";
+    this.stats = STATS[this.kind_];
     this.health = new Health(this.stats.hp);
     this.respawns = opts?.respawns ?? true;
     void this.load(spawn);
+  }
+
+  /** Arma que este inimigo DROPA ao morrer (captura de arma): brutamonte=clava, conjurador=cajado. */
+  get weaponDrop(): "clava" | "cajado" | null {
+    if (this.kind_ === "brutamonte") return "clava";
+    if (this.kind_ === "conjurador") return "cajado";
+    return null;
   }
 
   /** Dano que este morto causa no heroi ao conectar o golpe (lido pelo CombatDirector). */

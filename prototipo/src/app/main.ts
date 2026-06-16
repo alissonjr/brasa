@@ -297,14 +297,16 @@ async function main(): Promise<void> {
     }, holdMs);
   };
   // Um eco/memória por andar (sussurro do passado encenado ao entrar; biblia-narrativa).
+  // Beats de revelação por andar (canon fechado: povo morto -> alguém desceu antes -> o custo
+  // -> luto -> a verdade se monta -> confronto). Ver narrativa-e-historia.md seção 0.
   const ECHOES = [
-    "A última brasa desce ao poço. O frio reclama o que foi nosso.",
-    "Aqui dormem os que zelavam a chama. Agora dormem famintos.",
-    "A água subiu e a luz desceu. Ninguém mais reacende as lâmpadas.",
-    "Eu carreguei fogo por estes salões. Não me lembro de apagá-los.",
-    "Reze ao calor, dizia o velho. O calor não responde mais.",
-    "Quanto mais fundo, mais antigo o escuro. E mais faminto.",
-    "No fundo, algo guarda a primeira Brasa. Não quer devolvê-la.",
+    "Lê os nomes gravados nos bancos. Foram teu povo, antes do frio.",
+    "Um manto rasgado. Uma fagulha apagada no chão. Alguém desceu antes de ti.",
+    "Dizem que ela foi a primeira. Dizem que já ardia aqui quando a primeira desceu.",
+    "A Brasa não pede lenha. Pede quem a alimente por dentro.",
+    "Dois conjuntos de ossos. Um voltou até a porta. O outro desceu mais fundo.",
+    "Marta dizia: se não eu, então tu. Agora sinto o peso do que ela carregou.",
+    "No fundo, a primeira Acendedora ainda arde. E te esperava.",
   ];
 
   // Overlay preto para o fade entre andares.
@@ -352,6 +354,8 @@ async function main(): Promise<void> {
       combat.addBoss(new Vector3(anchor.x, 0, anchor.z + 4));
       platform.events.emit("crypt:floor", { index: i, kind: def.kind });
       console.log(`[descida] andar ${i + 1}/${DESCENT.length} (${def.kind}): GUARDIÃO`);
+      // Confronto encenado: a Primeira Acendedora fala antes de atacar (canon, narrativa §0).
+      if (gameActive) window.setTimeout(() => { if (combat.bossActive) showStory("Esperei tanto que esqueci meu nome. Qual é o teu?", 5000, false); }, 1400);
     } else {
       const kinds = ROSTER[i] ?? ["warrior"];
       kinds.forEach((kind, e) => {
@@ -930,6 +934,8 @@ async function main(): Promise<void> {
         roomCleared = true;
         fagulhas += CLEAR_BONUS; // recompensa por limpar a câmara
         updateFagulhaHud();
+        // Confronto encenado: ao cair, o Guardião (a Primeira) sussurra a verdade (canon §0).
+        if (DESCENT[floorIndex]?.boss) showStory("Vai. Acende a Brasa... e não a deixes sozinha, como eu fiquei.", 6500, false);
       }
       tryDescend();
       if (descentDone && !winShown) {

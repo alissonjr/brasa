@@ -45,6 +45,9 @@ export class CombatDirector {
   private essMat: StandardMaterial | null = null;
   // W2: Queimadura por alvo (status do ember). time = segundos restantes; stacks = pilha.
   private readonly burns = new Map<CombatTarget, { time: number; stacks: number; tick: number }>();
+  // CAPTURA DE ARMA: drops no chão (mesh + tipo) e a arma EQUIPADA (buff temporário/cargas).
+  private readonly drops: { mesh: Mesh; pos: Vector3; kind: "clava" | "cajado"; life: number }[] = [];
+  private heroWeapon: { kind: "clava" | "cajado"; timer: number; charges: number; mesh: Mesh } | null = null;
 
   constructor(
     private readonly scene: Scene,
@@ -324,15 +327,18 @@ export class CombatDirector {
         this.events.emit("enemy:died", { reward: this.boss.reward });
       }
     }
-    // Credita Fagulha por morto recém-derrotado (uma vez cada) + chance de soltar essência.
+    // Credita Fagulha por morto recém-derrotado (uma vez cada) + chance de soltar essência/arma.
     for (const e of this.enemies) {
       if (!e.health.alive && !this.dead.has(e)) {
         this.dead.add(e);
         this.events.emit("enemy:died", { reward: e.reward });
         this.maybeDropEssence(e);
+        const wd = e.weaponDrop;
+        if (wd) this.spawnDrop(wd, e.torsoPos);
       }
     }
     this.updateEssences(combatDt, heroPos);
+    this.updateWeapon(combatDt);
     this.tickBurns(combatDt);
 
     return combatDt;

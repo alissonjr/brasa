@@ -44,6 +44,7 @@ export type InputAction =
   | "ember"
   | "execute"
   | "ultimate"
+  | "pickup"
   | "lockOn"
   | "potion1"
   | "potion2"
@@ -66,6 +67,7 @@ export const INPUT_ACTIONS: InputAction[] = [
   "ember",
   "execute",
   "ultimate",
+  "pickup",
   "lockOn",
   "potion1",
   "potion2",
@@ -73,7 +75,7 @@ export const INPUT_ACTIONS: InputAction[] = [
 ];
 
 /** Ações consumidas por toque (não por estado contínuo). */
-const EDGE_ACTIONS: InputAction[] = ["jump", "attack", "heavy", "dodge", "ember", "execute", "ultimate", "lockOn", "potion1", "potion2"];
+const EDGE_ACTIONS: InputAction[] = ["jump", "attack", "heavy", "dodge", "ember", "execute", "ultimate", "pickup", "lockOn", "potion1", "potion2"];
 
 export const DEFAULT_BINDINGS: KeyBindings = {
   forward: ["KeyW", "ArrowUp"],
@@ -91,6 +93,7 @@ export const DEFAULT_BINDINGS: KeyBindings = {
   ember: ["KeyE"], // golpe de fogo (gasta Fagulha)
   execute: ["KeyF"], // executar inimigo em vacilo (vida baixa)
   ultimate: ["KeyX"], // ULTIMATE "Erupção": libera com a barra de Brasa cheia
+  pickup: ["KeyG"], // pegar a arma dropada pelo inimigo
   lockOn: ["KeyT"],
   potion1: ["Digit1"], // beber Poção de Recuperação
   potion2: ["Digit2"], // beber Elixir de Fúria
