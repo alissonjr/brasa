@@ -87,6 +87,49 @@ export class CombatDirector {
     return !!this.boss && this.boss.health.alive;
   }
 
+  // --- Execução (finisher) ---
+  private nearestExecutable(): Skeleton | null {
+    const hp = this.hero.position;
+    let best: Skeleton | null = null;
+    let bd = 2.8 * 2.8; // alcance da execução
+    for (const e of this.enemies) {
+      if (!e.executable) continue;
+      const c = e.torsoPos;
+      const d = (c.x - hp.x) * (c.x - hp.x) + (c.z - hp.z) * (c.z - hp.z);
+      if (d < bd) {
+        bd = d;
+        best = e;
+      }
+    }
+    return best;
+  }
+
+  /** Há um inimigo em vacilo ao alcance? Posição do tronco para o prompt "[F] Executar". */
+  executePromptPos(): { x: number; y: number; z: number } | null {
+    const e = this.nearestExecutable();
+    if (!e) return null;
+    const c = e.torsoPos;
+    return { x: c.x, y: c.y, z: c.z };
+  }
+
+  /** Executa o inimigo em vacilo mais próximo: dano letal + cura + Fagulha + VFX. true se executou. */
+  executeNearest(): boolean {
+    const e = this.nearestExecutable();
+    if (!e) return false;
+    const c = e.torsoPos.clone();
+    this.tmpDir.set(c.x - this.hero.position.x, 0, c.z - this.hero.position.z);
+    if (this.tmpDir.lengthSquared() < 1e-4) this.tmpDir.set(0, 0, 1);
+    this.tmpDir.normalize();
+    e.takeHit(99999, this.tmpDir, 2, true); // golpe letal: dispara morte + dissolução
+    // Recompensa do finisher (loop do Doom: executar = sobreviver): cura + estouro + freeze + tremor.
+    this.hero.combat.heal(this.hero.combat.maxHealth * 0.15);
+    this.fx.burst(c, 40);
+    this.hitStop.trigger(8 / 60);
+    this.camera.shake(0.12);
+    hitThunk(true);
+    return true;
+  }
+
   /** Descarta todos os inimigos atuais (ao trocar de andar da cripta). */
   clearEnemies(): void {
     for (const e of this.enemies) e.dispose();
@@ -345,6 +388,8 @@ export class CombatDirector {
       }
       target.takeHit(t.damage, this.tmpDir, t.knockback, true); // guardBreak: o fogo ignora o escudo
       this.applyBurn(target); // o fogo deixa Queimadura
+      // W3: o fogo REACENDE a Brasa no Guardião -> cambaleio + dano dobrado (gangorra de luz).
+      (target as { reignite?: () => void }).reignite?.();
     }
     // Estouro de fogo + feedback (dispara mesmo sem alvo).
     const fxPoint = origin.add(fwd.scale(2.2));

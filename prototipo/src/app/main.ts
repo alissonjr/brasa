@@ -223,6 +223,15 @@ async function main(): Promise<void> {
   channelBar.appendChild(channelFill);
   document.body.appendChild(channelBar);
 
+  // Prompt de EXECUÇÃO: aparece quando há inimigo em vacilo (vida baixa) ao alcance.
+  const execEl = document.createElement("div");
+  execEl.style.cssText =
+    "position:fixed;left:50%;bottom:104px;transform:translateX(-50%);z-index:36;padding:7px 16px;border-radius:8px;" +
+    "background:rgba(40,12,8,0.82);color:#ffd089;font:700 15px Cinzel,serif;border:1px solid #c8401c;opacity:0;" +
+    "transition:opacity .12s ease;pointer-events:none;text-shadow:0 1px 2px #000;white-space:nowrap;";
+  execEl.textContent = "[F] Executar";
+  document.body.appendChild(execEl);
+
   // Barra do CHEFE (Guardião): topo-centro, aparece só quando o chefe está ativo.
   const bossWrap = document.createElement("div");
   bossWrap.style.cssText =
@@ -583,6 +592,8 @@ async function main(): Promise<void> {
       hero.combat.applyDamageBuff(POTIONS.furia.dmgBonus, POTIONS.furia.durationSec);
       updatePotionHud();
     }
+    // Execução (F): mata o inimigo em vacilo (vida baixa) ao alcance, com cura + Fagulha + VFX.
+    if (input.consumePressed("execute")) combat.executeNearest();
   };
 
   scene.onAfterPhysicsObservable.add(() => {
@@ -854,6 +865,7 @@ async function main(): Promise<void> {
     promptEl.style.opacity = gameActive && roomCleared && !descending && !descentDone ? "1" : "0";
     fagulhaEl.style.display = gameActive && !descending ? "" : "none";
     potionsEl.style.display = gameActive && !descending ? "" : "none";
+    execEl.style.opacity = gameActive && !descending && combat.executePromptPos() ? "1" : "0";
     const bf = combat.bossFraction;
     if (gameActive && !descending && bf >= 0) {
       bossWrap.style.opacity = "1";

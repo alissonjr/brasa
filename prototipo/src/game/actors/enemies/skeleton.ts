@@ -175,6 +175,16 @@ export class Skeleton implements CombatTarget {
     return this.stats.reward;
   }
 
+  /** Em VACILO: vivo, carregado e com vida baixa (< 22%) - pode ser EXECUTADO (finisher). */
+  get executable(): boolean {
+    return this.loaded && this.health.alive && !this.sm.is("dead") && this.health.fraction < 0.22;
+  }
+
+  /** Posição do tronco (para o prompt de execução e VFX). */
+  get torsoPos(): Vector3 {
+    return this.hurtbox.center;
+  }
+
   /** Projetil disparado neste frame (inimigo ranged), consumido pelo CombatDirector. null = nada. */
   takeShot(): ShotSpec | null {
     const s = this.shot;

@@ -601,3 +601,24 @@ Higiene e processo
 - Spec análoga (estrutura espelhada): [`../spec-chefe-rei-jerico.md`](../spec-chefe-rei-jerico.md).
 - Motor reaproveitado: `prototipo/src/engine/ai/fsm.ts`,
   `prototipo/src/game/actors/enemies/defender.ts`, `prototipo/src/game/combat/tuning.ts`.
+
+---
+
+## ATUALIZAÇÃO W3 (2026-06-15) - gangorra de luz no código
+
+`[CÓDIGO]` `[NORMATIVO]` O Guardião (`guardiao.ts`) já tinha 3 fases por faixa de vida
+(fria/tiço/quente) com movesets (marreta, varredura, sopro de escuro AoE). A onda W3 somou a
+**mecânica-assinatura da luz** que faltava, de forma auto-contida e ligada ao recurso do herói:
+
+- **brasaLight (0..1)** começa BAIXA (0,35: a Brasa está morrendo). Quanto mais escuro, mais
+  CURTO o tell dos golpes (`tellMul = 0.7 + 0.3*brasaLight`): o chefe fica mais perigoso. Isto
+  se SOMA à escala por fase de vida.
+- **Sopro de escuro (AoE) APAGA** a Brasa um estágio (-0,34) ao se consumar.
+- **Golpe de Fogo (ember) REACENDE:** ao atingir o chefe, sobe a luz um estágio (+0,34) e o faz
+  **CAMBALEAR** por 0,8 s (parado, flash frio-claro, interrompe o golpe). Liga a Fagulha (W2) à
+  luta: gastar fogo no chefe é a chave para domá-lo.
+- **Cambaleio = vulnerabilidade:** durante o cambaleio o Guardião recebe **dano dobrado**
+  (`takeHit` x2). O loop de mestria vira: criar espaço -> ember para cambalear -> bater pesado.
+
+Pendente para W5/W6: confronto encenado (frase de entrada + sussurro de morte) e o
+escurecimento visual da ARENA conforme `brasaLightFraction` (hoje só o emissivo do chefe muda).

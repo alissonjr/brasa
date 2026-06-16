@@ -78,6 +78,11 @@ export class Guardiao implements CombatTarget {
   private loaded = false;
   private disposed = false;
   private cooldownSec = 0.8;
+  // W3: gangorra de luz. brasaLight 0..1 (começa MORRENDO = baixa). Quanto mais escuro, mais
+  // rápido/perigoso o Guardião. O Golpe de Fogo do herói REACENDE (sobe a luz e o CAMBALEIA);
+  // o Sopro de escuro APAGA. Cambaleio = parado, exposto, leva dano dobrado.
+  private brasaLight = 0.35;
+  private staggerTimer = 0;
 
   constructor(scene: Scene, spawn: Vector3) {
     this.scene = scene;
@@ -97,6 +102,30 @@ export class Guardiao implements CombatTarget {
   }
   get currentPhase(): number {
     return this.phase;
+  }
+  /** Luz da Brasa na arena (0..1); o HUD/iluminação podem ler para escurecer a cena. */
+  get brasaLightFraction(): number {
+    return this.brasaLight;
+  }
+  /** Está cambaleando (exposto após reacender): parado e vulnerável. */
+  get staggered(): boolean {
+    return this.staggerTimer > 0;
+  }
+
+  /**
+   * REACENDER (W3): o Golpe de Fogo do herói reacende a Brasa. Sobe a luz um estágio, faz o
+   * Guardião CAMBALEAR (parado ~0,8 s, dano dobrado) e o interrompe. Chamado pelo CombatDirector
+   * quando o ember atinge o chefe. Liga o recurso temático (Fagulha) à mecânica do chefe.
+   */
+  reignite(): void {
+    if (!this.health.alive) return;
+    this.brasaLight = Math.min(1, this.brasaLight + 0.34);
+    this.staggerTimer = 0.8;
+    if (this.aoeRing) this.aoeRing.setEnabled(false);
+    // flash frio-claro de ofuscação
+    for (const m of this.mats) m.emissiveColor.set(0.7, 0.85, 1.0);
+    this.setAnim(this.anims.hit, false);
+    this.sm.to("cooldown"); // interrompe o que estava fazendo
   }
 
   private async load(spawn: Vector3): Promise<void> {
@@ -185,7 +214,8 @@ export class Guardiao implements CombatTarget {
 
   takeHit(damage: number, dir: Vector3, knockback: number): { guarded: boolean } {
     if (!this.health.alive || !this.rootNode) return { guarded: false };
-    const { died } = this.health.damage(damage);
+    const dmg = this.staggered ? damage * 2 : damage; // cambaleio: vulnerável (dano dobrado)
+    const { died } = this.health.damage(dmg);
     // leve recuo (chefe é pesado: knockback reduzido)
     this.rootNode.position.x += dir.x * knockback * 0.05;
     this.rootNode.position.z += dir.z * knockback * 0.05;
@@ -204,6 +234,13 @@ export class Guardiao implements CombatTarget {
     const f = this.health.fraction;
     const newPhase = f > 0.66 ? 1 : f > 0.33 ? 2 : 3;
     if (newPhase !== this.phase) this.phase = newPhase;
+
+    // Cambaleio (exposto): congela o Guardião, mantém o flash frio e conta o tempo.
+    if (this.staggerTimer > 0) {
+      this.staggerTimer = Math.max(0, this.staggerTimer - combatDt);
+      if (this.staggerTimer === 0) this.applyPhaseTint(0); // volta ao emissivo da fase
+      return false;
+    }
 
     this.sm.advance(combatDt);
     if (this.sm.is("dead")) return false;
@@ -237,6 +274,8 @@ export class Guardiao implements CombatTarget {
       }
       if (wasBusy && !this.attack.isBusy) {
         if (this.aoeRing) this.aoeRing.setEnabled(false);
+        // Sopro de escuro consumado: APAGA a Brasa um estágio (gangorra).
+        if (this.cur.kind === "aoe") this.brasaLight = Math.max(0, this.brasaLight - 0.34);
         this.applyPhaseTint(0);
         this.sm.to("cooldown");
         this.setAnim(this.anims.idle, true);
@@ -269,7 +308,15 @@ export class Guardiao implements CombatTarget {
     this.cur = pick;
     this.attackDir.set(dirX, 0, dirZ);
     this.hitHeroThisSwing = false;
-    this.attack.start(pick.timing);
+    // Gangorra de luz: quanto mais escuro (brasaLight baixa), mais CURTO o tell (perigoso).
+    // light=1 -> antecipação cheia (legível); light=0 -> ~70% (rápido). Soma-se à fase.
+    const tellMul = 0.7 + 0.3 * this.brasaLight;
+    const timing: AttackTiming = {
+      startup: pick.timing.startup * tellMul,
+      active: pick.timing.active,
+      recovery: pick.timing.recovery,
+    };
+    this.attack.start(timing);
     this.sm.to("attacking");
     this.setAnim(this.anims.attack, false);
   }

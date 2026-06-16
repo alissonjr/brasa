@@ -759,6 +759,7 @@ const ACTION_LABEL: Record<InputAction, () => string> = {
   potion1: () => "Poção: Recuperação",
   potion2: () => "Poção: Fúria",
   interact: () => "Acender / Interagir",
+  execute: () => "Executar",
 };
 
 /** Mescla o remapeamento salvo (parcial) sobre o padrão da engine. */
