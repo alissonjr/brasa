@@ -2,15 +2,19 @@ Creditos de assets - Brasa (todos CC0 1.0 Universal: uso livre, inclusive comerc
 sem exigencia de atribuicao; creditamos por boa pratica).
 
 KayKit - Character Pack: Adventurers (Kay Lousberg)
-  Arquivos: Mage.glb (heroi jogavel EM JOGO, rigado), Rogue_Hooded.glb (variante encapuzada).
+  Arquivos: Rogue_Hooded.glb (heroina Acendedora EM JOGO: encapuzada, rig/pesos/animacoes
+  limpos), Mage.glb (alternativa / fallback do HeroModel).
   Fonte: https://kaylousberg.itch.io/kaykit-adventurers
          https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0
 
 Acendedora (modelo proprio do projeto) - acendedora.glb
   Gerado via Tripo 3D (text-to-model) e limpo no Blender (tools/isolate_acendedora.py:
-  isola uma das figuras, recentra, reexporta). Estatico (sem rig); usado APENAS nas
-  vitrines 3D dos menus (tela-titulo, criacao, Cronica). O heroi EM JOGO segue no KayKit
-  Mage rigado ate existir uma versao riggada da Acendedora. Asset proprio, sem restricao.
+  isola uma das figuras, recentra, reexporta). ESTATICO (sem rig); usado APENAS nas
+  vitrines 3D dos menus (tela-titulo, criacao, Cronica), onde a camera orbita e nao ha
+  deformacao. Tentamos riggar/animar via auto-rig do Tripo (tools/tripo_rig.py +
+  finalize_acendedora.py) para uso EM JOGO, mas o resultado deformava como gelatina
+  (pesos de skinning ruins) e a malha saiu com defeito; descartado para o jogo. O heroi
+  jogavel usa Rogue_Hooded ate existir um rig de qualidade da Acendedora. Asset proprio.
 
 KayKit - Character Pack: Skeletons (Kay Lousberg)
   Arquivos: Skeleton_Warrior.glb, Skeleton_Minion.glb, Skeleton_Mage.glb, Skeleton_Rogue.glb

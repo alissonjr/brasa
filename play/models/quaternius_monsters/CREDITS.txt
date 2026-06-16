@@ -1,0 +1,9 @@
+Quaternius - Ultimate Monsters (pasta "Big")
+Fonte: https://quaternius.com/packs/ultimatemonsters.html
+Licenca: CC0 1.0 Universal (dominio publico)
+Autor: Quaternius (https://quaternius.com)
+
+Modelos em uso (convertidos de glTF para GLB via Blender 4.5.9, atlas embutido):
+  bluedemon, cactoro, demon, dino, frog, mushroomking, ninja, orc, orc_skull, tribal, yeti
+Cada modelo compartilha um rig com AnimationGroups:
+  Idle, Walk, Run, Punch, Death, HitReact, Jump, Jump_Idle, Jump_Land, Duck, Wave, Yes, No, Weapon
