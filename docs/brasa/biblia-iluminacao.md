@@ -413,3 +413,22 @@ Fichas por situação (seção 9):
 Estilo:
 - [ ] Sem travessões, sem emojis em qualquer texto exibido [NORMATIVO]
 - [ ] Itens [A DEFINIR] resolvidos ou explicitamente adiados com registro [NORMATIVO]
+
+---
+
+## ATUALIZAÇÃO W4 (2026-06-15) - atmosfera por zona no código
+
+`[CÓDIGO]` `[NORMATIVO]` Cada câmara agora respira diferente conforme a profundidade, sem
+tocar geometria nem câmera (o teto e a câmera 3a pessoa já estavam afinados). Em `cryptRoom.ts`
+um `ZONE_DEPTH` por `RoomKind` (guarda 0.0, salao 0.35, cisterna 0.55, santuario 0.7,
+guardiao 1.0) escala:
+
+- **Névoa:** `fogDensity = 0.004 + 0.007 * depth` (raso límpido, fundo enevoado) e a cor fria
+  vai de azul-acinzentado claro (#243240) a azul-profundo gélido (#0e1622).
+- **Ambiente:** a luz fria-base cai de 0.70 (raso, mais iluminado) a 0.54 (fundo, sombrio);
+  a cor do ambiente esfria com a profundidade.
+- A virada frio->quente do braseiro continua por cima disto (não foi alterada).
+
+Resultado: as salas leem como uma DESCIDA (cada vez mais frio, escuro e denso), reforçando a
+identidade por zona sem custo de draw call. O escurecimento da arena do Guardião por
+`brasaLightFraction` (W3) fica para a W6.

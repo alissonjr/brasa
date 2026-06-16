@@ -130,6 +130,27 @@ export class CombatDirector {
     return true;
   }
 
+  /** ULTIMATE "Erupção": chuva de fogo na arena - dano forte a TODOS os inimigos (ignora guarda) + VFX. */
+  unleashUltimate(): void {
+    const origin = this.hero.position;
+    for (const target of this.targets) {
+      if (!target.health.alive) continue;
+      const c = target.hurtbox.center;
+      this.tmpDir.set(c.x - origin.x, 0, c.z - origin.z);
+      if (this.tmpDir.lengthSquared() < 1e-4) this.tmpDir.set(0, 0, 1);
+      this.tmpDir.normalize();
+      target.takeHit(60, this.tmpDir, 6, true); // o fogo da Erupção ignora escudo
+    }
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      this.fx.burst(new Vector3(origin.x + Math.cos(a) * 4, 1.2, origin.z + Math.sin(a) * 4), 22);
+    }
+    this.fx.burst(new Vector3(origin.x, 1.6, origin.z), 40);
+    this.hitStop.trigger(10 / 60);
+    this.camera.shake(0.18);
+    hitThunk(true);
+  }
+
   /** Descarta todos os inimigos atuais (ao trocar de andar da cripta). */
   clearEnemies(): void {
     for (const e of this.enemies) e.dispose();

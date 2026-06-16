@@ -658,22 +658,34 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     }
   });
 
-  // Alvos de cor da virada frio->quente (a cena vive entre estes dois estados).
-  const COLD_FOG = Color3.FromHexString("#1a2636");
+  // W4: IDENTIDADE POR ZONA. Quanto mais fundo a câmara, mais frio/escuro/denso o ar (sem
+  // tocar a geometria nem a câmera). 0 = raso (claro), 1 = fundo (monumental, gélido).
+  const ZONE_DEPTH: Record<RoomKind, number> = {
+    guarda: 0.0,
+    salao: 0.35,
+    cisterna: 0.55,
+    santuario: 0.7,
+    guardiao: 1.0,
+  };
+  const depth = ZONE_DEPTH[def.kind] ?? 0.5;
+  // Alvos de cor da virada frio->quente, agora com o FRIO escalado pela profundidade.
+  const COLD_FOG = Color3.Lerp(Color3.FromHexString("#243240"), Color3.FromHexString("#0e1622"), depth);
   const WARM_FOG = Color3.FromHexString("#241a14");
-  const COLD_AMB = Color3.FromHexString("#8aa6c6");
+  const COLD_AMB = Color3.Lerp(Color3.FromHexString("#9fb4cc"), Color3.FromHexString("#6f86a6"), depth);
   const WARM_AMB = Color3.FromHexString("#a98f6e");
+  const COLD_INTENSITY = 0.7 - 0.16 * depth; // raso mais iluminado; fundo mais sombrio
   const setBrazierLit = (t: number): void => {
     const k = t < 0 ? 0 : t > 1 ? 1 : t;
     brazierFlame.ignite = k;
     offerL.ignite = k;
     offerR.ignite = k;
     scene.fogColor = Color3.Lerp(COLD_FOG, WARM_FOG, k);
-    ctx.ambient.intensity = 0.62 - 0.22 * k; // o quente passa a vir do braseiro, não do "céu"
+    ctx.ambient.intensity = COLD_INTENSITY - 0.22 * k; // o quente passa a vir do braseiro, não do "céu"
     ctx.ambient.diffuse = Color3.Lerp(COLD_AMB, WARM_AMB, k);
     ctx.key.intensity = 1.0 - 0.3 * k;
   };
   setBrazierLit(0); // a sala nasce FRIA (braseiro apagado)
+  scene.fogDensity = 0.004 + 0.007 * depth; // raso límpido; fundo enevoado (não tocado pela virada)
 
   return {
     def,

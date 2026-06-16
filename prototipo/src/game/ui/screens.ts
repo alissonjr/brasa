@@ -760,6 +760,7 @@ const ACTION_LABEL: Record<InputAction, () => string> = {
   potion2: () => "Poção: Fúria",
   interact: () => "Acender / Interagir",
   execute: () => "Executar",
+  ultimate: () => "Ultimate (Erupção)",
 };
 
 /** Mescla o remapeamento salvo (parcial) sobre o padrão da engine. */

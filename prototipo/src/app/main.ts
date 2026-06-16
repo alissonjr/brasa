@@ -203,6 +203,37 @@ async function main(): Promise<void> {
     potionsEl.style.display = gameActive ? "" : "none";
   };
 
+  // Barra de BRASA (ultimate "Erupção", modelo God Gauge do Hades): enche causando E sofrendo
+  // dano; cheia (100), [X] libera a chuva de fogo. Mora aqui (app) para não tocar o heroCombat.
+  let brasaMeter = 0;
+  const brasaWrap = document.createElement("div");
+  brasaWrap.style.cssText =
+    "position:fixed;left:16px;bottom:16px;z-index:35;width:200px;pointer-events:none;display:none;";
+  const brasaLabel = document.createElement("div");
+  brasaLabel.style.cssText = "color:#ffcf8a;font:600 12px Cinzel,serif;text-shadow:0 1px 2px #000;margin-bottom:3px;letter-spacing:1px;";
+  brasaLabel.textContent = "BRASA";
+  const brasaTrack = document.createElement("div");
+  brasaTrack.style.cssText = "height:10px;border-radius:6px;background:rgba(8,10,14,0.8);border:1px solid #6e5a3a;overflow:hidden;";
+  const brasaFill = document.createElement("div");
+  brasaFill.style.cssText = "height:100%;width:0%;background:linear-gradient(90deg,#ff7a1c,#ffd089);transition:width .12s linear;";
+  brasaTrack.appendChild(brasaFill);
+  brasaWrap.append(brasaLabel, brasaTrack);
+  document.body.appendChild(brasaWrap);
+  const updateBrasaHud = (): void => {
+    brasaFill.style.width = `${Math.round(brasaMeter)}%`;
+    brasaLabel.textContent = brasaMeter >= 100 ? "BRASA - [X] ERUPÇÃO!" : "BRASA";
+    brasaLabel.style.color = brasaMeter >= 100 ? "#ffe9c0" : "#ffcf8a";
+  };
+  // Enche a barra causando dano (combat:hit) e apanhando (hero:hit).
+  platform.events.on<{ damage: number }>("combat:hit", ({ damage }) => {
+    brasaMeter = Math.min(100, brasaMeter + (damage ?? 8) * 0.7);
+    updateBrasaHud();
+  });
+  platform.events.on("hero:hit", () => {
+    brasaMeter = Math.min(100, brasaMeter + 7);
+    updateBrasaHud();
+  });
+
   // Aviso na tela quando a câmara é limpa e a passagem abre.
   const promptEl = document.createElement("div");
   promptEl.style.cssText =
@@ -573,8 +604,10 @@ async function main(): Promise<void> {
     descentDone = false;
     defeated = false;
     hero.combat.resetUpgrades();
+    brasaMeter = 0;
     updateFagulhaHud();
     updatePotionHud();
+    updateBrasaHud();
   };
   if (gameSave?.run.active) restoreRun(gameSave.run);
   else enterRoom(0);
@@ -594,6 +627,12 @@ async function main(): Promise<void> {
     }
     // Execução (F): mata o inimigo em vacilo (vida baixa) ao alcance, com cura + Fagulha + VFX.
     if (input.consumePressed("execute")) combat.executeNearest();
+    // Ultimate (X): só com a barra de Brasa cheia. Limpa a arena (chuva de fogo).
+    if (input.consumePressed("ultimate") && brasaMeter >= 100) {
+      combat.unleashUltimate();
+      brasaMeter = 0;
+      updateBrasaHud();
+    }
   };
 
   scene.onAfterPhysicsObservable.add(() => {
@@ -866,6 +905,7 @@ async function main(): Promise<void> {
     fagulhaEl.style.display = gameActive && !descending ? "" : "none";
     potionsEl.style.display = gameActive && !descending ? "" : "none";
     execEl.style.opacity = gameActive && !descending && combat.executePromptPos() ? "1" : "0";
+    brasaWrap.style.display = gameActive && !descending ? "" : "none";
     const bf = combat.bossFraction;
     if (gameActive && !descending && bf >= 0) {
       bossWrap.style.opacity = "1";
