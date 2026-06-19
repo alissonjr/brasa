@@ -586,8 +586,8 @@ Acessibilidade (seção 7)
 - [ ] Assistências: reduzir movimento, reduzir flashes (incl. versão suave do acender do braseiro), modo história/dano reduzido. [DESIGN][NORMATIVO]
 
 Estética casada com a direção de arte (seção 8)
-- [ ] theme.css re-tematizado para a paleta fria-base de direcao-de-arte.md 2.1, com o laranja reservado ao fogo/foco. [DESIGN][NORMATIVO]
-- [ ] Regra da gangorra respeitada na UI: laranja só no foco/fagulha em estados frios; azul recua em estados quentes. [DESIGN][NORMATIVO]
+- [x] theme.css re-tematizado para a paleta fria-base de direcao-de-arte.md 2.1, com o laranja reservado ao fogo/foco. [DESIGN][NORMATIVO]
+- [x] Regra da gangorra respeitada na UI: laranja só no foco/fagulha em estados frios; azul recua em estados quentes. [DESIGN][NORMATIVO]
 - [ ] Emissivo/brilho na UI restrito a fogo, fagulha, prompt de acender e item em foco. [DESIGN][NORMATIVO]
 
 Responsivo e plataforma (seção 9)
@@ -628,8 +628,6 @@ Pendências [A DEFINIR]
 - Régua de detalhe e DoD: [`padrao-de-detalhe.md`](../padrao-de-detalhe.md).
 - Spec análoga (estrutura herdada): `docs/spec-ui-hud-ux.md` (era Josué).
 - Código reaproveitado: `prototipo/src/engine/ui/uiManager.ts`, `prototipo/src/game/ui/{hud,combatHud,screens,strings,fonts}.ts` e `theme.css`.
-</content>
-</invoke>
 
 ---
 
@@ -648,3 +646,27 @@ Pendências [A DEFINIR]
   ordem das dádivas ofertadas e um bônus "do dia".
 - **Escurecimento da arena do Guardião** por `brasaLightFraction` (W3): quando a Brasa apaga, a
   névoa/ambiente da arena escurecem; ao reacender, clareiam. Liga o visual à mecânica de luz.
+
+---
+
+## ATUALIZAÇÃO 5 itens + Tier 1/2 (2026-06-16) - HUD e feedback no código
+
+`[CÓDIGO]` `[NORMATIVO]` Itens de UI/feedback implementados (`combatHud.ts`, `dev/perfHud.ts`):
+
+- **Fagulha em PIPS (implementado):** a barra contínua virou 3 pips (losangos); o pip parcial
+  mostra a regeneração em curso. Substitui o "blueprint" da W6.
+- **Feedback positivo de combate (implementado):** moldura curta (~200 ms) por evento - acerto sem
+  bloqueio = DOURADO; cura (essência/poção/braseiro) = VERDE; bloqueio/parry = BRONZE; esquiva
+  perfeita = CIANO. Sempre com som. `setReducedFlashes(prefs.reducedMotion)` desliga as molduras
+  (acessibilidade), mantendo o som.
+- **Ressonância no HUD (Tier 2):** fileira de marcas que acendem com o streak de acertos sem
+  apanhar; só aparece com a dádiva ativa; zera ao apanhar.
+- **Overlay de performance (gate normativo):** `dev/perfHud.ts` (SceneInstrumentation) loga draw
+  calls por sala ao entrar (aviso se >= 60) e mostra draw calls/fps/frame ms ao vivo sob `?perf`
+  ou tecla F9. Confirmação numérica das 7 salas < 60 ainda depende de rodar no navegador.
+- **Inscrições por proximidade:** placa lapidar discreta ao chegar perto do nicho (1 por andar),
+  distinta dos ecos de entrada.
+- **Tela de vitória:** mostra o tempo da descida + o leaderboard local (top 5).
+- **Retículo de lock-on (2026-06-17):** ao travar (tecla T), um retículo ciano marca o alvo,
+  projetado na tela (`Vector3.Project`) a cada frame; some quando destravado/sem alvo. A dica de
+  controles passa a listar "Alvo: T".

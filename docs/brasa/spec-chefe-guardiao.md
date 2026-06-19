@@ -622,3 +622,20 @@ Higiene e processo
 
 Pendente para W5/W6: confronto encenado (frase de entrada + sussurro de morte) e o
 escurecimento visual da ARENA conforme `brasaLightFraction` (hoje só o emissivo do chefe muda).
+
+---
+
+## ATUALIZAÇÃO Tier 1 (2026-06-16) - parry e inquebrável no chefe
+
+`[CÓDIGO]` `[NORMATIVO]` O Guardião entrou no sistema de profundidade do Tier 1
+([`spec-combate-tier1-profundidade.md`](spec-combate-tier1-profundidade.md)):
+
+- **Parry de melee:** os golpes overhead e varredura (sweep) são APARÁVEIS. Aparar (bloqueio na
+  janela ~0,18 s, frontal) CAMBALEIA o Guardião por 0,8 s e anula o dano. Como o cambaleio já dá
+  **dano dobrado** (mecânica do reignite), o parry abre a mesma janela forte - e SOMA com a
+  gangorra de luz: ember reacende + cambaleia; parry também cambaleia. Dois caminhos para a abertura.
+- **Sopro de escuro (AoE) é INQUEBRÁVEL:** `attackUnblockable` quando o golpe em curso é o AoE.
+  Ignora o bloqueio (block não reduz) e NÃO pode ser aparado - só a esquiva/i-frames salva. Reforça
+  "o sopro você sai de perto, não segura a guarda".
+- `guardiao.ts`: getter `attackUnblockable` (kind === "aoe") e método `stagger(seconds)` (usado
+  pelo parry; reaproveita o `staggerTimer` do reignite).

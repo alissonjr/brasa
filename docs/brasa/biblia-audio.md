@@ -583,3 +583,22 @@ Estilo:
 - **Cambaleio do Guardião (W3):** som agudo de "cega" + batida grave ao reacender (sinal de
   janela de dano dobrado).
 - **Ecos do passado:** voz reverberada (decay ~3,5 s), filtrada (sem graves), legendada no HUD.
+
+---
+
+## ATUALIZAÇÃO 5 itens + Tier 1/2 (2026-06-16) - áudio implementado
+
+`[CÓDIGO]` `[NORMATIVO]` Sintetizado via WebAudio (sem assets), gated pelos volumes das opções.
+
+- **SFX de tell por PERFIL (`tellSound` em `combatSound.ts`):** `swift` (corte agudo: rogue/
+  espreitador), `heavy` (THOOM grave: heavy/sentinela/brutamonte), `cast` (assobio frio
+  ascendente: conjurador), `boss` (grave dissonante: Guardião), `unblock` (sino grave + ruído
+  áspero ascendente: golpe inquebrável), `basic` (swish médio: minion/warrior/demônio/antigo).
+  Tocado ao iniciar a antecipação. Gated pelo volume de SFX. Mapa tipo->perfil no
+  [`biblia-bestiario.md`](biblia-bestiario.md) (adendo).
+- **Stingers (`audio/stingers.ts`, gated pelo volume de MÚSICA):** `despertar` (grave dissonante +
+  sopro frio, ao entrar na câmara), `guardiao` (queda grave ominosa, ao avistar o chefe),
+  `reavivar` (arpejo maior ascendente, na vitória), `fagulha` (dois tons brilhantes, ao acender o
+  braseiro).
+- **Sons novos de combate:** `healChime` (cura: dois tons consonantes), `perfectDodgeChime`
+  (esquiva perfeita: assobio agudo cristalino).

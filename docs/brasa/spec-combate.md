@@ -552,3 +552,50 @@ Processo
   (`addBurnBoost`, `setDamageCap`, `addMaxStamina`, `addSparkRegenMul`, `enableResonance`,
   `setBrazierHealFrac`, além dos já existentes).
 - **Ressonância:** acertos encadeados sem apanhar dão até +30% de dano (zera ao tomar dano).
+
+---
+
+## ATUALIZAÇÃO Tier 1 + Tier 2 (2026-06-16) - profundidade de combate no código
+
+`[CÓDIGO]` `[NORMATIVO]` Ratifica as mecânicas de profundidade implementadas. Detalhe completo
+(objetivo, DoD, casos de uso) em [`spec-combate-tier1-profundidade.md`](spec-combate-tier1-profundidade.md)
+e [`spec-combate-tier2-profundidade.md`](spec-combate-tier2-profundidade.md). Substitui, onde
+conflita, o texto antigo (ex.: Fagulha agora é em CARGAS, não 0..1 contínuo).
+
+- **Fagulha em CARGAS (substitui o recurso contínuo):** `tuning.ts` `spark` = `{ charges: 3,
+  regenPerSec: 1/6, emberCost: 1 }`. 1 carga por Golpe de Fogo; regenera ~1 carga a cada 6 s;
+  recarrega tudo no braseiro; **+1 carga ao matar um inimigo**. HUD em 3 pips (ver
+  [`spec-ui-hud-ux.md`](spec-ui-hud-ux.md)).
+- **Poise / interrupção (Tier 1):** cada inimigo tem postura; os golpes do herói drenam (leve 10,
+  finalizadora 14, pesado 34, ember 16; campo `poise` no `AttackTuning`). Ao zerar, o inimigo
+  CAMBALEIA ~0,6 s (cancela o golpe em curso) e leva **+30% de dano**. Poise por tipo no
+  [`biblia-bestiario.md`](biblia-bestiario.md) (adendo). Cria a opção "interromper vs. esperar".
+- **Ataque inquebrável (Tier 1):** heavy/sentinela/brutamonte têm ~40% de chance de uma investida
+  INQUEBRÁVEL: ignora o bloqueio (só esquiva salva), telegrafada por tinta vermelha + som "unblock".
+- **Parry de melee (Tier 1):** bloquear na janela (~0,18 s ao apertar) contra golpe melee frontal e
+  bloqueável anula o dano, CAMBALEIA o atacante, devolve 30 de stamina e dá feedback de bronze.
+  Inquebrável e AoE do chefe não se aparam.
+- **Esquiva perfeita (Tier 2):** golpe anulado pelos i-frames na janela inicial do rolamento
+  (~0,12 s) recompensa: hit stop breve + **+1 carga de Fagulha** + flash ciano + som. Uma por rolamento.
+- **Cleave (Tier 2):** a finalizadora (raio 2,4 m) e o pesado (2,8 m) respingam nos inimigos
+  próximos do impacto (0,55x dano, 0,5x poise). Leves 1 e 2 seguem mono-alvo.
+- **Ressonância visível:** o streak agora aparece no HUD (ver UI).
+
+### Tier 3 (2026-06-16) - stamina de guarda e flanco
+Detalhe em [`spec-combate-tier3-profundidade.md`](spec-combate-tier3-profundidade.md).
+- **Stamina de guarda + guard break:** segurar bloqueio drena stamina (~12/s); aparar um golpe
+  custa ~50% do dano em stamina (chip); se a stamina zera bloqueando, GUARD BREAK: o herói
+  cambaleia ~0,5 s (não age) e o golpe passa CHEIO. Ataque leve segue sem custo (responsividade).
+  Completa o triângulo defensivo: parry (de graça, exige timing) > bloqueio (custa) > turtle (quebra).
+- **Flanco / backstab:** golpe melee direto pelas COSTAS do inimigo = x1.5 dano + 50% de poise;
+  pelo FLANCO = x1.2; de frente = x1.0. Lê a orientação lógica do alvo (sem o offset do modelo).
+  Não vale para Queimadura nem ember. Recompensa o posicionamento que as plantas já incentivam.
+
+### Lock-on / soft-target (2026-06-17) - mira de combate
+Detalhe em [`spec-combate-lock-on.md`](spec-combate-lock-on.md).
+- **Soft-target (sempre ligado):** na antecipação do golpe/ember, se há inimigo num cone frontal
+  apertado (<= 7 m), o herói encara ESSE inimigo em vez do yaw cru da câmera (o golpe gruda no
+  alvo óbvio). Sem inimigo no cone, mira pela câmera (comportamento antigo).
+- **Lock-on (tecla T, já existia no input, agora funcional):** trava no melhor inimigo à frente;
+  golpes/ember miram o alvo travado mesmo com a câmera virada; retículo no HUD; salta para o
+  próximo ao matar o travado; solta ao trocar de sala. Não strafe-locka a locomoção (age só na mira).

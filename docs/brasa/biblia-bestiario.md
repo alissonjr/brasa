@@ -440,3 +440,34 @@ garante o teto ao não manter duas salas vivas.
 - [ ] Projétil do arqueiro: pool/trajetória definidos (4.2)
 - [ ] Ondas (leva 3+3) vs. todos simultâneos por sala (seção 5)
 - [ ] Teto de 8 skinned por sala confirmado após medir skinning na CPU (seção 5)
+
+---
+
+## ATUALIZAÇÃO Tier 1 (2026-06-16) - postura, tell sonoro e inquebrável no código
+
+`[CÓDIGO]` `[NORMATIVO]` Cada tipo ganhou três atributos novos em `skeleton.ts` (ver
+[`spec-combate-tier1-profundidade.md`](spec-combate-tier1-profundidade.md) e
+[`biblia-audio.md`](biblia-audio.md)):
+
+- **poise:** postura. Os golpes do herói drenam (leve 10, finalizadora 14, pesado 34, ember 16);
+  ao zerar, o inimigo CAMBALEIA ~0,6 s (cancela a antecipação) e leva +30% de dano. Regenera fora
+  do ataque (~2,5 s para encher). Tipos com poise alto NÃO são interrompidos por leves -> respeito.
+- **tellProfile:** assinatura SONORA do tell (a sala é escura; a leitura não pode depender só de cor).
+- **canUnblockable:** o tipo pode telegrafar (~40%) um golpe INQUEBRÁVEL (ignora bloqueio; só esquiva
+  salva), avisado por tinta vermelha + som "unblock".
+
+| Tipo | poise | tellProfile | inquebrável |
+|---|---|---|---|
+| minion | 12 | basic | não |
+| rogue | 14 | swift | não |
+| espreitador | 14 | swift | não |
+| conjurador | 18 | cast | não (ranged) |
+| warrior | 25 | basic | não |
+| demônio | 25 | basic | não |
+| antigo | 45 | basic | não |
+| heavy | 65 | heavy | sim |
+| brutamonte | 75 | heavy | sim |
+| sentinela | 95 | heavy | sim |
+
+Consequência de design: minion/rogue/warrior são interrompíveis (pressione); heavy/sentinela/
+brutamonte exigem esquiva no inquebrável e raramente cambaleiam (respeite o golpe).
