@@ -1,5 +1,5 @@
-import { Scene, Vector3 } from "@babylonjs/core";
-import { createEngine, el, enableHavokPhysics, InputState, ThirdPersonCamera, UiManager } from "@engine";
+import { Matrix, Scene, Vector3 } from "@babylonjs/core";
+import { addFinishingPass, addSceneOutline, createEngine, el, enableHavokPhysics, enableSsao, Easings, InputState, ThirdPersonCamera, Tweens, UiManager } from "@engine";
 import type { KeyBindings } from "@engine";
 import {
   WORLD_GRAVITY,
@@ -16,6 +16,7 @@ import {
   ProfileScreen,
   WorldMapScreen,
   CharacterCreateScreen,
+  VictoryScreen,
   GameHud,
   DEFAULT_CHAPTER,
   DEFAULT_CHARACTER,
@@ -29,6 +30,7 @@ import {
   createPauseButton,
   configureUiSound,
   configureCombatSound,
+  healChime,
   configureTitleAmbience,
   startTitleAmbience,
   stopTitleAmbience,
@@ -36,6 +38,14 @@ import {
   startMusic,
   stopMusic,
   setMusicState,
+  configureStingers,
+  playStinger,
+  configureAmbience,
+  startAmbience,
+  setAmbience,
+  updateAmbience,
+  playWhisper,
+  playStir,
   CombatDirector,
   CombatHud,
   DIFFICULTY_DAMAGE_TAKEN,
@@ -48,6 +58,20 @@ import {
 import { SAVE_SCHEMA_VERSION, requestPersistentStorage } from "@platform";
 import type { Quality, SaveData } from "@platform";
 import { buildPlatform } from "./services";
+import { PerfHud } from "../dev/perfHud";
+
+/** PRNG determinístico (mulberry32): mesma semente -> mesma sequência (seed por run). */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const newSeed = (): number => Math.floor(Math.random() * 0x7fffffff) + 1;
 
 /**
  * CAMADA APP - composition root de BRASA. Cria a ENGINE, monta a PLATAFORMA, instancia
@@ -91,6 +115,15 @@ async function main(): Promise<void> {
     const s = platform.settings.get();
     return s.masterVolume * s.musicVolume;
   });
+  configureStingers(() => {
+    const s = platform.settings.get();
+    return s.masterVolume * s.musicVolume;
+  });
+  // ESTILO (Bloco 4, §4.4): ambiência adaptativa (textura musical -> volume de música).
+  configureAmbience(() => {
+    const s = platform.settings.get();
+    return s.masterVolume * s.musicVolume;
+  });
   const persistente = await requestPersistentStorage();
   console.log(`[plataforma] storage persistente: ${persistente}`);
   const profile = platform.profile.current();
@@ -113,6 +146,16 @@ async function main(): Promise<void> {
   const spawn = new Vector3(CRYPT_SPAWN.x, 1.5, CRYPT_SPAWN.z);
   const camera = new ThirdPersonCamera(scene, canvas, spawn);
   const cryptCtx = setupCryptScene(scene, camera.camera); // look global (glow/nevoa/luz/sombra/pos)
+  // ESTILO (Bloco 1, spec-estilo-visual-render §4.1c): SSAO aterra atores e cantos da cripta.
+  enableSsao(scene, camera.camera, { strength: 1.0, base: 0.35, radius: 0.0009, area: 0.0075 });
+  // ESTILO (Bloco 3, §4.3): edge-detect de cena (linha de tinta no MUNDO). Antes da finalização
+  // para a linha ser papelada/posterizada junto. Pulado em WebGPU (GLSL); fica o inverted-hull.
+  addSceneOutline(camera.camera, { thickness: 1.4, strength: 0.85 });
+  // ESTILO (Bloco 2, §4.2a): passe de finalização (papel + dither + posterize). Em WebGPU é
+  // pulado (GLSL); o resto da pilha estilizada segue valendo.
+  addFinishingPass(camera.camera, { posterizeLevels: 22, ditherStrength: 0.6, paperStrength: 0.15 });
+  // ESTILO (Bloco 2, §4.2b): gerenciador de tween para o juice (atualizado no loop com dt real).
+  const tweens = new Tweens();
   stage("Cavando a cripta...");
   await ensureCryptPieces(scene); // carrega o kit KayKit uma vez
   const hero = new Acendedora(scene, spawn, WORLD_GRAVITY);
@@ -130,7 +173,10 @@ async function main(): Promise<void> {
   input.setBindings(platform.settings.get().keyBindings as Partial<KeyBindings>);
   input.attach(window);
 
-  const combat = new CombatDirector(scene, camera, hero, platform.events);
+  const combat = new CombatDirector(scene, camera, hero, platform.events, tweens);
+  // Gate de performance (NORMATIVO): mede draw calls + fps por sala. Overlay sob ?perf ou F9.
+  const perf = new PerfHud(scene, engine);
+  window.addEventListener("keydown", (e) => { if (e.code === "F9") perf.toggle(); });
   const applyDifficulty = (): void =>
     hero.combat.setDamageTakenMultiplier(DIFFICULTY_DAMAGE_TAKEN[character.difficulty] ?? 1);
   applyDifficulty();
@@ -148,6 +194,7 @@ async function main(): Promise<void> {
     { index: 6, kind: "guardiao", enemies: 4, boss: true }, // clímax (chefe real = feature futura)
   ];
   let currentRoom: Room | null = null;
+  let currentBoss: ReturnType<typeof combat.addBoss> | null = null; // Guardião do andar final (se houver)
   let floorIndex = 0;
   let descending = false;
   let descentDone = false;
@@ -156,11 +203,18 @@ async function main(): Promise<void> {
   // vira de fria a quente (lightT); só então o alçapão libera (passageOpen). Ver spec-top5.
   let channelT = 0;
   let lightT = 0;
+  let floorDepth = 0; // ESTILO (Bloco 4): profundidade do andar atual (0..1) p/ a ambiência
+  let ambAcc = 0; // acumulador de throttle do setAmbience
   let passageOpen = false;
   const CHANNEL_SEC = 1.3; // tempo segurando [R] no altar
+  let bossChannelT = 0; // canalização da Brasa central DURANTE o confronto do Guardião
+  const BOSS_CHANNEL_SEC = 1.1;
   const LIGHT_SEC = 1.0; // duração da virada frio->quente
   let fagulhas = 0; // moeda: cinza quente dos mortos, gasta nas dádivas do braseiro
   let runActive = false; // há uma descida em andamento (para persistência/retomar)
+  let runSeed = newSeed(); // semente da run: jitter de posição e ordem de oferta determinísticos
+  let timedRun = false; // a descida foi jogada do começo nesta sessão (vale para o leaderboard)
+  let runStartedAt = 0; // performance.now() do início da descida cronometrada
   const purchasedBoons: string[] = []; // nomes das dádivas compradas (reaplicadas ao carregar)
   let defeated = false; // derrota: a fagulha apagou (vida zerou)
   // Declarado cedo: restoreRun() roda no boot e chama updateFagulhaHud/updatePotionHud,
@@ -263,6 +317,22 @@ async function main(): Promise<void> {
   execEl.textContent = "[F] Executar";
   document.body.appendChild(execEl);
 
+  // Prompt de PEGAR ARMA (captura de arma): aparece quando há uma arma dropada ao alcance.
+  const pickupEl = document.createElement("div");
+  pickupEl.style.cssText =
+    "position:fixed;left:50%;bottom:134px;transform:translateX(-50%);z-index:36;padding:6px 14px;border-radius:8px;" +
+    "background:rgba(12,17,24,0.82);color:#ffd089;font:700 14px Cinzel,serif;border:1px solid #caa45a;opacity:0;" +
+    "transition:opacity .12s ease;pointer-events:none;text-shadow:0 1px 2px #000;white-space:nowrap;";
+  document.body.appendChild(pickupEl);
+
+  // HUD da arma equipada (clava/cajado) com cargas restantes.
+  const weaponEl = document.createElement("div");
+  weaponEl.style.cssText =
+    "position:fixed;right:16px;top:80px;z-index:35;padding:6px 14px;border-radius:14px;" +
+    "background:rgba(40,24,8,0.8);color:#ffcf8a;font:600 14px Cinzel,serif;border:1px solid #caa45a;" +
+    "pointer-events:none;text-shadow:0 1px 2px #000;display:none;white-space:nowrap;";
+  document.body.appendChild(weaponEl);
+
   // Barra do CHEFE (Guardião): topo-centro, aparece só quando o chefe está ativo.
   const bossWrap = document.createElement("div");
   bossWrap.style.cssText =
@@ -278,6 +348,15 @@ async function main(): Promise<void> {
   bossTrack.appendChild(bossFill);
   bossWrap.append(bossName, bossTrack);
   document.body.appendChild(bossWrap);
+
+  // Retículo de LOCK-ON: marca o alvo travado, projetado na tela a cada frame.
+  const reticleEl = document.createElement("div");
+  reticleEl.style.cssText =
+    "position:fixed;width:34px;height:34px;border:2px solid #bfe6ff;border-radius:50%;" +
+    "box-shadow:0 0 8px rgba(150,225,255,.7),inset 0 0 6px rgba(150,225,255,.5);" +
+    "transform:translate(-50%,-50%);z-index:34;pointer-events:none;display:none;";
+  document.body.appendChild(reticleEl);
+  const reticleWorld = new Vector3();
 
   // Texto de cena (set-pieces): abertura, ecos por andar, reavivar. Fade in/out.
   const storyEl = document.createElement("div");
@@ -309,6 +388,27 @@ async function main(): Promise<void> {
     "No fundo, a primeira Acendedora ainda arde. E te esperava.",
   ];
 
+  // INSCRIÇÕES por proximidade (item 5): texto curto GRAVADO na pedra do nicho, lido ao se
+  // aproximar (distinto do ECO, que é a voz/memória ao ENTRAR). Fragmentário, coerente com o
+  // canon (povo morto -> alguém desceu -> o custo -> luto -> a verdade -> confronto).
+  const INSCRIPTIONS = [
+    "Aqui jaz a guarda da chama. Foram teu povo, antes do frio.",
+    "Outra desceu por estas escadas. Não a vimos voltar.",
+    "Quem acendeu a primeira Brasa? A pedra não responde.",
+    "A chama cobra em carne: uma vida por geração.",
+    "Que descanses, tu que voltaste. E tu, que desceste mais.",
+    "Marta gravou aqui: não temas o fundo. Teme ficar.",
+    "Ela ainda guarda o fogo. Liberta-a, ou toma seu lugar.",
+  ];
+  // Placa discreta da inscrição (estilo lapidar): aparece ao chegar perto do nicho.
+  const inscriptionEl = document.createElement("div");
+  inscriptionEl.style.cssText =
+    "position:fixed;left:50%;bottom:160px;transform:translateX(-50%);z-index:35;max-width:60vw;text-align:center;" +
+    "color:#cdbb95;font:600 15px Cinzel,serif;font-style:italic;letter-spacing:1px;text-shadow:0 1px 3px #000;" +
+    "background:rgba(10,8,5,0.5);border:1px solid rgba(156,115,57,0.35);border-radius:6px;padding:7px 16px;" +
+    "opacity:0;transition:opacity .4s ease;pointer-events:none;white-space:nowrap;";
+  document.body.appendChild(inscriptionEl);
+
   // Overlay preto para o fade entre andares.
   const fadeEl = document.createElement("div");
   fadeEl.style.cssText =
@@ -322,9 +422,11 @@ async function main(): Promise<void> {
 
   const enterRoom = (i: number): void => {
     currentRoom?.dispose();
+    currentBoss = null;
     combat.clearEnemies();
     const def = DESCENT[i]!;
     currentRoom = buildCryptRoom(scene, cryptCtx, def);
+    perf.logRoom(i, def.kind); // mede draw calls da sala recem-montada (gate de performance)
     floorIndex = i;
     runActive = true; // há uma descida em andamento (persistível)
     roomCleared = false; // passagem selada até limpar a câmara
@@ -342,31 +444,50 @@ async function main(): Promise<void> {
     const ROSTER: SkeletonKind[][] = [
       ["minion"], // 0 abertura: 1 fraco (ensina o laço)
       ["minion", "minion", "demonio"], // 1 estreia o demônio (silhueta nova, pressão leve)
-      ["warrior", "espreitador", "rogue", "minion"], // 2 estreia o espreitador (hit-and-run)
+      ["warrior", "arqueiro", "espreitador", "minion"], // 2 estreia o ARQUEIRO (ranged ágil; usa cobertura dos pilares)
       ["warrior", "conjurador", "antigo", "espreitador", "minion"], // 3 pico - estreia o conjurador (à distância)
-      ["brutamonte", "conjurador", "rogue", "demonio"], // 4 estreia o brutamonte (tanque enorme)
-      ["sentinela", "espreitador", "conjurador", "warrior", "rogue"], // 5 elite + pressão mista
+      ["brutamonte", "arqueiro", "rogue", "demonio"], // 4 brutamonte (tanque) + arqueiro pressionando de longe
+      ["sentinela", "espreitador", "arqueiro", "warrior", "rogue"], // 5 elite + pressão mista (ranged + melee)
       ["brutamonte", "antigo", "conjurador", "demonio"], // 6 (sobra: o andar 6 é do CHEFE)
     ];
     const anchor = currentRoom.enemyAnchor; // centro do spawn (varia com a planta)
+    combat.setEnemyBounds(currentRoom.enemyBounds); // inimigos não recuam para trás do altar/paredes
     if (def.boss) {
       // Andar do Guardião: 1 contra 1 na arena (surge à frente do altar).
-      combat.addBoss(new Vector3(anchor.x, 0, anchor.z + 4));
+      currentBoss = combat.addBoss(new Vector3(anchor.x, 0, anchor.z + 4));
+      currentBoss.bindArena(currentRoom.arena); // a arena reage à gangorra de luz da Brasa
       platform.events.emit("crypt:floor", { index: i, kind: def.kind });
       console.log(`[descida] andar ${i + 1}/${DESCENT.length} (${def.kind}): GUARDIÃO`);
+      if (gameActive) playStinger("guardiao"); // avistar o Guardião (stinger grave e ominoso)
       // Confronto encenado: a Primeira Acendedora fala antes de atacar (canon, narrativa §0).
       if (gameActive) window.setTimeout(() => { if (combat.bossActive) showStory("Esperei tanto que esqueci meu nome. Qual é o teu?", 5000, false); }, 1400);
     } else {
       const kinds = ROSTER[i] ?? ["warrior"];
+      // W6/Item5: variação por run DETERMINÍSTICA. O jitter de ângulo/raio vem de um PRNG
+      // semeado por (runSeed + andar): a mesma run reproduz as mesmas posições (retomar/morrer
+      // não embaralha), mas runs diferentes variam. Rejogabilidade barata e estável.
+      const rand = mulberry32(runSeed + i * 1009);
       kinds.forEach((kind, e) => {
-        const a = (e / Math.max(1, kinds.length)) * Math.PI * 2;
-        combat.addSkeleton(new Vector3(anchor.x + Math.cos(a) * 4.5, 0, anchor.z + Math.sin(a) * 3), { kind, respawns: false });
+        const a = (e / Math.max(1, kinds.length)) * Math.PI * 2 + (rand() - 0.5) * 0.9;
+        const rx = 4.5 + (rand() - 0.5) * 1.6;
+        const rz = 3 + (rand() - 0.5) * 1.2;
+        combat.addSkeleton(new Vector3(anchor.x + Math.cos(a) * rx, 0, anchor.z + Math.sin(a) * rz), { kind, respawns: false });
       });
       platform.events.emit("crypt:floor", { index: i, kind: def.kind });
       console.log(`[descida] andar ${i + 1}/${DESCENT.length} (${def.kind}): ${kinds.join(", ")}`);
     }
     combat.wake(0.9); // despertar: os mortos ficam parados por um instante ao entrar
-    if (gameActive) showStory(ECHOES[i] ?? "", 4200, false); // eco/memória do andar
+    // ESTILO (Bloco 4, §4.4): profundidade do andar p/ a ambiência; agitação dos mortos no
+    // despertar; sussurro espacial do eco pelo lado do nicho. startAmbience é idempotente.
+    floorDepth = i / Math.max(1, DESCENT.length - 1);
+    startAmbience();
+    setAmbience({ depth: floorDepth, danger: 0, urgency: 0 });
+    if (gameActive) {
+      if (!def.boss) playStinger("despertar"); // os mortos da câmara acordam (stinger frio)
+      playStir(def.boss ? 1 : (ROSTER[i]?.length ?? 1)); // os mortos se agitam ao acordar
+      showStory(ECHOES[i] ?? "", 4200, false); // eco/memória do andar
+      playWhisper(Math.sign(currentRoom.inscriptionPos.x) * 0.6); // o eco sussurra do nicho
+    }
   };
 
   // Dádivas da Brasa: compradas no braseiro (custam Fagulha). Cada descida oferece 3 do
@@ -391,15 +512,17 @@ async function main(): Promise<void> {
     { name: "Braseiro Quente", desc: "Acender o braseiro cura 60% da vida (em vez de 40%).", cost: 8, ramo: "utilidade", apply: () => hero.combat.setBrazierHealFrac(0.6) },
   ];
   const FREE_BOON: Boon = { name: "Lasca de Brasa", desc: "+10 de vida. Sempre disponível.", cost: 0, ramo: "defesa", apply: () => hero.combat.addMaxHealth(10) };
-  const pickFromRamo = (r: Ramo): Boon => {
+  const pickFromRamo = (r: Ramo, rand: () => number): Boon => {
     const pool = BOONS.filter((b) => b.ramo === r);
-    return pool[Math.floor(Math.random() * pool.length)]!;
+    return pool[Math.floor(rand() * pool.length)]!;
   };
 
   const chooseBoon = (): Promise<void> =>
     new Promise((resolve) => {
-      // Oferta CURADA e fixa nesta visita: 1 de cada ramo + a Lasca grátis.
-      const offer = [pickFromRamo("agressao"), pickFromRamo("defesa"), pickFromRamo("utilidade"), FREE_BOON];
+      // Oferta CURADA e fixa nesta visita: 1 de cada ramo + a Lasca grátis. A escolha de QUAL
+      // dádiva de cada ramo é determinística pela semente da run (mesma run -> mesma oferta).
+      const rand = mulberry32(runSeed + (floorIndex + 1) * 7919 + 13);
+      const offer = [pickFromRamo("agressao", rand), pickFromRamo("defesa", rand), pickFromRamo("utilidade", rand), FREE_BOON];
       const panel = el("div", { class: "menu-panel" });
       const overlay = el("div", { class: "menu-backdrop" }, panel);
       overlay.style.zIndex = "60";
@@ -486,6 +609,8 @@ async function main(): Promise<void> {
       void doAutosave();
     } else {
       hero.combat.healByMax(hero.combat.brazierHealFrac); // acender o braseiro cura (respiro; Braseiro Quente sobe)
+      combatHud.flashHeal();
+      healChime();
       await chooseBoon(); // gasta Fagulha numa dádiva (tela preta atrás)
       enterRoom(floorIndex + 1);
       void doAutosave(); // checkpoint = braseiro aceso: grava a run (andar/Fagulha/dádivas)
@@ -507,6 +632,25 @@ async function main(): Promise<void> {
   // Fase 1: limpa a sala -> canaliza segurando [R] perto do altar (channelT). Fase 2: vira a
   // luz de fria a quente (lightT) e abre o alçapão (passageOpen).
   const updateIgnite = (dtSec: number): void => {
+    // Confronto do Guardião: canalizar a Brasa central (segurar [R] no altar) reacende a
+    // chama e EXPÕE o chefe (cambaleio/dano dobrado). Counterplay repetível; a sala do
+    // chefe só "limpa" quando ele cai, então isto roda antes do fluxo normal.
+    if (currentBoss && combat.bossActive && !descending && !defeated && currentRoom) {
+      const b = currentRoom.brazier;
+      const near = Math.hypot(hero.position.x - b.x, hero.position.z - b.z) <= 3.4;
+      if (near && input.isHeld("interact")) {
+        bossChannelT = Math.min(1, bossChannelT + dtSec / BOSS_CHANNEL_SEC);
+        if (bossChannelT >= 1) {
+          currentBoss.reigniteFromBrazier();
+          bossChannelT = 0;
+        }
+      } else {
+        bossChannelT = Math.max(0, bossChannelT - (dtSec / BOSS_CHANNEL_SEC) * 1.5);
+      }
+      channelBar.style.opacity = bossChannelT > 0.01 ? "1" : "0";
+      channelFill.style.width = `${Math.round(bossChannelT * 100)}%`;
+      return;
+    }
     if (!currentRoom || !roomCleared || passageOpen || descending || defeated) {
       channelBar.style.opacity = "0";
       return;
@@ -525,10 +669,11 @@ async function main(): Promise<void> {
       // Virada de luz frio->quente; ao completar, abre a passagem.
       channelBar.style.opacity = "0";
       lightT = Math.min(1, lightT + dtSec / LIGHT_SEC);
-      currentRoom.setBrazierLit(lightT);
-      if (lightT >= 1) {
+      currentRoom.setBrazierLit(Easings.easeInOutCubic(lightT)); // ESTILO (Bloco 2): virada com easing
+      if (lightT >= 1 && !passageOpen) {
         currentRoom.setCleared(true);
         passageOpen = true;
+        playStinger("fagulha"); // o braseiro pegou (stinger curto e brilhante)
         promptEl.textContent = "A Brasa arde: pise no feixe de luz para descer";
       }
     }
@@ -572,10 +717,17 @@ async function main(): Promise<void> {
     overlay.style.zIndex = "60";
     document.body.appendChild(overlay);
   };
+  // --- Vitória: a Brasa foi reavivada. Tela temática com leaderboard (top 5).
+  // VictoryScreen grava o tempo (só se timedRun) e mostra o ranking; consistente com os
+  // demais menus (UiManager) em vez do overlay raw-DOM antigo. ---
+  const showVictory = (elapsedSec: number): void => {
+    ui.replaceAll(new VictoryScreen(ctx, elapsedSec, timedRun));
+  };
   platform.events.on("hero:died", () => {
     if (defeated || !gameActive) return;
     defeated = true;
     gameActive = false;
+    playStinger("derrota"); // a fagulha apagou (queda menor fria)
     document.exitPointerLock();
     showDefeat();
   });
@@ -585,6 +737,8 @@ async function main(): Promise<void> {
     fagulhas = run.fagulhas;
     inv.vida = run.pocaoVida;
     inv.furia = run.pocaoFuria;
+    runSeed = run.seed > 0 ? run.seed : newSeed(); // legado (seed 0): gera uma para esta retomada
+    timedRun = false; // run retomada não conta para o leaderboard (tempo não é justo)
     purchasedBoons.length = 0;
     const all = [...BOONS, FREE_BOON];
     for (const name of run.upgrades) {
@@ -605,6 +759,9 @@ async function main(): Promise<void> {
     inv.vida = 1;
     inv.furia = 0;
     purchasedBoons.length = 0;
+    runSeed = newSeed(); // nova run: nova semente
+    timedRun = true; // jogada do começo nesta sessão: vale para o leaderboard
+    runStartedAt = performance.now();
     descentDone = false;
     defeated = false;
     hero.combat.resetUpgrades();
@@ -622,6 +779,8 @@ async function main(): Promise<void> {
     if (input.consumePressed("potion1") && inv.vida > 0 && hero.combat.canDrink) {
       inv.vida -= 1;
       hero.combat.heal(hero.combat.maxHealth * POTIONS.vida.healFrac);
+      combatHud.flashHeal();
+      healChime();
       updatePotionHud();
     }
     if (input.consumePressed("potion2") && inv.furia > 0 && hero.combat.canDrink) {
@@ -637,6 +796,10 @@ async function main(): Promise<void> {
       brasaMeter = 0;
       updateBrasaHud();
     }
+    // Pegar arma (G): equipa a arma dropada (clava do gigante / cajado do mago) ao alcance.
+    if (input.consumePressed("pickup")) combat.pickupNearby();
+    // Lock-on (T): trava/destrava o alvo à frente da câmera (mira gruda; retículo no HUD).
+    if (input.consumePressed("lockOn")) combat.toggleLock();
   };
 
   scene.onAfterPhysicsObservable.add(() => {
@@ -650,6 +813,20 @@ async function main(): Promise<void> {
   scene.onBeforeRenderObservable.add(() => {
     const dt = engine.getDeltaTime() / 1000;
     camera.update(hero.position, dt);
+    // ESTILO (Bloco 4, §4.4a): ambiência adaptativa. updateAmbience todo frame (batida da
+    // Brasa); setAmbience throttled (4x/s) para não agendar rampas demais.
+    if (gameActive) {
+      updateAmbience(dt);
+      ambAcc += dt;
+      if (ambAcc >= 0.25) {
+        ambAcc = 0;
+        const danger = combat.bossActive
+          ? 0.55 + 0.45 * (1 - combat.bossFraction)
+          : Math.min(1, combat.aliveEnemyCount / 4);
+        const urgency = combat.bossActive ? 1 - combat.bossBrasaLight : 0;
+        setAmbience({ depth: floorDepth, danger, urgency });
+      }
+    }
   });
 
   // --- UI (overlay HTML/CSS) + plataforma de save ---
@@ -677,12 +854,21 @@ async function main(): Promise<void> {
   gameHud.setVisible(false);
 
   const combatHud = new CombatHud();
+  combatHud.setReducedFlashes(prefs.reducedMotion); // acessibilidade: sem molduras de flash
   ui.hudLayer.appendChild(combatHud.vignette);
+  ui.hudLayer.appendChild(combatHud.feedback);
   ui.hudLayer.appendChild(combatHud.root);
   ui.hudLayer.appendChild(combatHud.hint);
   combatHud.setVisible(false);
   platform.events.on("hero:hit", () => combatHud.flashDamage());
-  platform.events.on("combat:hit", () => combatHud.dismissHint());
+  // Feedback POSITIVO (W6): acerto sem bloqueio -> dourado; bloqueio/parry -> bronze; cura -> verde.
+  platform.events.on<{ guarded?: boolean }>("combat:hit", ({ guarded }) => {
+    combatHud.dismissHint();
+    if (!guarded) combatHud.flashHit();
+  });
+  platform.events.on("hero:block", () => combatHud.flashBlock());
+  platform.events.on("hero:heal", () => combatHud.flashHeal());
+  platform.events.on("hero:perfect", () => combatHud.flashPerfect());
 
   let pausedOpen = false;
 
@@ -728,6 +914,7 @@ async function main(): Promise<void> {
           pocaoVida: inv.vida,
           pocaoFuria: inv.furia,
           upgrades: purchasedBoons,
+          seed: runSeed,
         },
       },
     };
@@ -871,6 +1058,37 @@ async function main(): Promise<void> {
     else if (pausedOpen) ctx.resume();
   });
 
+  // --- Atalhos de DEBUG (só em `npm run dev`; o Vite remove em produção) ---
+  // Pra caçar soft-locks e testar a descida sem jogar tudo: pular andar, ir ao chefe,
+  // limpar a sala e curar. Não conflitam com o input de jogo (teclas livres).
+  if (import.meta.env.DEV) {
+    window.addEventListener("keydown", (e) => {
+      if (!gameActive) return;
+      const last = DESCENT.length - 1;
+      switch (e.code) {
+        case "BracketRight": // ] -> próximo andar
+          enterRoom(Math.min(floorIndex + 1, last));
+          break;
+        case "BracketLeft": // [ -> andar anterior
+          enterRoom(Math.max(0, floorIndex - 1));
+          break;
+        case "Backslash": // \ -> pula direto pro Guardião
+          enterRoom(last);
+          break;
+        case "KeyK": // limpa a sala (mata todos) -> abre a canalização do braseiro
+          combat.clearEnemies();
+          break;
+        case "KeyH": // cura cheia
+          hero.combat.healByMax(1);
+          break;
+        default:
+          return;
+      }
+      e.preventDefault();
+      console.log(`[debug] ${e.code} -> andar ${floorIndex + 1}/${DESCENT.length}`);
+    });
+  }
+
   document.addEventListener("pointerlockchange", () => {
     if (gameActive && document.pointerLockElement === null) pauseGame();
   });
@@ -901,7 +1119,9 @@ async function main(): Promise<void> {
   let hudAcc = 0;
   engine.runRenderLoop(() => {
     scene.render();
+    perf.update(); // gate de performance: draw calls/fps por frame + log por sala
     const dt = engine.getDeltaTime();
+    tweens.update(dt / 1000); // ESTILO (Bloco 2): avança o juice com o dt real
     acc += dt;
     hudAcc += dt;
     combatHud.setVisible(gameActive);
@@ -910,6 +1130,49 @@ async function main(): Promise<void> {
     potionsEl.style.display = gameActive && !descending ? "" : "none";
     execEl.style.opacity = gameActive && !descending && combat.executePromptPos() ? "1" : "0";
     brasaWrap.style.display = gameActive && !descending ? "" : "none";
+    const dropName = gameActive && !descending ? combat.nearbyDrop() : null;
+    if (dropName) {
+      pickupEl.textContent = `[G] Pegar ${dropName}`;
+      pickupEl.style.opacity = "1";
+    } else {
+      pickupEl.style.opacity = "0";
+    }
+    const wpn = gameActive && !descending ? combat.weaponHud : null;
+    if (wpn) {
+      weaponEl.textContent = wpn;
+      weaponEl.style.display = "";
+    } else {
+      weaponEl.style.display = "none";
+    }
+    // Inscrição por proximidade: ao chegar perto do nicho, a pedra "se lê".
+    if (gameActive && !descending && currentRoom &&
+      Math.hypot(hero.position.x - currentRoom.inscriptionPos.x, hero.position.z - currentRoom.inscriptionPos.z) <= 3.0) {
+      inscriptionEl.textContent = INSCRIPTIONS[floorIndex] ?? "";
+      inscriptionEl.style.opacity = "1";
+    } else {
+      inscriptionEl.style.opacity = "0";
+    }
+    // Retículo de lock-on: projeta o alvo travado para a tela.
+    const lockPos = gameActive && !descending ? combat.getLockedPos() : null;
+    const lockCam = scene.activeCamera;
+    if (lockPos && lockCam) {
+      reticleWorld.set(lockPos.x, lockPos.y, lockPos.z);
+      const v = Vector3.Project(
+        reticleWorld,
+        Matrix.IdentityReadOnly,
+        scene.getTransformMatrix(),
+        lockCam.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight())
+      );
+      if (v.z > 0 && v.z < 1) {
+        reticleEl.style.left = `${v.x}px`;
+        reticleEl.style.top = `${v.y}px`;
+        reticleEl.style.display = "";
+      } else {
+        reticleEl.style.display = "none";
+      }
+    } else {
+      reticleEl.style.display = "none";
+    }
     const bf = combat.bossFraction;
     if (gameActive && !descending && bf >= 0) {
       bossWrap.style.opacity = "1";
@@ -921,7 +1184,10 @@ async function main(): Promise<void> {
       // Trilha por estado: combate (inimigos vivos) -> quente (Brasa acesa) -> frio (explorando).
       setMusicState(combat.enemiesAlive > 0 ? "combate" : passageOpen ? "quente" : "frio");
     }
-    if (gameActive) combatHud.update(hero.combat.healthFraction, hero.combat.staminaFraction, hero.combat.sparkFraction, dt / 1000);
+    if (gameActive) {
+      combatHud.update(hero.combat.healthFraction, hero.combat.staminaFraction, hero.combat.sparkCharges, hero.combat.sparkChargeMax, dt / 1000);
+      combatHud.setResonance(hero.combat.resonanceStreak, hero.combat.resonanceActive);
+    }
     if (gameActive) updateIgnite(dt / 1000); // canalização/virada de luz: todo frame
     if (acc > 250) {
       fpsEl.textContent = `${engine.getFps().toFixed(0)} fps`;
@@ -934,6 +1200,8 @@ async function main(): Promise<void> {
         roomCleared = true;
         fagulhas += CLEAR_BONUS; // recompensa por limpar a câmara
         updateFagulhaHud();
+        if (!DESCENT[floorIndex]?.boss) playStinger("limpa"); // alívio curto da câmara limpa
+
         // Confronto encenado: ao cair, o Guardião (a Primeira) sussurra a verdade (canon §0).
         if (DESCENT[floorIndex]?.boss) showStory("Vai. Acende a Brasa... e não a deixes sozinha, como eu fiquei.", 6500, false);
       }
@@ -941,9 +1209,16 @@ async function main(): Promise<void> {
       if (descentDone && !winShown) {
         winShown = true;
         setMusicState("quente"); // crossfade para o tema morno (reavivar)
+        playStinger("reavivar"); // a Brasa volta a arder (arpejo ascendente)
         currentRoom?.setBrazierLit(1); // a luz vira plena
         showStory("A Brasa voltou a arder. O frio recua.", 7000, true);
-        gameHud.notify("A Brasa foi reavivada", "Você alcançou o fundo do poço e devolveu a luz.");
+        const elapsed = (performance.now() - runStartedAt) / 1000; // tempo da descida (leaderboard)
+        // Após o texto de vitória, abre o painel com o tempo + o ranking local.
+        window.setTimeout(() => {
+          gameActive = false;
+          document.exitPointerLock();
+          showVictory(elapsed);
+        }, 3200);
       }
       gameHud.update({
         name: platform.profile.current().name,

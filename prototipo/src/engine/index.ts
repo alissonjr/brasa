@@ -6,6 +6,20 @@
  * importar SOMENTE deste barrel (@engine), nunca por caminho profundo.
  */
 export { createEngine } from "./rendering/createEngine";
+// Pipeline estilizado (toon/tinta + AO + finalização + edge-detect). Ver
+// docs/brasa/spec-estilo-visual-render.md. Genérico: o jogo decide cores/intensidades.
+export { toonifyHierarchy } from "./rendering/toon";
+export type { ToonOptions } from "./rendering/toon";
+export { addOutline, outlineHierarchy, clearOutline } from "./rendering/outline";
+export type { OutlineOptions } from "./rendering/outline";
+export { enableSsao } from "./rendering/ssao";
+export type { SsaoOptions, SsaoHandle } from "./rendering/ssao";
+export { addFinishingPass } from "./rendering/finishingPass";
+export type { FinishingOptions, FinishingHandle } from "./rendering/finishingPass";
+export { addSceneOutline } from "./rendering/sceneOutline";
+export type { SceneOutlineOptions, SceneOutlineHandle } from "./rendering/sceneOutline";
+export { Tweens, Easings } from "./core/tween";
+export type { Easing } from "./core/tween";
 export { enableHavokPhysics } from "./physics/physicsService";
 export { InputState, DEFAULT_BINDINGS, INPUT_ACTIONS } from "./input/inputState";
 export type { InputSource, CombatInputSource, InputAction, KeyBindings } from "./input/inputState";

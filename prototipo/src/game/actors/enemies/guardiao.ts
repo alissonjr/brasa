@@ -1,57 +1,91 @@
 import { Color3, MeshBuilder, StandardMaterial, TransformNode, Vector3 } from "@babylonjs/core";
 import type { AnimationGroup, AssetContainer, Mesh, Scene } from "@babylonjs/core";
-import { AttackState, StateMachine, Health, loadContainer, type AttackTiming, type Hurtbox } from "@engine";
+import { AttackState, StateMachine, Health, loadContainer, outlineHierarchy, type AttackTiming, type Hurtbox } from "@engine";
 import type { CombatTarget } from "../../combat/combatTarget";
+import type { ArenaControls } from "../../scenes/crypt/cryptRoom";
+import { tellSound } from "../../combat/combatSound";
 
 /**
- * CAMADA JOGO (Brasa). O GUARDIÃO: chefe do fundo do poço (spec-chefe-guardiao). Não é
- * "mais um esqueleto": tem vida alta, ARENA própria (andar guardião), barra de chefe no HUD
- * e TRÊS FASES espelhadas no tema da LUZ, por faixa de vida:
- *  - Fase 1 (fria, 100-66%): lento e MUITO legível. Marreta descendente + varredura.
- *  - Fase 2 (tiço, 66-33%): + Sopro de escuro (AoE telegrafado por anel no chão). Mais rápido.
- *  - Fase 3 (quente, 33-0%): agressivo, janelas menores, encadeia golpes.
- * Telegrafia por emissivo pulsante na antecipação (o brilho avisa antes do golpe).
- * Implementa CombatTarget (o herói o fere pelo mesmo pipeline). O CombatDirector o trata
- * num slot próprio (boss), conta sua vida como "inimigo vivo" e encena o desfecho ao matá-lo.
+ * CAMADA JOGO (Brasa). O GUARDIÃO: chefe único do fundo do poço (spec-chefe-guardiao). Não é
+ * "mais um esqueleto": tem vida alta, ARENA própria (andar guardião), barra de chefe no HUD e
+ * a GANGORRA DE LUZ como coração do encontro. Dois medidores que o jogador lê:
+ *  - VIDA do Guardião (barra de chefe): cai com os golpes.
+ *  - LUZ da Brasa (brasaLight 0..1, lida no MUNDO): começa MORRENDO (baixa). O herói a ergue
+ *    reacendendo (Golpe de Fogo OU canalizar a Brasa central); o Guardião a apaga (sopro #4) e
+ *    ela esfria sozinha com o tempo.
+ *
+ * A GANGORRA (spec §4.1): quanto mais a Brasa APAGA, mais forte/rápido/escuro o Guardião (tells
+ * mais curtos, anda mais, encadeia mais); quanto mais ARDE, mais ele RECUA e EXPÕE a silhueta
+ * (tells longos, janelas longas). Chegar a "forte" OFUSCA o Guardião: CAMBALEIO DE LUZ (parado,
+ * exposto, dano dobrado), do qual ele tenta sair com o sopro de escuro (§5.5).
+ *
+ * TRÊS FASES por faixa de vida + luz (spec §5.4), lidas por luz/silhueta/cor:
+ *  - Fase 1 "a guardiã que aguarda" (100-66%): lenta, MUITO legível. Só #1 marreta + #2 sweep.
+ *  - Fase 2 "o dever que consome" (66-33%): + #3 gancho (puxa/quebra guarda), #4 sopro (AoE,
+ *    apaga a Brasa, inquebrável), #5 combo (2-3 cortes). Mais rápida; o breu cresce.
+ *  - Fase 3 "o escuro que reclama" (33-0%): tells ~15% mais curtos, encadeia mais; HAZARDS de
+ *    chão (maré de breu + frio que morde, §5.6); luta para manter a Brasa apagada.
+ *
+ * Implementa CombatTarget (o herói o fere pelo mesmo pipeline). O CombatDirector o trata num
+ * slot próprio (boss) e o credita ao morrer. A ARENA (cryptRoom) reage à luz e telegrafa os
+ * hazards via `bindArena`; o chefe é a fonte de verdade dos medidores.
  */
-type Mode = "approach" | "attacking" | "cooldown" | "dead";
-type AttackKind = "overhead" | "sweep" | "aoe";
+type Mode = "approach" | "attacking" | "cooldown" | "exposto" | "dead";
+type AttackKind = "overhead" | "sweep" | "pull" | "aoe" | "combo";
 
 interface BossAttack {
   kind: AttackKind;
   timing: AttackTiming;
   damage: number;
-  range: number; // alcance (overhead/sweep) ou raio (aoe)
+  range: number; // alcance (melee) ou raio (aoe)
   arcCos: number; // cos do meio-ângulo do cone frontal (aoe ignora)
   knockback: number;
+  hits?: number; // nº de acertos da janela ativa (combo encadeia 2-3)
+  guardBreak?: boolean; // ignora a guarda frontal (overhead, pull)
 }
 
 const MODEL = "/models/quaternius_monsters/mushroomking.glb";
 const HEIGHT = 3.2;
-const MAX_HP = 600;
-const MOVE_BASE = 1.7;
+const MAX_HP = 340; // spec §2: vida medida em SEGUNDOS (~75-110 s), não esponja
+const MOVE_BASE = 1.6; // lento, pesado, solene (não corre); o escuro o acelera
 const FACE_OFFSET = Math.PI; // Quaternius olha -Z
 
-// Tintas emissivas por fase (fria -> tiço -> quente). spec-vfx-e-shaders.
-const PHASE_TINT = [Color3.FromHexString("#2a6a78"), Color3.FromHexString("#6a2a1c"), Color3.FromHexString("#b5431c")];
+// Limiares da LUZ da Brasa (3 estágios, §4): quase morta / bruxulejando / forte.
+const LIGHT_FORTE = 0.8; // >= forte: OFUSCA o Guardião (cambaleio de luz, §5.5)
+const LIGHT_STEP = 0.34; // um estágio (reacender sobe; sopro de escuro desce)
+const LIGHT_DECAY = 0.018; // /s: a Brasa esfria sozinha (manter acesa é trabalho contínuo, §4.2)
 
-// Movesets por fase (timings em segundos; antecipação LONGA e legível, maior que a dos comuns).
+// Tintas emissivas por fase (fria -> tiço -> quente). spec-vfx-e-shaders / direcao-de-arte §5.
+const PHASE_TINT = [Color3.FromHexString("#2a6a78"), Color3.FromHexString("#6a2a1c"), Color3.FromHexString("#b5431c")];
+const EYE_COLD = new Color3(0.37, 0.72, 0.79); // olhos/runas ciano-espectrais no escuro (#5FB7C9)
+const STAGGER_FLASH = new Color3(0.7, 0.85, 1.0); // flash frio de "cega" no cambaleio
+
+// Movesets por fase (timings em segundos; antecipação LONGA e legível, §5.1/§5.3). Fase 3
+// encurta ~15% (aplicado no startAttack). Os danos seguem a tabela §5.3.
 function attacksFor(phase: number): BossAttack[] {
   const overhead: BossAttack = {
-    kind: "overhead", timing: { startup: phase >= 3 ? 0.55 : 0.8, active: 0.16, recovery: phase >= 3 ? 0.55 : 0.8 },
-    damage: 26, range: 3.6, arcCos: 0.4, knockback: 5,
+    kind: "overhead", timing: { startup: 1.0, active: 0.2, recovery: 0.9 },
+    damage: 28, range: 3.6, arcCos: 0.4, knockback: 5, guardBreak: true, // #1: força esquiva
   };
   const sweep: BossAttack = {
-    kind: "sweep", timing: { startup: phase >= 3 ? 0.5 : 0.7, active: 0.18, recovery: 0.7 },
-    damage: 22, range: 3.8, arcCos: -0.2, knockback: 6, // arco largo (~230°)
+    kind: "sweep", timing: { startup: 0.6, active: 0.25, recovery: 0.6 },
+    damage: 17, range: 3.8, arcCos: -0.2, knockback: 6, // #2: arco largo (~230°), drena guarda
+  };
+  const pull: BossAttack = {
+    kind: "pull", timing: { startup: 0.5, active: 0.16, recovery: 0.7 },
+    damage: 12, range: 4.2, arcCos: 0.5, knockback: -4, guardBreak: true, // #3: gancho (puxa, abre guarda)
   };
   const aoe: BossAttack = {
-    kind: "aoe", timing: { startup: 1.0, active: 0.2, recovery: 0.9 },
-    damage: 30, range: 5.2, arcCos: -1, knockback: 8, // raio total
+    kind: "aoe", timing: { startup: 0.9, active: 0.2, recovery: 1.0 },
+    damage: 10, range: 5.2, arcCos: -1, knockback: 8, // #4: sopro de escuro (raio total, apaga a Brasa)
   };
-  if (phase <= 1) return [overhead, sweep];
-  if (phase === 2) return [overhead, sweep, aoe];
-  return [overhead, sweep, aoe, overhead]; // fase 3: mais ataque
+  const combo: BossAttack = {
+    kind: "combo", timing: { startup: 0.6, active: 0.5, recovery: 0.7 },
+    damage: 14, range: 3.6, arcCos: 0.2, knockback: 4, hits: phase >= 3 ? 3 : 2, // #5: 2-3 cortes
+  };
+  if (phase <= 1) return [overhead, sweep]; // ensina a gangorra com só dois golpes
+  if (phase === 2) return [overhead, sweep, pull, aoe, combo];
+  return [overhead, sweep, pull, aoe, combo, overhead, combo]; // fase 3: encadeia mais
 }
 
 let cache: Promise<AssetContainer> | null = null;
@@ -73,21 +107,38 @@ export class Guardiao implements CombatTarget {
   private readonly attackDir = new Vector3(0, 0, 1);
   private readonly center_ = new Vector3();
   private hitHeroThisSwing = false;
+  private comboHitsLeft = 0; // acertos restantes do combo (cada ciclo ativo dá 1)
+  private comboNextHitT = 0; // contagem regressiva para o próximo corte do combo (dentro do ativo)
   private struck = false;
   private aoeRing: Mesh | null = null;
   private loaded = false;
   private disposed = false;
-  private cooldownSec = 0.8;
-  // W3: gangorra de luz. brasaLight 0..1 (começa MORRENDO = baixa). Quanto mais escuro, mais
-  // rápido/perigoso o Guardião. O Golpe de Fogo do herói REACENDE (sobe a luz e o CAMBALEIA);
-  // o Sopro de escuro APAGA. Cambaleio = parado, exposto, leva dano dobrado.
+  private cooldownSec = 0.9;
+  // Gangorra de luz. brasaLight 0..1 (começa MORRENDO = baixa). Reacender sobe; sopro/decaimento
+  // descem. Chegar a "forte" OFUSCA -> cambaleio de luz (staggerTimer). No cambaleio: dano dobrado.
   private brasaLight = 0.35;
   private staggerTimer = 0;
+  // Hazards (fase 3): ligados via arena. frostTimer espaça as zonas de gelo; mareOn rastreia
+  // a maré de breu para alternar (não empilhar com combo pesado, §5.6).
+  private arena: ArenaControls | null = null;
+  private frostTimer = 0;
+  private mareOn = false;
 
   constructor(scene: Scene, spawn: Vector3) {
     this.scene = scene;
     this.base = spawn.clone();
     void this.load(spawn);
+  }
+
+  /**
+   * Liga a arena do chefe (cryptRoom `room.arena`): o Guardião passa a DIRIGIR a leitura de
+   * luz no mundo (escurece/esquenta a câmara conforme a Brasa) e os hazards da fase 3. Chamado
+   * pelo coordenador logo após `combat.addBoss(...)`. Sem arena, o chefe funciona igual (só não
+   * há leitura de luz no cenário nem hazards de chão).
+   */
+  bindArena(arena: ArenaControls | null | undefined): void {
+    this.arena = arena ?? null;
+    this.arena?.setBrasaLight(this.brasaLight);
   }
 
   get reward(): number {
@@ -103,29 +154,65 @@ export class Guardiao implements CombatTarget {
   get currentPhase(): number {
     return this.phase;
   }
-  /** Luz da Brasa na arena (0..1); o HUD/iluminação podem ler para escurecer a cena. */
+  /** Luz da Brasa na arena (0..1); leitura de fase no mundo. 3 estágios: <0,33 quase morta,
+   *  <0,66 bruxulejando, >=0,8 forte. O HUD/cenário podem ler para escurecer a cena. */
   get brasaLightFraction(): number {
     return this.brasaLight;
   }
-  /** Está cambaleando (exposto após reacender): parado e vulnerável. */
+  /** Está cambaleando (CAMBALEIO DE LUZ / parry): parado, exposto, leva dano dobrado. */
   get staggered(): boolean {
     return this.staggerTimer > 0;
   }
 
+  /** O golpe em curso é INQUEBRÁVEL? O Sopro de escuro (AoE) ignora bloqueio e não se apara. */
+  get attackUnblockable(): boolean {
+    return this.sm.is("attacking") && this.cur?.kind === "aoe";
+  }
+
+  /** Cambaleia o chefe de fora (PARRY do herói em overhead/sweep): interrompe e o expõe (dano dobrado). */
+  stagger(seconds = 0.8): void {
+    if (!this.health.alive) return;
+    this.enterStagger(Math.max(this.staggerTimer, seconds));
+  }
+
   /**
-   * REACENDER (W3): o Golpe de Fogo do herói reacende a Brasa. Sobe a luz um estágio, faz o
-   * Guardião CAMBALEAR (parado ~0,8 s, dano dobrado) e o interrompe. Chamado pelo CombatDirector
-   * quando o ember atinge o chefe. Liga o recurso temático (Fagulha) à mecânica do chefe.
+   * REACENDER pelo Golpe de Fogo (ember): sobe a luz um estágio e CAMBALEIA o Guardião. Chamado
+   * pelo CombatDirector quando o ember atinge o chefe. Liga o recurso temático (Fagulha) à luta.
    */
   reignite(): void {
+    this.raiseBrasa(LIGHT_STEP);
+  }
+
+  /**
+   * REACENDER pela CANALIZAÇÃO da Brasa central (o verbo de luz, §4.2): o herói canaliza a
+   * fagulha na Brasa por ~1,2-1,6 s, parado e vulnerável, e sobe um estágio inteiro. Mais forte
+   * que o ember (recompensa a janela de risco). O coordenador chama ao COMPLETAR a canalização.
+   */
+  reigniteFromBrazier(): void {
+    this.raiseBrasa(LIGHT_STEP + 0.06);
+  }
+
+  /** Sobe a Brasa de luz (reacender) e dispara o cambaleio de luz se cruzar para "forte". */
+  private raiseBrasa(by: number): void {
     if (!this.health.alive) return;
-    this.brasaLight = Math.min(1, this.brasaLight + 0.34);
-    this.staggerTimer = 0.8;
+    const before = this.brasaLight;
+    this.brasaLight = Math.min(1, this.brasaLight + by);
+    // Borda de subida para "forte": OFUSCA -> cambaleio de luz (§5.5). Reacender abaixo do
+    // limiar não cambaleia sozinho, mas o ember sempre dá um tranco curto (leitura do acerto).
+    if (this.brasaLight >= LIGHT_FORTE && before < LIGHT_FORTE) this.enterStagger(0.9);
+    else this.enterStagger(Math.max(this.staggerTimer, 0.6));
+  }
+
+  /** Entra no modo exposto: parado, flash frio, interrompe o golpe; o tempo conta no update. */
+  private enterStagger(seconds: number): void {
+    this.staggerTimer = seconds;
+    this.attack.cancel();
+    this.cur = null;
+    this.comboHitsLeft = 0;
     if (this.aoeRing) this.aoeRing.setEnabled(false);
-    // flash frio-claro de ofuscação
-    for (const m of this.mats) m.emissiveColor.set(0.7, 0.85, 1.0);
+    for (const m of this.mats) m.emissiveColor.copyFrom(STAGGER_FLASH);
     this.setAnim(this.anims.hit, false);
-    this.sm.to("cooldown"); // interrompe o que estava fazendo
+    this.sm.to("exposto");
   }
 
   private async load(spawn: Vector3): Promise<void> {
@@ -157,6 +244,8 @@ export class Guardiao implements CombatTarget {
       const mat = m.material as StandardMaterial | null;
       if (mat && "emissiveColor" in mat && !this.mats.includes(mat)) this.mats.push(mat);
     }
+    // ESTILO (Bloco 1, §4.1b): contorno de tinta grosso (é o chefe; silhueta domina a leitura).
+    outlineHierarchy(model, { width: HEIGHT * 0.022 });
 
     const find = (re: RegExp): AnimationGroup | undefined => this.animGroups.find((g) => re.test(g.name));
     for (const g of this.animGroups) g.stop();
@@ -199,22 +288,25 @@ export class Guardiao implements CombatTarget {
   }
 
   private applyPhaseTint(telegraph: number): void {
-    // emissivo = tinta da fase * (base + telegrafia). telegraph 0..1 (sobe na antecipação).
+    // emissivo = tinta da fase * (base + telegrafia) + olhos ciano no breu. No escuro o ciano
+    // sobressai (silhueta espectral, §4.1); na luz a tinta quente da fase domina.
     const tint = PHASE_TINT[this.phase - 1]!;
     const k = 0.12 + 0.9 * telegraph;
-    for (const m of this.mats) m.emissiveColor.set(tint.r * k, tint.g * k, tint.b * k);
+    const cold = (1 - this.brasaLight) * 0.4; // olhos/runas ciano crescem no escuro
+    for (const m of this.mats)
+      m.emissiveColor.set(tint.r * k + EYE_COLD.r * cold, tint.g * k + EYE_COLD.g * cold, tint.b * k + EYE_COLD.b * cold);
   }
 
   get hurtbox(): Hurtbox {
     const p = this.rootNode?.position ?? this.base;
     this.center_.copyFrom(p);
-    this.center_.y += HEIGHT * 0.5;
-    return { center: this.center_, radius: 1.1 };
+    this.center_.y += HEIGHT * 0.34; // ~1.1: altura de golpe do herói (não lá no alto)
+    return { center: this.center_, radius: 1.7 }; // chefe grande: alvo generoso, golpe confiável
   }
 
   takeHit(damage: number, dir: Vector3, knockback: number): { guarded: boolean } {
     if (!this.health.alive || !this.rootNode) return { guarded: false };
-    const dmg = this.staggered ? damage * 2 : damage; // cambaleio: vulnerável (dano dobrado)
+    const dmg = this.staggered ? damage * 2 : damage; // cambaleio de luz: vulnerável (dano dobrado)
     const { died } = this.health.damage(dmg);
     // leve recuo (chefe é pesado: knockback reduzido)
     this.rootNode.position.x += dir.x * knockback * 0.05;
@@ -223,6 +315,7 @@ export class Guardiao implements CombatTarget {
       this.sm.to("dead");
       this.setAnim(this.anims.death, false);
       if (this.aoeRing) this.aoeRing.setEnabled(false);
+      this.arena?.setMareDeBreu(false);
     }
     return { guarded: false };
   }
@@ -230,15 +323,39 @@ export class Guardiao implements CombatTarget {
   /** Avança o chefe; retorna true no frame em que conecta um golpe no herói. */
   update(combatDt: number, heroPos: Vector3): boolean {
     if (!this.loaded || !this.rootNode || combatDt <= 0) return false;
-    // Fase por faixa de vida (100-66 / 66-33 / 33-0).
+    // Fase por faixa de vida (100-66 / 66-33 / 33-0). Vida NÃO sobe entre fases (§5.4).
     const f = this.health.fraction;
     const newPhase = f > 0.66 ? 1 : f > 0.33 ? 2 : 3;
     if (newPhase !== this.phase) this.phase = newPhase;
 
-    // Cambaleio (exposto): congela o Guardião, mantém o flash frio e conta o tempo.
+    // Decaimento da Brasa: esfria sozinha (mais rápido no quente/fase tardia). Manter acesa é
+    // trabalho contínuo (§4.2). No cambaleio o decaimento pausa (a luz "segura" o ofuscamento).
+    if (this.staggerTimer <= 0) {
+      const decay = LIGHT_DECAY * (1 + 0.5 * (this.phase - 1));
+      this.brasaLight = Math.max(0, this.brasaLight - decay * combatDt);
+    }
+
+    // Gangorra de luz refletida no MUNDO: a arena escurece/esquenta com a Brasa; a maré de breu
+    // liga na fase 3; as zonas de gelo entram fora dos golpes pesados (não empilhar, §5.6).
+    if (this.arena) {
+      this.arena.setBrasaLight(this.brasaLight);
+      const wantMare = this.phase >= 3 && this.health.alive;
+      if (wantMare !== this.mareOn) {
+        this.mareOn = wantMare;
+        this.arena.setMareDeBreu(wantMare);
+      }
+      this.updateFrost(combatDt, heroPos);
+    }
+
+    // CAMBALEIO DE LUZ / parry (exposto): congela o Guardião, mantém o flash frio, conta o tempo.
     if (this.staggerTimer > 0) {
       this.staggerTimer = Math.max(0, this.staggerTimer - combatDt);
-      if (this.staggerTimer === 0) this.applyPhaseTint(0); // volta ao emissivo da fase
+      if (this.staggerTimer === 0) {
+        this.applyPhaseTint(0); // volta ao emissivo da fase
+        // Sai do cambaleio para a recuperação: o jogador ainda tem a janela; o chefe então
+        // volta a rondar e (na fase do sopro) tende a usá-lo para reapagar a Brasa (§5.5).
+        this.sm.to("cooldown");
+      }
       return false;
     }
 
@@ -262,7 +379,22 @@ export class Guardiao implements CombatTarget {
         const g = inStartup ? this.attack.phaseProgress : 1;
         this.aoeRing.scaling.setAll(this.cur.range * g);
       }
+      const wasActive = this.attack.isActive;
       this.attack.advance(combatDt);
+      // Combo (§5.3 #5): uma única janela ativa longa que conta como vários cortes. Reabrimos a
+      // chance de acerto em intervalos iguais dentro da janela ativa (1 por corte). Os demais
+      // golpes acertam uma vez só. justActive reinicia a contagem ao entrar em ativo.
+      if (this.attack.isActive && !wasActive) {
+        this.hitHeroThisSwing = false;
+        this.comboNextHitT = 0;
+      }
+      if (this.cur.kind === "combo" && this.attack.isActive) {
+        this.comboNextHitT -= combatDt;
+        if (this.comboNextHitT <= 0 && this.comboHitsLeft > 0) {
+          this.hitHeroThisSwing = false; // libera o próximo corte
+          this.comboNextHitT = this.cur.timing.active / Math.max(1, this.cur.hits ?? 1);
+        }
+      }
       if (this.attack.isActive && !this.hitHeroThisSwing) {
         let hit = false;
         if (this.cur.kind === "aoe") hit = dist <= this.cur.range;
@@ -270,35 +402,61 @@ export class Guardiao implements CombatTarget {
         if (hit) {
           this.struck = true;
           this.hitHeroThisSwing = true;
+          if (this.cur.kind === "combo") this.comboHitsLeft = Math.max(0, this.comboHitsLeft - 1);
         }
       }
       if (wasBusy && !this.attack.isBusy) {
         if (this.aoeRing) this.aoeRing.setEnabled(false);
-        // Sopro de escuro consumado: APAGA a Brasa um estágio (gangorra).
-        if (this.cur.kind === "aoe") this.brasaLight = Math.max(0, this.brasaLight - 0.34);
+        // Sopro de escuro consumado: APAGA a Brasa um estágio (gangorra). Pune a canalização.
+        if (this.cur.kind === "aoe") this.brasaLight = Math.max(0, this.brasaLight - LIGHT_STEP);
         this.applyPhaseTint(0);
+        this.comboHitsLeft = 0;
         this.sm.to("cooldown");
         this.setAnim(this.anims.idle, true);
       }
     } else if (this.sm.is("cooldown")) {
       root.rotation.y = Math.atan2(dx, dz) + FACE_OFFSET;
-      // janela de punição: encurta com a fase (mais agressivo no quente)
-      this.cooldownSec = this.phase >= 3 ? 0.5 : this.phase === 2 ? 0.7 : 0.9;
+      // Janela de punição: encurta com a fase E com o escuro (a luz alonga = mais segura, §5.1).
+      const base = this.phase >= 3 ? 0.55 : this.phase === 2 ? 0.72 : 0.9;
+      this.cooldownSec = base * (0.8 + 0.4 * this.brasaLight);
       if (this.sm.time >= this.cooldownSec) this.sm.to("approach");
     } else {
       // approach: encara e fecha distância; ao chegar perto, escolhe um golpe da fase.
       root.rotation.y = Math.atan2(dx, dz) + FACE_OFFSET;
       const reach = 3.2;
       if (dist > reach) {
-        const step = MOVE_BASE * (this.phase >= 3 ? 1.3 : 1) * combatDt;
+        // Velocidade: lento na luz (recua/expõe), mais rápido no escuro (perigoso, §4.1).
+        const darkBoost = 1 + 0.55 * (1 - this.brasaLight);
+        const step = MOVE_BASE * darkBoost * (this.phase >= 3 ? 1.2 : 1) * combatDt;
         root.position.x += (dx / dist) * step;
         root.position.z += (dz / dist) * step;
+        this.applyPhaseTint(0); // mantém olhos ciano enquanto anda
         this.setAnim(this.anims.walk, true);
       } else {
         this.startAttack(dx / dist, dz / dist);
       }
     }
     return this.struck;
+  }
+
+  /** Hazard de frio (§5.6, fase 3): planta zonas de gelo telegrafadas e pune quem fica parado. */
+  private updateFrost(combatDt: number, heroPos: Vector3): void {
+    if (!this.arena || this.phase < 3 || !this.health.alive) return;
+    // Não empilhar hazard + combo pesado (§5.6): só semeia zona fora de um golpe pesado.
+    const heavyNow = this.sm.is("attacking") && (this.cur?.kind === "aoe" || this.cur?.kind === "combo" || this.cur?.kind === "overhead");
+    this.frostTimer -= combatDt;
+    if (this.frostTimer <= 0 && !heavyNow) {
+      this.frostTimer = 3.2; // espaçamento entre zonas (legível, não spam)
+      // Telegrafa uma zona perto do herói (o frio "morde" quem fica parado): offset aleatório.
+      const ox = Math.sin(performance.now() * 0.0013) * 2.4;
+      const oz = Math.cos(performance.now() * 0.0017) * 2.4;
+      this.arena.spawnFrostZone(heroPos.x + ox, heroPos.z + oz, 1.8, 0.6, 1.6);
+    }
+    // Punir quem está parado numa zona ATIVA: empurra a Brasa um pouco para baixo (o escuro
+    // reclama) e marca um acerto leve. O dano em si é resolvido pelo loop de struck do update.
+    if (this.arena.inActiveFrost(heroPos.x, heroPos.z)) {
+      this.brasaLight = Math.max(0, this.brasaLight - 0.02 * combatDt);
+    }
   }
 
   private startAttack(dirX: number, dirZ: number): void {
@@ -308,9 +466,11 @@ export class Guardiao implements CombatTarget {
     this.cur = pick;
     this.attackDir.set(dirX, 0, dirZ);
     this.hitHeroThisSwing = false;
+    this.comboHitsLeft = pick.hits ?? 0;
     // Gangorra de luz: quanto mais escuro (brasaLight baixa), mais CURTO o tell (perigoso).
-    // light=1 -> antecipação cheia (legível); light=0 -> ~70% (rápido). Soma-se à fase.
-    const tellMul = 0.7 + 0.3 * this.brasaLight;
+    // light=1 -> antecipação cheia (legível); light=0 -> ~70% (rápido). Soma-se à fase: a fase 3
+    // encurta mais ~15% (§5.4).
+    const tellMul = (0.7 + 0.3 * this.brasaLight) * (this.phase >= 3 ? 0.85 : 1);
     const timing: AttackTiming = {
       startup: pick.timing.startup * tellMul,
       active: pick.timing.active,
@@ -319,10 +479,15 @@ export class Guardiao implements CombatTarget {
     this.attack.start(timing);
     this.sm.to("attacking");
     this.setAnim(this.anims.attack, false);
+    // Assinatura sonora por golpe (audível no breu, §6/§7): sopro = inquebrável (grave de
+    // perigo); gancho = agudo curto; combo = pesado; overhead/sweep = grave dissonante do chefe.
+    tellSound(pick.kind === "aoe" ? "unblock" : pick.kind === "pull" ? "swift" : pick.kind === "combo" ? "heavy" : "boss");
   }
 
   dispose(): void {
     this.disposed = true;
+    this.arena?.setMareDeBreu(false);
+    this.arena = null;
     for (const g of this.animGroups) g.dispose();
     this.animGroups = [];
     this.aoeRing?.dispose();

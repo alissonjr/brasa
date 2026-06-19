@@ -24,6 +24,9 @@ const WINDUP = -1.2;
 const STRIKE = 1.3;
 const GUARD = -0.2; // pose de bloqueio (lâmina/escudo erguido à frente)
 const PARRY_WINDOW_SEC = 0.18; // janela de deflect ao iniciar o bloqueio (ref. Sekiro ~200ms)
+const BLOCK_DRAIN_PER_SEC = 12; // stamina escorre enquanto a guarda fica erguida (Tier 3)
+const BLOCK_CHIP_FRAC = 0.5; // aparar um golpe custa esta fração do dano em STAMINA (chip)
+const GUARD_BREAK_SEC = 0.5; // cambaleio do herói ao esvaziar a stamina bloqueando
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
@@ -52,13 +55,16 @@ export class HeroCombat {
   // Stamina.
   private stamina: number = HERO.maxStamina;
   private regenDelay = 0;
+  private guardBreakTimer = 0; // > 0: herói cambaleando (guard break), não age e fica vulnerável
 
-  // Fagulha (recurso de fogo) + estado do golpe de fogo (ember).
-  private spark: number = HERO.spark.max;
+  // Fagulha (recurso de fogo) em CARGAS (0..charges, fracionario durante a regeneracao) +
+  // estado do golpe de fogo (ember). 1 carga por Golpe de Fogo (W6).
+  private spark: number = HERO.spark.charges;
   private emberConsumed = false;
 
   // Esquiva. Objeto mutável (os eixos mudam por esquiva); InputSource tem eixos readonly.
   private dodgeElapsed = 0;
+  private perfectConsumed_ = false; // já recompensou a esquiva perfeita neste rolamento?
   private readonly dodgeMove = { forward: 0, strafe: 0, running: true, consumeJump: () => false };
 
   // Dano recebido escalado pela dificuldade (criação de personagem); 1 = Normal.
@@ -125,9 +131,19 @@ export class HeroCombat {
     return this.busy && this.attack.current === "startup";
   }
 
-  /** Fração da Fagulha (0..1) para o HUD. */
+  /** Fração da Fagulha (0..1) para a luz/efeitos. */
   get sparkFraction(): number {
-    return this.spark / HERO.spark.max;
+    return this.spark / HERO.spark.charges;
+  }
+
+  /** Cargas de Fagulha atuais (float 0..charges; o HUD usa o piso para os pips cheios). */
+  get sparkCharges(): number {
+    return this.spark;
+  }
+
+  /** Número máximo de cargas de Fagulha (pips no HUD). */
+  get sparkChargeMax(): number {
+    return HERO.spark.charges;
   }
 
   /** Janela ativa do golpe de fogo: o CombatDirector resolve a área UMA vez. */
@@ -145,7 +161,18 @@ export class HeroCombat {
 
   /** Recarrega a Fagulha (ao entrar numa sala / acender o braseiro). */
   refillSpark(): void {
-    this.spark = HERO.spark.max;
+    this.spark = HERO.spark.charges;
+  }
+
+  /** Recompensa do PARRY de melee: devolve stamina e libera a regeneração (aparar mantém a ofensiva). */
+  rewardParry(): void {
+    this.stamina = Math.min(this.maxStamina_, this.stamina + 30);
+    this.regenDelay = 0;
+  }
+
+  /** Ganha cargas de Fagulha (ao matar um morto desperto): mantem o fogo "vivo" na turba. */
+  gainSparkCharge(n = 1): void {
+    this.spark = Math.min(HERO.spark.charges, this.spark + n);
   }
 
   /** Cura uma fração da vida máxima (respiro ao acender o braseiro). */
@@ -183,6 +210,18 @@ export class HeroCombat {
 
   get isBlocking(): boolean {
     return this.blocking;
+  }
+
+  /**
+   * ESQUIVA PERFEITA: um golpe anulado pelos i-frames na JANELA INICIAL do rolamento (você
+   * esquivou no último instante) recompensa uma vez. Consome o crédito (uma por rolamento).
+   */
+  consumePerfectDodge(): boolean {
+    const start = HERO.dodge.iframeStartSec;
+    const inWindow = this.state === "dodging" && this.dodgeElapsed >= start && this.dodgeElapsed <= start + 0.12;
+    if (!inWindow || this.perfectConsumed_) return false;
+    this.perfectConsumed_ = true;
+    return true;
   }
 
   /** Janela de parry ativa (bloqueio recém-iniciado): bloqueio frontal DEVOLVE o projétil. */
@@ -229,6 +268,14 @@ export class HeroCombat {
   /** Pode beber poção agora? (fora de golpe/conjuração; idle ou aproximação). */
   get canDrink(): boolean {
     return this.state === "idle";
+  }
+  /** Ressonância: a dádiva está ativa? (para o HUD mostrar o streak). */
+  get resonanceActive(): boolean {
+    return this.resonanceOn_;
+  }
+  /** Ressonância: acertos encadeados sem apanhar (0..5; zera ao apanhar). */
+  get resonanceStreak(): number {
+    return this.hitStreak_;
   }
   /** Elixir de Fúria: soma um multiplicador de dano por uma duração. */
   applyDamageBuff(mul: number, seconds: number): void {
@@ -311,14 +358,38 @@ export class HeroCombat {
    * Recebe dano (inimigos, M2.3). i-frames da esquiva anulam (applied=false); bloqueio
    * reduz. `applied` diz se a vida foi tocada (para vinheta/shake/som de dano).
    */
-  takeDamage(amount: number): { applied: boolean; died: boolean } {
-    if (this.invulnerable || amount <= 0) return { applied: false, died: false };
-    const blockMul = this.blocking ? 0.25 : 1; // bloqueio reduz dano frontal (parry exato fica p/ depois)
+  takeDamage(amount: number, unblockable = false): { applied: boolean; died: boolean; guardBroken: boolean } {
+    if (this.invulnerable || amount <= 0) return { applied: false, died: false, guardBroken: false };
+    // Bloqueio efetivo? Inquebrável ignora a guarda. Aparar custa STAMINA (chip); sem stamina,
+    // GUARD BREAK: o golpe passa cheio e o herói cambaleia (Tier 3).
+    let blocking = this.blocking && !unblockable;
+    let guardBroken = false;
+    if (blocking) {
+      const chip = amount * BLOCK_CHIP_FRAC;
+      if (this.stamina >= chip) {
+        this.stamina -= chip;
+        this.regenDelay = HERO.staminaRegenDelaySec;
+      } else {
+        this.stamina = 0;
+        this.beginGuardBreak();
+        blocking = false; // guarda quebrou: dano cheio
+        guardBroken = true;
+      }
+    }
+    const blockMul = blocking ? 0.25 : 1;
     let dmg = amount * this.damageTakenMul * blockMul;
     if (this.damageCap_ > 0 && dmg > this.damageCap_) dmg = this.damageCap_; // Revestimento
     this.hitStreak_ = 0; // apanhar zera a Ressonância
     const { died } = this.health.damage(dmg);
-    return { applied: true, died };
+    return { applied: true, died, guardBroken };
+  }
+
+  /** GUARD BREAK: stamina zerou bloqueando. O herói cambaleia (não age) por um instante. */
+  private beginGuardBreak(): void {
+    this.guardBreakTimer = GUARD_BREAK_SEC;
+    this.blocking = false;
+    this.comboStep = 0;
+    this.state = "idle";
   }
 
   /** Revive o herói com vida cheia (M2.3 graybox: respawn após morrer, sem GameOver ainda). */
@@ -327,6 +398,7 @@ export class HeroCombat {
     this.state = "idle";
     this.stamina = this.maxStamina_;
     this.hitStreak_ = 0;
+    this.guardBreakTimer = 0;
   }
 
   /** Zera todos os upgrades/dádivas (jogo novo): volta o herói ao estado-base. */
@@ -356,6 +428,16 @@ export class HeroCombat {
     this.regenSpark(deltaSeconds);
     if (this.buffTimer > 0) this.buffTimer = Math.max(0, this.buffTimer - deltaSeconds);
 
+    // GUARD BREAK (Tier 3): a guarda quebrou (stamina zerou bloqueando). O herói cambaleia:
+    // não aceita inputs de combate por um instante (pode andar). A guarda fica caída.
+    if (this.guardBreakTimer > 0) {
+      this.guardBreakTimer = Math.max(0, this.guardBreakTimer - deltaSeconds);
+      this.blocking = false;
+      this.state = "idle";
+      this.poseWeapon();
+      return;
+    }
+
     // Janela de PARRY: ao INICIAR o bloqueio, abre ~0,18 s em que o bloqueio frontal DEVOLVE
     // o projétil (deflect), em vez de só pará-lo. Spam de bloqueio não renova (precisa soltar).
     const blockingNow = input.isHeld("block");
@@ -384,6 +466,12 @@ export class HeroCombat {
     this.idleTime += dt;
     if (this.idleTime > HERO.comboResetSec) this.comboStep = 0;
     this.blocking = input.isHeld("block");
+    // Tier 3: segurar a guarda DRENA stamina; ao esvaziar, GUARD BREAK (cambaleia).
+    if (this.blocking) {
+      this.stamina -= BLOCK_DRAIN_PER_SEC * dt;
+      this.regenDelay = HERO.staminaRegenDelaySec;
+      if (this.stamina <= 0) this.beginGuardBreak();
+    }
 
     if (input.consumePressed("dodge") && this.spend(HERO.dodge.staminaCost)) {
       this.startDodge(input);
@@ -453,8 +541,8 @@ export class HeroCombat {
   }
 
   private regenSpark(dt: number): void {
-    if (this.spark < HERO.spark.max) {
-      this.spark = Math.min(HERO.spark.max, this.spark + HERO.spark.regenPerSec * this.sparkRegenMul_ * dt);
+    if (this.spark < HERO.spark.charges) {
+      this.spark = Math.min(HERO.spark.charges, this.spark + HERO.spark.regenPerSec * this.sparkRegenMul_ * dt);
     }
   }
 
@@ -475,6 +563,7 @@ export class HeroCombat {
     this.dodgeMove.forward = f;
     this.dodgeMove.strafe = s;
     this.dodgeElapsed = 0;
+    this.perfectConsumed_ = false; // novo rolamento: rearma a esquiva perfeita
     this.blocking = false;
     this.comboStep = 0;
     this.state = "dodging";

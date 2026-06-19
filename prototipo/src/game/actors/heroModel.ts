@@ -1,7 +1,7 @@
 import { ImportMeshAsync, TransformNode } from "@babylonjs/core";
 import type { AnimationGroup, Scene } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF"; // registra o loader glTF
-import { assetUrl, type CharacterVisual } from "@engine";
+import { assetUrl, outlineHierarchy, type CharacterVisual } from "@engine";
 
 /**
  * CAMADA JOGO (Brasa). Modelo visual do herói: um KayKit Adventurer (CC0) rigado, com
@@ -85,6 +85,9 @@ export class HeroModel implements CharacterVisual {
     fit.scaling.setAll(scale);
     fit.position.set(-cx * scale, -CAPSULE_HALF - min.y * scale, -cz * scale);
     top.parent = fit;
+
+    // ESTILO (Bloco 1, spec-estilo-visual-render §4.1b): contorno de tinta na heroína.
+    outlineHierarchy(this.root, { width: 0.03 });
 
     this.setupAnimations(result.animationGroups);
     this.loaded = true;

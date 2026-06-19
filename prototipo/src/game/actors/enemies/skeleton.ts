@@ -1,9 +1,10 @@
 import { Color3, TransformNode, Vector3 } from "@babylonjs/core";
 import type { AbstractMesh, AnimationGroup, AssetContainer, Scene, StandardMaterial } from "@babylonjs/core";
-import { AttackState, StateMachine, Ticker, Health, loadContainer, type Hurtbox } from "@engine";
+import { AttackState, StateMachine, Ticker, Health, loadContainer, outlineHierarchy, type Hurtbox } from "@engine";
 import type { CombatTarget } from "../../combat/combatTarget";
 import { type AttackTuning } from "../../combat/tuning";
 import { HealthBar3D } from "../../combat/healthBar3d";
+import { tellSound, type TellProfile } from "../../combat/combatSound";
 
 /**
  * CAMADA JOGO (Brasa). Inimigo desperto (bestiario docs/brasa/biblia-bestiario.md). Dois
@@ -19,7 +20,7 @@ type Mode = "approach" | "attacking" | "cooldown" | "dead";
 
 export type SkeletonKind =
   | "minion" | "warrior" | "rogue" | "heavy" | "antigo" | "sentinela"
-  | "demonio" | "brutamonte" | "espreitador" | "conjurador";
+  | "demonio" | "brutamonte" | "espreitador" | "conjurador" | "arqueiro";
 
 /** Como o inimigo se comporta na FSM (ver cabecalho). default: melee. */
 type Behavior = "melee" | "skirmisher" | "ranged";
@@ -31,6 +32,14 @@ export interface ShotSpec {
   speed: number;
   damage: number;
 }
+
+/**
+ * Retangulo de chao em que o inimigo PODE andar. Sem isto, um inimigo ranged recua para longe
+ * do heroi (movendo `position` direto, sem colisao) e acaba DENTRO/ATRAS do estrado do altar -
+ * que tem colisao e BARRA o heroi - ficando imatavel. A sala passa estes limites (paredes
+ * insetadas + frente do altar) para manter todo inimigo em terreno que o heroi alcanca.
+ */
+export interface EnemyBounds { minX: number; maxX: number; minZ: number; maxZ: number; }
 
 interface SkelStats {
   model: string;
@@ -47,35 +56,38 @@ interface SkelStats {
   behavior?: Behavior; // default melee
   projectileSpeed?: number; // ranged: m/s do projetil
   faceOffset?: number; // correcao de orientacao do modelo (Quaternius vs KayKit), radianos
+  tellProfile?: TellProfile; // assinatura SONORA do tell (default basic)
+  poise: number; // postura: o golpe do heroi drena; ao zerar, CAMBALEIA (interrompe a antecipacao)
+  canUnblockable?: boolean; // pode telegrafar um golpe INQUEBRAVEL (ignora bloqueio; forca esquiva)
 }
 
 const STATS: Record<SkeletonKind, SkelStats> = {
   minion: {
     model: "/models/Skeleton_Minion.glb", height: 1.55, hp: 30, moveSpeed: 3.2, attackRange: 2.0, approachUntil: 1.8, cooldownSec: 0.35,
-    overhead: { startup: 0.35, active: 0.1, recovery: 0.45, damage: 8, knockback: 0, hitStopFrames: 4 }, damage: 8, guards: false, reward: 3,
+    overhead: { startup: 0.35, active: 0.1, recovery: 0.45, damage: 8, knockback: 0, hitStopFrames: 4 }, damage: 8, guards: false, reward: 3, poise: 12,
   },
   warrior: {
     model: "/models/Skeleton_Warrior.glb", height: 1.85, hp: 60, moveSpeed: 2.4, attackRange: 2.2, approachUntil: 2.0, cooldownSec: 0.5,
-    overhead: { startup: 0.6, active: 0.12, recovery: 0.75, damage: 16, knockback: 0, hitStopFrames: 6 }, damage: 16, guards: false, reward: 4,
+    overhead: { startup: 0.6, active: 0.12, recovery: 0.75, damage: 16, knockback: 0, hitStopFrames: 6 }, damage: 16, guards: false, reward: 4, poise: 25,
   },
   rogue: {
     model: "/models/Skeleton_Rogue.glb", height: 1.78, hp: 42, moveSpeed: 3.7, attackRange: 2.0, approachUntil: 1.8, cooldownSec: 0.3,
-    overhead: { startup: 0.32, active: 0.08, recovery: 0.42, damage: 11, knockback: 1, hitStopFrames: 5 }, damage: 11, guards: false, reward: 4,
+    overhead: { startup: 0.32, active: 0.08, recovery: 0.42, damage: 11, knockback: 1, hitStopFrames: 5 }, damage: 11, guards: false, reward: 4, tellProfile: "swift", poise: 14,
   },
   heavy: {
     model: "/models/Skeleton_Warrior.glb", height: 2.45, hp: 130, moveSpeed: 1.5, attackRange: 2.7, approachUntil: 2.3, cooldownSec: 0.85,
-    overhead: { startup: 0.95, active: 0.15, recovery: 0.85, damage: 28, knockback: 3, hitStopFrames: 10 }, damage: 28, guards: true, reward: 8,
+    overhead: { startup: 0.95, active: 0.15, recovery: 0.85, damage: 28, knockback: 3, hitStopFrames: 10 }, damage: 28, guards: true, reward: 8, tellProfile: "heavy", poise: 65, canUnblockable: true,
   },
   // Antigo: morto de profundidade, mais vida e golpe forte. Bestiário §3. (Repontado para
   // orc_skull do Quaternius: Skeleton_Mage.glb nunca existiu em disco e o tipo falhava ao carregar.)
   antigo: {
     model: "/models/quaternius_monsters/orc_skull.glb", height: 2.0, hp: 95, moveSpeed: 2.2, attackRange: 2.4, approachUntil: 2.1, cooldownSec: 0.6,
-    overhead: { startup: 0.7, active: 0.13, recovery: 0.8, damage: 21, knockback: 2, hitStopFrames: 8 }, damage: 21, guards: false, reward: 9, faceOffset: Math.PI,
+    overhead: { startup: 0.7, active: 0.13, recovery: 0.8, damage: 21, knockback: 2, hitStopFrames: 8 }, damage: 21, guards: false, reward: 9, faceOffset: Math.PI, poise: 45,
   },
   // Sentinela: elite pré-chefe, enorme, tanque, bloqueia; drop alto. Bestiário §3.
   sentinela: {
     model: "/models/Skeleton_Warrior.glb", height: 2.7, hp: 200, moveSpeed: 1.7, attackRange: 2.9, approachUntil: 2.5, cooldownSec: 0.8,
-    overhead: { startup: 0.85, active: 0.15, recovery: 0.85, damage: 32, knockback: 4, hitStopFrames: 12 }, damage: 32, guards: true, reward: 20,
+    overhead: { startup: 0.85, active: 0.15, recovery: 0.85, damage: 32, knockback: 4, hitStopFrames: 12 }, damage: 32, guards: true, reward: 20, tellProfile: "heavy", poise: 95, canUnblockable: true,
   },
 
   // --- Monstros Quaternius (Ultimate Monsters, CC0): variedade de silhueta + COMPORTAMENTO ---
@@ -83,19 +95,19 @@ const STATS: Record<SkeletonKind, SkelStats> = {
   demonio: {
     model: "/models/quaternius_monsters/demon.glb", height: 1.95, hp: 70, moveSpeed: 3.0, attackRange: 2.1, approachUntil: 1.9, cooldownSec: 0.45,
     overhead: { startup: 0.4, active: 0.1, recovery: 0.5, damage: 16, knockback: 2, hitStopFrames: 6 }, damage: 16, guards: false, reward: 6,
-    behavior: "melee", faceOffset: Math.PI,
+    behavior: "melee", faceOffset: Math.PI, poise: 25,
   },
   // Brutamonte: tanque lento e ENORME, golpe pesado lento de ler, bloqueia leve frontal.
   brutamonte: {
     model: "/models/quaternius_monsters/yeti.glb", height: 2.5, hp: 150, moveSpeed: 1.6, attackRange: 2.8, approachUntil: 2.4, cooldownSec: 0.8,
     overhead: { startup: 0.9, active: 0.15, recovery: 0.8, damage: 30, knockback: 4, hitStopFrames: 11 }, damage: 30, guards: true, reward: 12,
-    behavior: "melee", faceOffset: Math.PI,
+    behavior: "melee", faceOffset: Math.PI, tellProfile: "heavy", poise: 75, canUnblockable: true,
   },
   // Espreitador: veloz, golpeia e RECUA (hit-and-run). Pune quem persegue cegamente.
   espreitador: {
     model: "/models/quaternius_monsters/ninja.glb", height: 1.8, hp: 40, moveSpeed: 4.2, attackRange: 2.0, approachUntil: 1.7, cooldownSec: 0.55,
     overhead: { startup: 0.28, active: 0.08, recovery: 0.35, damage: 12, knockback: 1, hitStopFrames: 5 }, damage: 12, guards: false, reward: 6,
-    behavior: "skirmisher", faceOffset: Math.PI,
+    behavior: "skirmisher", faceOffset: Math.PI, tellProfile: "swift", poise: 14,
   },
   // Conjurador: mantem distancia e DISPARA um projetil de fogo telegrafado. Forca fechar espaco.
   // Projetil JUSTO (design de bullet legivel): antecipacao longa (cast 0.95s), tiro LENTO
@@ -103,13 +115,36 @@ const STATS: Record<SkeletonKind, SkelStats> = {
   conjurador: {
     model: "/models/quaternius_monsters/mushroomking.glb", height: 2.1, hp: 70, moveSpeed: 1.8, attackRange: 11, approachUntil: 9, cooldownSec: 1.8,
     overhead: { startup: 0.95, active: 0.12, recovery: 0.7, damage: 14, knockback: 1, hitStopFrames: 6 }, damage: 14, guards: false, reward: 10,
-    behavior: "ranged", projectileSpeed: 6.5, faceOffset: Math.PI,
+    // O mushroomking (Quaternius) e o UNICO do pacote modelado virado para +Z (os demais -
+    // demon/yeti/ninja - viram para -Z e usam faceOffset Math.PI). Com Math.PI ele dava as
+    // costas ao heroi; faceOffset 0 o faz encarar. Verificado por render dos 4 modelos.
+    behavior: "ranged", projectileSpeed: 6.5, faceOffset: 0, tellProfile: "cast", poise: 18,
+  },
+  // Arqueiro: esqueleto ranged ágil. Reusa a máquina ranged (mira telegrafada ~0.9s +
+  // projétil lento esquivável do CombatDirector). Sem guarda, HP/poise baixos: força o
+  // jogador a fechar distância e usar a cobertura dos pilares (bíblia-bestiário 3.3).
+  arqueiro: {
+    model: "/models/Skeleton_Rogue.glb", height: 1.78, hp: 38, moveSpeed: 3.0, attackRange: 10, approachUntil: 8, cooldownSec: 1.5,
+    overhead: { startup: 0.9, active: 0.1, recovery: 0.6, damage: 12, knockback: 1, hitStopFrames: 5 }, damage: 12, guards: false, reward: 8,
+    behavior: "ranged", projectileSpeed: 8.5, faceOffset: Math.PI, tellProfile: "cast", poise: 14,
   },
 };
 
 const FLASH_SEC = 0.07;
 const RESPAWN_SEC = 2.2;
 const FLASH = Color3.FromHexString("#ffd2a0");
+const STAGGER_SEC = 0.6; // tempo parado/exposto ao ter a postura (poise) quebrada
+const STAGGER_DMG_MUL = 1.3; // cambaleado leva +30% de dano (recompensa da quebra)
+const UNBLOCKABLE_CHANCE = 0.4; // chance de a investida de um tipo pesado ser inquebravel
+// Coleira: distância máx. do ponto de spawn. Sem corpo físico, os que RECUAM (ranged/
+// skirmisher) atravessariam a parede e ficariam inalcançáveis -> a sala nunca "limparia"
+// (soft-lock que travava chegar ao altar). Mantém todo morto dentro da área jogável.
+const MAX_LEASH = 11;
+// EMERGÊNCIA: o morto NÃO surge do nada. Nasce enterrado (abaixo do piso) e SOBE rasgando o
+// chão enquanto toca a animação de despertar, dentro da janela de "despertar" do diretor
+// (wake ~0.9 s). Some o "pop-in" e ancora a chegada no mundo (eles vinham do solo).
+const EMERGE_SEC = 0.8;
+const RISE_DEPTH = 1.7; // quão fundo nasce enterrado (some sob o piso opaco)
 
 // Cache de container POR MODELO (cada tipo tem um glb; instancias clonam).
 const cache = new Map<string, Promise<AssetContainer>>();
@@ -146,14 +181,19 @@ export class Skeleton implements CombatTarget {
   private readonly knock = new Vector3();
   private readonly center_ = new Vector3();
   private hitHeroThisSwing = false;
+  private poise = 0; // postura atual; ao zerar, CAMBALEIA (interrompe a antecipacao)
+  private staggerTimer = 0; // > 0: parado e exposto (cambaleio)
+  private attackUnblockable_ = false; // o golpe em curso ignora bloqueio (telegrafado em vermelho)
   private shot: ShotSpec | null = null;
   private flash = 0;
   private squash = 0;
   private respawn = 0;
   private deadElapsed = 0; // tempo desde a morte (para a dissolução em morte permanente)
   private torsoY = 0.9;
+  private emergeTimer = 0; // > 0: subindo do chão (despertar); não age, não pode ser atingido ainda
   private loaded = false;
   private readonly respawns: boolean;
+  private bounds: EnemyBounds | null = null; // terreno andavel (mantem o inimigo alcancavel)
 
   private readonly kind_: SkeletonKind;
 
@@ -164,6 +204,7 @@ export class Skeleton implements CombatTarget {
     this.kind_ = opts?.kind ?? "warrior";
     this.stats = STATS[this.kind_];
     this.health = new Health(this.stats.hp);
+    this.poise = this.stats.poise;
     this.respawns = opts?.respawns ?? true;
     void this.load(spawn);
   }
@@ -178,6 +219,38 @@ export class Skeleton implements CombatTarget {
   /** Dano que este morto causa no heroi ao conectar o golpe (lido pelo CombatDirector). */
   get attackDamage(): number {
     return this.stats.damage;
+  }
+
+  /** Está cambaleando (postura quebrada): parado e exposto. */
+  get staggered(): boolean {
+    return this.staggerTimer > 0;
+  }
+
+  /** O golpe que está conectando agora é INQUEBRÁVEL? (ignora bloqueio; só esquiva salva). */
+  get attackUnblockable(): boolean {
+    return this.attackUnblockable_ && this.sm.is("attacking");
+  }
+
+  /** Cambaleia o inimigo de fora (usado pelo PARRY do herói): interrompe e o expõe. */
+  stagger(seconds = STAGGER_SEC): void {
+    if (this.health.alive && !this.sm.is("dead")) this.beginStagger(seconds);
+  }
+
+  /** Define o terreno andável (a sala chama ao spawnar): impede recuar para fora do alcance. */
+  setBounds(b: EnemyBounds): void {
+    this.bounds = b;
+    this.clampPos();
+  }
+
+  /** Prende a posição ao terreno andável (chamado após cada movimento/empurrão). */
+  private clampPos(): void {
+    const b = this.bounds;
+    const p = this.rootNode?.position;
+    if (!b || !p) return;
+    if (p.x < b.minX) p.x = b.minX;
+    else if (p.x > b.maxX) p.x = b.maxX;
+    if (p.z < b.minZ) p.z = b.minZ;
+    else if (p.z > b.maxZ) p.z = b.maxZ;
   }
 
   /** Fagulha (cinza quente) que este morto credita ao ser derrotado. */
@@ -226,6 +299,8 @@ export class Skeleton implements CombatTarget {
     const rootNode = new TransformNode("skeleton", this.scene);
     this.rootNode = rootNode;
     rootNode.position.copyFrom(spawn);
+    rootNode.position.y = spawn.y - RISE_DEPTH; // nasce enterrado: sobe rasgando o chão (emerge)
+    this.emergeTimer = EMERGE_SEC;
 
     model.parent = rootNode;
     model.rotationQuaternion = null;
@@ -250,6 +325,9 @@ export class Skeleton implements CombatTarget {
         this.matEmissive0.push(mat.emissiveColor?.clone?.() ?? Color3.Black());
       }
     }
+    // ESTILO (Bloco 1, spec-estilo-visual-render §4.1b): contorno de tinta. Escala com o porte
+    // (inimigos maiores, linha mais grossa). Acompanha o esqueleto (renderOutline nativo).
+    outlineHierarchy(model, { width: this.stats.height * 0.018 });
 
     const find = (re: RegExp): AnimationGroup | undefined => entries.animationGroups.find((g) => re.test(g.name));
     for (const g of entries.animationGroups) g.stop();
@@ -264,7 +342,31 @@ export class Skeleton implements CombatTarget {
 
     this.hpBar = new HealthBar3D(this.scene, rootNode, this.stats.height * 1.08);
     this.loaded = true;
-    this.setAnim(this.anims.idle, true);
+    // Despertar: toca a animação de levantar (se o modelo tiver) enquanto sobe; senão, idle.
+    this.setAnim(this.emergeTimer > 0 ? (this.anims.awaken ?? this.anims.idle) : this.anims.idle, this.anims.awaken ? false : true);
+  }
+
+  /**
+   * EMERGÊNCIA: avança a subida do chão (despertar). Roda durante a janela de "despertar" do
+   * diretor (enquanto a IA está suspensa) e também blinda o início do update. Sobe de
+   * -RISE_DEPTH até a cota do spawn com desaceleração; ao chegar, entra em idle e passa a agir.
+   */
+  emerge(dt: number): void {
+    if (this.emergeTimer <= 0 || !this.rootNode || dt <= 0) return;
+    this.hpBar?.update(dt);
+    this.emergeTimer = Math.max(0, this.emergeTimer - dt);
+    const t = 1 - this.emergeTimer / EMERGE_SEC; // 0..1
+    const eased = 1 - (1 - t) * (1 - t); // ease-out: rompe o chão e assenta
+    this.rootNode.position.y = this.base.y - RISE_DEPTH * (1 - eased);
+    if (this.emergeTimer <= 0) {
+      this.rootNode.position.y = this.base.y;
+      this.setAnim(this.anims.idle, true);
+    }
+  }
+
+  /** Ainda subindo do chão? (o diretor não testa acerto/IA contra quem está emergindo). */
+  get emerging(): boolean {
+    return this.emergeTimer > 0;
   }
 
   private setAnim(group: AnimationGroup | undefined, loop: boolean): void {
@@ -283,36 +385,83 @@ export class Skeleton implements CombatTarget {
   }
 
   /** O heroi o acerta. Tipos com escudo (heavy) amortecem o golpe LEVE frontal; pesado/flanco passam. */
-  takeHit(damage: number, dir: Vector3, knockback: number, guardBreak = false): { guarded: boolean } {
+  takeHit(damage: number, dir: Vector3, knockback: number, guardBreak = false, poiseDamage = 0, positionalBonus = false): { guarded: boolean } {
     if (!this.health.alive || !this.rootNode) return { guarded: false };
     const guarding = this.stats.guards && this.sm.is("approach");
     const fy = this.rootNode.rotation.y;
     const frontal = dir.x * Math.sin(fy) + dir.z * Math.cos(fy) < -0.3;
     const blocked = guarding && frontal && !guardBreak;
-    const dmg = blocked ? damage * 0.35 : damage;
+    let dmg = blocked ? damage * 0.35 : damage;
+    // FLANCO/BACKSTAB (Tier 3): lê a posição do herói vs. a orientação LÓGICA do inimigo (sem o
+    // offset do modelo). Pelas costas (x1.5 dano, +50% poise); pelo flanco (x1.2 dano).
+    let poiseMul = 1;
+    if (positionalBonus && !blocked) {
+      const lf = fy - (this.stats.faceOffset ?? 0);
+      const d = dir.x * Math.sin(lf) + dir.z * Math.cos(lf);
+      if (d > 0.4) { dmg *= 1.5; poiseMul = 1.5; } // costas
+      else if (d > -0.4) dmg *= 1.2; // flanco
+    }
+    if (this.staggered) dmg *= STAGGER_DMG_MUL; // cambaleado: leva mais dano (recompensa da quebra)
 
     const { died } = this.health.damage(dmg);
     this.flash = FLASH_SEC;
     this.squash = 1;
     this.knock.set(dir.x * knockback * (blocked ? 0.3 : 1), 0, dir.z * knockback * (blocked ? 0.3 : 1));
     this.hpBar?.set(this.health.fraction);
+    // POISE: golpes nao bloqueados drenam a postura; ao zerar, CAMBALEIA (interrompe o ataque).
+    if (!died && !blocked && poiseDamage > 0 && !this.staggered) {
+      this.poise -= poiseDamage * poiseMul;
+      if (this.poise <= 0) this.beginStagger(STAGGER_SEC);
+    }
     if (died) {
       this.respawn = this.respawns ? RESPAWN_SEC : -1;
       this.deadElapsed = 0;
+      this.staggerTimer = 0;
       this.sm.to("dead");
       this.setAnim(this.anims.death, false);
-    } else if (!blocked && this.sm.is("approach")) {
+    } else if (!blocked && !this.staggered && this.sm.is("approach")) {
       this.setAnim(this.anims.hit, false);
     }
     return { guarded: blocked };
   }
 
+  /** Quebra de postura: cancela o golpe em curso, reseta o poise e deixa o inimigo exposto. */
+  private beginStagger(seconds: number): void {
+    this.staggerTimer = seconds;
+    this.poise = this.stats.poise;
+    this.attack.cancel();
+    this.attackUnblockable_ = false;
+    this.hitHeroThisSwing = true; // garante que o golpe interrompido nao conecta
+    this.shot = null;
+    this.restoreEmissive();
+    this.sm.to("cooldown");
+    this.setAnim(this.anims.hit, false);
+  }
+
+  /** Volta o emissivo dos materiais à cor-base (após telegrafia de inquebrável / cambaleio). */
+  private restoreEmissive(): void {
+    for (let i = 0; i < this.mats.length; i++) this.mats[i]!.emissiveColor.copyFrom(this.matEmissive0[i]!);
+  }
+
   update(combatDt: number, heroPos: Vector3): boolean {
     if (!this.loaded || !this.rootNode) return false;
+    if (this.emergeTimer > 0) { this.emerge(combatDt); return false; } // ainda subindo do chão: não age
     this.hpBar?.update(combatDt);
     if (combatDt <= 0) return false;
 
     this.decayReactions(combatDt);
+    this.clampPos(); // empurrão do knockback não joga o inimigo para fora do alcance
+
+    // CAMBALEIO (poise quebrado): parado e exposto. Conta o tempo e não age.
+    if (this.staggerTimer > 0) {
+      this.staggerTimer = Math.max(0, this.staggerTimer - combatDt);
+      return false;
+    }
+    // Postura regenera fora do ataque (volta a poder cambalear depois de um tempo).
+    if (!this.sm.is("attacking") && this.poise < this.stats.poise) {
+      this.poise = Math.min(this.stats.poise, this.poise + this.stats.poise * 0.4 * combatDt);
+    }
+
     this.sm.advance(combatDt);
 
     if (this.sm.is("dead")) {
@@ -332,6 +481,14 @@ export class Skeleton implements CombatTarget {
     if (this.sm.is("attacking")) {
       root.rotation.y = Math.atan2(this.attackDir.x, this.attackDir.z) + fo;
       const wasBusy = this.attack.isBusy;
+      // TELEGRAFIA do golpe INQUEBRÁVEL: o inimigo "esquenta" em vermelho na antecipação.
+      if (this.attackUnblockable_ && this.attack.current === "startup") {
+        const r = 0.4 + 1.0 * this.attack.phaseProgress;
+        for (let i = 0; i < this.mats.length; i++) {
+          const e0 = this.matEmissive0[i]!;
+          this.mats[i]!.emissiveColor.set(e0.r + r, e0.g, e0.b);
+        }
+      }
       this.attack.advance(combatDt);
       if (this.attack.isActive && !this.hitHeroThisSwing) {
         if (beh === "ranged") {
@@ -352,6 +509,8 @@ export class Skeleton implements CombatTarget {
         }
       }
       if (wasBusy && !this.attack.isBusy) {
+        if (this.attackUnblockable_) this.restoreEmissive(); // apaga a telegrafia vermelha
+        this.attackUnblockable_ = false;
         this.sm.to("cooldown");
         this.setAnim(this.anims.idle, true);
       }
@@ -381,15 +540,31 @@ export class Skeleton implements CombatTarget {
         this.setAnim(this.anims.idle, true);
       }
     }
+    // Coleira: nunca deixa o morto sair além de MAX_LEASH do spawn (evita o kite p/ fora
+    // da sala -> inalcançável -> sala não limpa). Cobre recuo, aproximação e knockback.
+    const lx = root.position.x - this.base.x;
+    const lz = root.position.z - this.base.z;
+    const ld = Math.hypot(lx, lz);
+    if (ld > MAX_LEASH) {
+      root.position.x = this.base.x + (lx / ld) * MAX_LEASH;
+      root.position.z = this.base.z + (lz / ld) * MAX_LEASH;
+    }
+    // A coleira é um círculo em volta do spawn: não sabe que o ALTAR barra o herói. O clamp
+    // por terreno (frente do altar + paredes) garante que o inimigo fique sempre alcançável.
+    this.clampPos();
     return struck;
   }
 
   private startOverhead(dirX: number, dirZ: number): void {
     this.attackDir.set(dirX, 0, dirZ);
     this.hitHeroThisSwing = false;
+    // Tipos pesados às vezes carregam um golpe INQUEBRÁVEL (ignora bloqueio; força esquiva).
+    // Só melee inquebrável (ranged dispara projétil esquivável, sem conceito de bloqueio).
+    this.attackUnblockable_ = !!this.stats.canUnblockable && (this.stats.behavior ?? "melee") !== "ranged" && Math.random() < UNBLOCKABLE_CHANCE;
     this.attack.start(this.stats.overhead);
     this.sm.to("attacking");
     this.setAnim(this.anims.attack, false);
+    tellSound(this.attackUnblockable_ ? "unblock" : (this.stats.tellProfile ?? "basic"));
   }
 
   private decayReactions(dt: number): void {
@@ -447,6 +622,9 @@ export class Skeleton implements CombatTarget {
     this.knock.setAll(0);
     this.flash = 0;
     this.squash = 0;
+    this.poise = this.stats.poise;
+    this.staggerTimer = 0;
+    this.attackUnblockable_ = false;
     this.hpBar?.set(1);
     this.sm.to("approach");
     this.currentAnim = null;

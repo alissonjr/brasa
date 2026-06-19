@@ -6,6 +6,7 @@ import { T, setLanguage } from "./strings";
 import { uiHover, uiClick } from "./uiSound";
 import { ModelStage } from "./modelStage";
 import { TitleScene } from "./titleScene";
+import { formatTime, readLeaderboard, submitTime } from "../content/leaderboard";
 import type { UiContext } from "./uiContext";
 import { LANDMARKS, WORLD_HALF, type LandmarkKind } from "../content/map";
 import { CAMPAIGN, chapterName, currentObjective, findChapter, progressPercent } from "../content/campaign";
@@ -506,6 +507,53 @@ export class PauseScreen implements Screen {
         { variant: "danger", glyph: ICONS.exit }
       ),
     ]);
+  }
+}
+
+// --- Vitória (A Brasa foi reavivada): leaderboard de tempos da descida ---
+
+export class VictoryScreen implements Screen {
+  readonly element: HTMLElement;
+
+  constructor(ctx: UiContext, runSeconds: number, timed = true) {
+    // timed=false (descida retomada de save) não entra no leaderboard, só exibe.
+    const rank = timed ? submitTime(runSeconds) : -1;
+    const times = readLeaderboard(); // top 5 já ordenado (melhor primeiro)
+
+    const board = el("div", { class: "score-list" });
+    if (times.length === 0) {
+      board.append(el("p", { class: "empty", text: T.semTempos }));
+    } else {
+      times.forEach((t, i) => {
+        const isRun = i === rank;
+        board.append(
+          el(
+            "div",
+            { class: "score-row" + (isRun ? " current" : "") },
+            el("span", { class: "score-rank", text: `${i + 1}.` }),
+            el("span", { class: "score-time", text: formatTime(t) }),
+            el("span", { class: "score-tag", text: isRun ? T.estaCorrida : "" })
+          )
+        );
+      });
+    }
+
+    this.element = backdrop(
+      [
+        el("h2", { class: "menu-title", text: T.brasaReavivada }),
+        el("p", { class: "menu-subtitle", text: T.vitoriaSub }),
+        el(
+          "div",
+          { class: "profile-stats" },
+          statRow(T.tempoDaDescida, formatTime(runSeconds)),
+          statRow(T.pontos, String(ctx.score.total))
+        ),
+        el("div", { class: "opt-section", text: T.melhoresTempos }),
+        board,
+        btn(T.sairTitulo, () => ctx.quitToTitle(), { variant: "primary", glyph: ICONS.exit }),
+      ],
+      "victory-panel"
+    );
   }
 }
 

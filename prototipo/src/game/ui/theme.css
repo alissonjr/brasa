@@ -6,19 +6,43 @@
    os VALORES agora são a paleta de Brasa, então toda a UI acompanha sem reescrever regras. */
 
 :root {
-  --areia: #cdd6e0; /* pedra clara fria (era areia) */
-  --pergaminho: #d7dee6; /* pedra muito clara */
-  --ouro: #f0a44e; /* a brasa: destaque quente */
-  --ouro-claro: #ffcf8a; /* fagulha clara */
-  --bronze: #c46a2a; /* brasa profunda */
-  --bronze-claro: #e08a3a; /* brasa acesa */
-  --texto: #d6dee8; /* texto frio claro */
-  --texto-suave: #8c9aa8; /* texto frio suave */
-  --borda: #2c3440; /* pedra escura */
-  --borda-clara: #46525f; /* pedra média */
-  --painel-1: #1c2430; /* pedra do painel (topo) */
-  --painel-2: #141a24; /* pedra do painel (meio) */
-  --painel-3: #0e131b; /* o escuro do poço (base) */
+  /* Paleta fria-base de Brasa (direcao-de-arte 2.1 / spec-ui-hud-ux 8): a UI nasce em
+     pedra-cripta fria; a BRASA (laranja) é reservada ao fogo e ao item em foco (a
+     "gangorra"). Os nomes de variável são herdados; os valores agora são frios, então
+     toda a UI reage sem reescrever regra a regra. */
+
+  /* Frio: superfícies, pedra, morte */
+  --cripta: #0e1a2b; /* fundo mais profundo (poço) */
+  --ardosia: #1f3247; /* pedra do painel */
+  --aco-frio: #3e5c7e; /* borda/realce frio */
+  --ciano: #5fb7c9; /* ameaça dos mortos (nunca acionável-positivo) */
+
+  /* Quente: SÓ fogo, fagulha e foco (a brasa reservada) */
+  --brasa-nucleo: #ff7a1a; /* o fogo, prompt de acender */
+  --ambar: #ffa63d; /* halo/fagulha cheia */
+  --ouro-fagulha: #ffd27a; /* ponta da chama, realce de foco */
+
+  /* Materiais antigos */
+  --bronze-patina: #7a5a2e; /* bronze FRIO, apagado (moldura, detalhe) */
+  --bronze-aquecido: #c98a3a; /* bronze que pegou a luz da brasa (só no quente) */
+  --osso: #d8cfb8; /* texto/título claro sobre pedra */
+  --vermelho-tico: #c8401c;
+
+  /* Aliases legados: mantêm as regras existentes vivas, agora FRIAS. */
+  --areia: #cdd6e0; /* pedra clara fria */
+  --pergaminho: #d7dee6;
+  --ouro: var(--ambar); /* "destaque quente" => brasa, só no foco/fogo */
+  --ouro-claro: var(--ouro-fagulha);
+  --bronze: var(--bronze-patina); /* moldura fria apagada */
+  --bronze-claro: var(--bronze-aquecido);
+  --rotulo: #8ea4ba; /* rótulo de seção: aço frio (era bronze quente) */
+  --texto: #d6dee8;
+  --texto-suave: #8c9aa8;
+  --borda: #243343; /* pedra escura fria */
+  --borda-clara: #3a5170; /* pedra média (aço apagado) */
+  --painel-1: #1a2a3d; /* pedra do painel (topo) */
+  --painel-2: #122032; /* pedra do painel (meio) */
+  --painel-3: #0a131f; /* o escuro do poço (base) */
   --perigo: #9a4334;
   --perigo-borda: #b7322e;
 }
@@ -101,11 +125,12 @@
   font-size: 32px;
   letter-spacing: 2px;
   text-align: center;
-  background: linear-gradient(180deg, var(--ouro-claro) 0%, var(--bronze-claro) 60%, #b07a30 100%);
+  /* Brasa gravada na letra (mesmo gradiente do título cinematográfico). */
+  background: linear-gradient(180deg, #ffe9c4 0%, #ffb259 52%, #c9722a 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 0 14px rgba(255, 140, 60, 0.28)) drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5));
 }
 .menu-title::after {
   content: "";
@@ -141,16 +166,17 @@
   letter-spacing: 0.6px;
   text-align: center;
   padding: 12px 18px;
-  color: #f6ecd6;
-  background: linear-gradient(180deg, #6a4e2b 0%, #543d22 52%, #46331c 100%);
+  /* Pedra-cripta FRIA por padrão; só acende em brasa no foco/hover (a gangorra). */
+  color: var(--osso);
+  background: linear-gradient(180deg, #243a52 0%, #1a2c40 52%, #132131 100%);
   border: 1px solid var(--borda-clara);
   border-radius: 4px;
   box-shadow:
-    inset 0 1px 0 rgba(246, 227, 176, 0.22),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.22),
-    inset 0 -2px 6px rgba(0, 0, 0, 0.35),
-    0 1px 2px rgba(0, 0, 0, 0.4);
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.5);
+    inset 0 1px 0 rgba(180, 205, 230, 0.14),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.28),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.4),
+    0 1px 2px rgba(0, 0, 0, 0.45);
+  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
   transition: background 0.14s ease, border-color 0.14s ease, transform 0.06s ease, color 0.14s ease, box-shadow 0.14s ease;
 }
 /* Conteúdo (glifo + rótulo) acima da varredura de luz. */
@@ -166,7 +192,7 @@
   left: -135%;
   width: 55%;
   height: 100%;
-  background: linear-gradient(100deg, transparent, rgba(246, 227, 176, 0.3) 50%, transparent);
+  background: linear-gradient(100deg, transparent, rgba(255, 180, 110, 0.32) 50%, transparent);
   transform: skewX(-18deg);
   transition: left 0.5s ease;
   pointer-events: none;
@@ -184,8 +210,8 @@
   display: inline-flex;
   width: 17px;
   height: 17px;
-  color: var(--ouro);
-  opacity: 0.85;
+  color: var(--aco-frio); /* glifo frio apagado; acende em brasa no foco */
+  opacity: 0.9;
   transition: color 0.14s ease, opacity 0.14s ease, transform 0.14s ease;
 }
 .btn-glyph svg {
@@ -198,10 +224,21 @@
   opacity: 1;
   transform: scale(1.08);
 }
-.btn:hover {
-  background: linear-gradient(180deg, #82602f 0%, #654a28 52%, #543d20 100%);
-  border-color: var(--bronze-claro);
-  color: var(--ouro-claro);
+/* Acende em brasa no foco/hover: a pedra fria pega a luz do fogo (a gangorra). */
+.btn:hover,
+.btn:focus-visible {
+  background: linear-gradient(180deg, #3a3526 0%, #2c2a23 52%, #221f1a 100%);
+  border-color: var(--ambar);
+  color: var(--ouro-fagulha);
+  /* Gangorra cromática (estudo de menu): o item em foco é o ÚNICO ponto quente da tela,
+     com o mesmo halo de brasa do título cinematográfico. Identidade coesa entre as telas. */
+  box-shadow:
+    inset 0 1px 0 rgba(255, 210, 150, 0.28),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.28),
+    inset 0 -2px 6px rgba(0, 0, 0, 0.4),
+    0 0 26px rgba(255, 140, 60, 0.5),
+    0 0 7px rgba(255, 190, 120, 0.6),
+    0 1px 2px rgba(0, 0, 0, 0.45);
 }
 .btn:focus-visible {
   outline: 2px solid var(--ouro);
@@ -340,7 +377,7 @@
   transition: border-color 0.14s ease, background 0.14s ease;
 }
 .slot-row:hover {
-  border-color: var(--bronze);
+  border-color: var(--ambar);
 }
 .slot-info {
   display: flex;
@@ -351,7 +388,7 @@
 .slot-info strong {
   font-family: "Cinzel", Georgia, serif;
   font-size: 15px;
-  color: var(--ouro);
+  color: var(--osso);
 }
 .slot-info span {
   font-size: 14px;
@@ -381,7 +418,7 @@
   font-size: 12px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: var(--bronze-claro);
+  color: var(--rotulo);
 }
 .opt-row {
   display: flex;
@@ -394,14 +431,14 @@
   flex: 1;
   max-width: 60%;
   height: 6px;
-  accent-color: var(--bronze);
+  accent-color: var(--ambar);
   cursor: pointer;
 }
 .select {
   font-family: "EB Garamond", Georgia, serif;
   font-size: 16px;
-  color: #f6ecd6;
-  background: #46331c;
+  color: var(--osso);
+  background: #16273a;
   border: 1px solid var(--borda-clara);
   border-radius: 4px;
   padding: 7px 10px;
@@ -419,7 +456,7 @@
 .checkbox {
   width: 20px;
   height: 20px;
-  accent-color: var(--bronze);
+  accent-color: var(--ambar);
   cursor: pointer;
 }
 
@@ -469,18 +506,18 @@
   font-family: "Cinzel", Georgia, serif;
   font-size: 13px;
   letter-spacing: 1px;
-  color: #f6ecd6;
+  color: var(--osso);
   padding: 8px 14px;
-  background: linear-gradient(180deg, #6a4e2b 0%, #4f3a22 100%);
+  background: linear-gradient(180deg, #223850 0%, #16273a 100%);
   border: 1px solid var(--borda-clara);
   border-radius: 4px;
-  box-shadow: inset 0 1px 0 rgba(246, 227, 176, 0.16), 0 1px 3px rgba(0, 0, 0, 0.45);
+  box-shadow: inset 0 1px 0 rgba(180, 205, 230, 0.12), 0 1px 3px rgba(0, 0, 0, 0.45);
   transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
 }
 .hud-pause-btn:hover {
-  background: linear-gradient(180deg, #82602f 0%, #604628 100%);
-  border-color: var(--bronze-claro);
-  color: var(--ouro-claro);
+  background: linear-gradient(180deg, #3a3526 0%, #2a2820 100%);
+  border-color: var(--ambar);
+  color: var(--ouro-fagulha);
 }
 .hud-pause-btn .glyph {
   font-size: 15px;
@@ -628,7 +665,7 @@
   font-size: 12px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: var(--bronze-claro);
+  color: var(--rotulo);
   margin-top: 4px;
 }
 .name-row {
@@ -639,8 +676,8 @@
   flex: 1;
   font-family: "EB Garamond", Georgia, serif;
   font-size: 16px;
-  color: #f6ecd6;
-  background: #46331c;
+  color: var(--osso);
+  background: #16273a;
   border: 1px solid var(--borda-clara);
   border-radius: 4px;
   padding: 9px 12px;
@@ -672,7 +709,7 @@
 .stat-row .v {
   font-family: "Cinzel", Georgia, serif;
   font-size: 15px;
-  color: var(--ouro);
+  color: var(--osso);
 }
 
 /* --- Diálogo de confirmação / alerta --- */
@@ -780,7 +817,7 @@
 .ach-text strong {
   font-family: "Cinzel", Georgia, serif;
   font-size: 15px;
-  color: var(--ouro);
+  color: var(--osso);
 }
 .ach-row:not(.unlocked) .ach-text strong {
   color: var(--texto-suave);
@@ -882,7 +919,7 @@
 }
 .codex-row.clickable:hover,
 .codex-row.clickable:focus-visible {
-  border-color: var(--bronze);
+  border-color: var(--ambar);
   outline: none;
 }
 .codex-row.clickable:focus-visible {
@@ -924,7 +961,7 @@
 .codex-text strong {
   font-family: "Cinzel", Georgia, serif;
   font-size: 15px;
-  color: var(--ouro);
+  color: var(--osso);
 }
 .codex-row.locked .codex-text strong {
   color: var(--texto-suave);
@@ -1201,7 +1238,7 @@
   transition: border-color 0.14s ease, background 0.14s ease;
 }
 .swatch:hover {
-  border-color: var(--bronze);
+  border-color: var(--ambar);
 }
 .swatch.selected {
   border-color: var(--ouro);
@@ -1238,7 +1275,7 @@
   transition: border-color 0.14s ease, background 0.14s ease;
 }
 .choice:hover {
-  border-color: var(--bronze);
+  border-color: var(--ambar);
 }
 .choice.selected {
   border-color: var(--ouro);
@@ -1251,7 +1288,7 @@
 .choice strong {
   font-family: "Cinzel", Georgia, serif;
   font-size: 15px;
-  color: var(--ouro);
+  color: var(--osso);
 }
 .choice span {
   font-size: 14px;
@@ -1610,3 +1647,21 @@
   from { opacity: 0; transform: translateY(10px) scale(0.985); }
   to { opacity: 1; transform: none; }
 }
+
+/* --- Tela de vitória (leaderboard) --- */
+.victory-panel { min-width: 360px; max-width: min(92vw, 480px); }
+.score-list { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
+.score-row {
+  display: flex; align-items: center; gap: 12px; padding: 9px 13px;
+  background: linear-gradient(180deg, rgba(246, 227, 176, 0.04), rgba(0, 0, 0, 0.14));
+  border: 1px solid var(--borda); border-radius: 4px;
+}
+.score-row.current {
+  border-color: var(--ouro);
+  background: linear-gradient(180deg, rgba(255, 166, 61, 0.16), rgba(0, 0, 0, 0.18));
+  box-shadow: 0 0 10px rgba(255, 166, 61, 0.25);
+}
+.score-rank { width: 22px; color: var(--texto-suave); font-family: "Cinzel", Georgia, serif; }
+.score-time { flex: 1; font-family: "Cinzel", Georgia, serif; font-size: 16px; color: var(--osso); }
+.score-row.current .score-time { color: var(--ouro-claro); }
+.score-tag { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--ambar); }

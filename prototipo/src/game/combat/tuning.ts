@@ -16,6 +16,10 @@ export interface AttackTuning extends AttackTiming {
   hitStopFrames: number;
   /** Custo de stamina (de 100); ausente = não consome. */
   staminaCost?: number;
+  /** Dano de POISE: o quanto este golpe drena da postura do inimigo (cambaleia ao zerar). */
+  poise?: number;
+  /** Raio de CLEAVE (m): >0 faz o golpe respingar nos inimigos próximos do impacto (horda). */
+  cleave?: number;
 }
 
 export const HERO = {
@@ -25,9 +29,10 @@ export const HERO = {
   staminaRegenDelaySec: 1.0,
 
   // Ataque leve: snappy (responsivo), comprometido, baixo dano. Combo de até 3 (M2.2).
-  light: { startup: 0.12, active: 0.06, recovery: 0.22, damage: 10, knockback: 2, hitStopFrames: 4 } as AttackTuning,
+  light: { startup: 0.12, active: 0.06, recovery: 0.22, damage: 10, knockback: 2, hitStopFrames: 4, poise: 10 } as AttackTuning,
   // 3a do combo: empurrão (knockback forte) e mais peso (spec-combate §3 "3a com empurrão").
-  lightFinisher: { startup: 0.16, active: 0.07, recovery: 0.3, damage: 12, knockback: 6, hitStopFrames: 7 } as AttackTuning,
+  // Cleave: a finalizadora respinga nos inimigos próximos (resposta de horda do moveset normal).
+  lightFinisher: { startup: 0.16, active: 0.07, recovery: 0.3, damage: 12, knockback: 6, hitStopFrames: 7, poise: 14, cleave: 2.4 } as AttackTuning,
   // Janela para encadear o combo: golpear de novo até aqui após o anterior continua a cadeia.
   comboResetSec: 0.45,
 
@@ -40,6 +45,8 @@ export const HERO = {
     knockback: 6,
     hitStopFrames: 10,
     staminaCost: 35,
+    poise: 34, // o pesado quebra a postura: cambaleia tipos médios de um golpe
+    cleave: 2.8, // o pesado varre os inimigos próximos do impacto
   } as AttackTuning,
 
   // Esquiva (M2.2): i-frames no MIOLO; vulnerável no fim (recovery).
@@ -50,11 +57,13 @@ export const HERO = {
     staminaCost: 25,
   },
 
-  // FAGULHA: recurso de fogo (0..1) que regenera devagar e recarrega no braseiro.
-  spark: { max: 1, regenPerSec: 0.16, emberCost: 0.34 },
+  // FAGULHA: recurso de fogo em CARGAS DISCRETAS (W6). 3 cargas; 1 carga por Golpe de Fogo;
+  // regenera devagar (1 carga a cada ~6 s), recarrega tudo no braseiro e ganha 1 ao matar.
+  // regenPerSec e em CARGAS/segundo; emberCost em CARGAS. (Migrado do recurso continuo 0..1.)
+  spark: { charges: 3, regenPerSec: 1 / 6, emberCost: 1 },
   // GOLPE DE FOGO (ember): leque de fogo à frente em ARCO/ÁREA, atinge vários, ignora
   // escudo (queima), custa Fagulha (não stamina). arcCos = cos(meio-ângulo) do cone.
-  ember: { startup: 0.26, active: 0.1, recovery: 0.42, damage: 22, knockback: 5, range: 5.5, arcCos: 0.5 },
+  ember: { startup: 0.26, active: 0.1, recovery: 0.42, damage: 22, knockback: 5, range: 5.5, arcCos: 0.5, poise: 16 },
 } as const;
 
 /**

@@ -120,6 +120,13 @@ const PT = {
   dom: "Dom",
   dificuldade: "Dificuldade",
   comecar: "Iniciar a descida",
+  // Tela de vitória (leaderboard)
+  brasaReavivada: "A Brasa foi reavivada",
+  vitoriaSub: "A última chama arde de novo no fundo do poço.",
+  tempoDaDescida: "Tempo da descida",
+  melhoresTempos: "Melhores tempos",
+  estaCorrida: "esta descida",
+  semTempos: "Nenhum tempo registrado ainda.",
 } as const;
 
 export type StringKey = keyof typeof PT;
@@ -231,6 +238,12 @@ const EN: Record<StringKey, string> = {
   dom: "Calling",
   dificuldade: "Difficulty",
   comecar: "Begin the descent",
+  brasaReavivada: "The Brasa is rekindled",
+  vitoriaSub: "The last flame burns again at the bottom of the pit.",
+  tempoDaDescida: "Descent time",
+  melhoresTempos: "Best times",
+  estaCorrida: "this run",
+  semTempos: "No times recorded yet.",
 };
 
 let current: Lang = "pt";

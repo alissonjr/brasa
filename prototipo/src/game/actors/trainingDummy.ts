@@ -1,6 +1,6 @@
 import { Color3, MeshBuilder, StandardMaterial, TransformNode, Vector3 } from "@babylonjs/core";
 import type { Mesh, Scene } from "@babylonjs/core";
-import { Health, type Hurtbox } from "@engine";
+import { Health, outlineHierarchy, type Hurtbox } from "@engine";
 import type { CombatTarget } from "../combat/combatTarget";
 import { HealthBar3D } from "../combat/healthBar3d";
 
@@ -45,6 +45,9 @@ export class TrainingDummy implements CombatTarget {
     beam.position.set(0, 1.15, 0);
     const head = part(MeshBuilder.CreateSphere("head", { diameter: 0.34, segments: 8 }, scene), this.headMat, this.root);
     head.position.set(0, 1.6, 0);
+
+    // ESTILO (Bloco 1, spec-estilo-visual-render §4.1b): contorno de tinta no boneco de treino.
+    outlineHierarchy(this.root, { width: 0.025 });
 
     this.hpBar = new HealthBar3D(scene, this.root, 1.95);
   }

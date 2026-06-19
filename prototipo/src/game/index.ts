@@ -26,12 +26,15 @@ export {
   CodexScreen,
   QuestLogScreen,
   CharacterCreateScreen,
+  VictoryScreen,
   createAutosaveIndicator,
   createPauseButton,
 } from "./ui/screens";
 export { configureUiSound } from "./ui/uiSound";
 export { configureTitleAmbience, startTitleAmbience, stopTitleAmbience } from "./ui/titleAmbience";
 export { configureMusic, startMusic, stopMusic, setMusicState } from "./audio/musicManager";
+export { configureStingers, playStinger } from "./audio/stingers";
+export { configureAmbience, startAmbience, setAmbience, updateAmbience, playWhisper, playStir, stopAmbience } from "./audio/adaptiveAmbience";
 export { GameHud } from "./ui/hud";
 export type { HudState } from "./ui/hud";
 export type { UiContext } from "./ui/uiContext";
@@ -51,11 +54,12 @@ export { ACHIEVEMENTS, achievementForObjective, achievementById } from "./conten
 export type { Achievement } from "./content/achievements";
 export { readGameSave } from "./content/saveData";
 export type { GameSaveData, RunSave } from "./content/saveData";
+export { readLeaderboard, submitTime, formatTime } from "./content/leaderboard";
 export { CODEX, isCodexUnlocked } from "./content/codex";
 export type { CodexEntry, CodexCategory } from "./content/codex";
 export { DEFAULT_CHARACTER, readCharacter, MANTOS, DONS, DIFFICULTIES } from "./content/character";
 export type { CharacterSave, Difficulty } from "./content/character";
 export { CombatDirector } from "./combat/combatDirector";
-export { configureCombatSound } from "./combat/combatSound";
+export { configureCombatSound, healChime } from "./combat/combatSound";
 export { DIFFICULTY_DAMAGE_TAKEN, POTIONS, ABSORB } from "./combat/tuning";
 export { CombatHud } from "./ui/combatHud";

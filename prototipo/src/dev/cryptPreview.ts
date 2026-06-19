@@ -1,5 +1,5 @@
 import { ArcRotateCamera, Scene, Vector3 } from "@babylonjs/core";
-import { createEngine, enableHavokPhysics, InputState, ThirdPersonCamera } from "@engine";
+import { createEngine, enableHavokPhysics, InputState, ThirdPersonCamera, enableSsao, addSceneOutline, addFinishingPass } from "@engine";
 import { WORLD_GRAVITY, Acendedora, Skeleton, buildCryptRoom, setupCryptScene, ensureCryptPieces } from "@game";
 
 /**
@@ -18,6 +18,10 @@ async function main(): Promise<void> {
   const spawn = new Vector3(0, 1.5, -9);
   const camera = new ThirdPersonCamera(scene, canvas, spawn);
   const ctx = setupCryptScene(scene, camera.camera);
+  // ESTILO (spec-estilo-visual-render): pilha estilizada (Blocos 1-3) p/ validação visual.
+  enableSsao(scene, camera.camera, { strength: 1.0, base: 0.35, radius: 0.0009, area: 0.0075 });
+  addSceneOutline(camera.camera, { thickness: 1.4, strength: 0.85 });
+  addFinishingPass(camera.camera, { posterizeLevels: 22, ditherStrength: 0.6, paperStrength: 0.15 });
   await ensureCryptPieces(scene);
   let room = buildCryptRoom(scene, ctx, { index: 0, kind: "guarda", enemies: 0 });
   room.setBrazierLit(1); // preview mostra a sala já acesa (estado quente)

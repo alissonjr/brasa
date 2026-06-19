@@ -66,6 +66,52 @@ export function hitThunk(heavy = false): void {
   noiseBurst(a, t, 0.06, (heavy ? 0.18 : 0.1) * vol, heavy ? 1800 : 2600);
 }
 
+/**
+ * SOM DE TELL por arquétipo de inimigo (W6). A câmara é escura/azul: a leitura do golpe
+ * não pode depender só da cor, então cada perfil telegrafa com uma assinatura sonora ao
+ * iniciar o ataque. Sintetizado (sem assets), gated pelo volume de sfx.
+ *  - swift: corte agudo e rápido (rogue/espreitador).
+ *  - heavy: THOOM grave e longo (heavy/brutamonte/sentinela).
+ *  - cast:  assobio frio ASCENDENTE (conjurador; avisa projétil).
+ *  - boss:  grave dissonante (Guardião).
+ *  - unblock: aviso de golpe INQUEBRÁVEL (sino grave + ruído áspero ascendente; "este não bloqueie").
+ *  - basic: swish médio (minion/warrior/demônio/antigo).
+ */
+export type TellProfile = "swift" | "heavy" | "cast" | "boss" | "unblock" | "basic";
+export function tellSound(profile: TellProfile): void {
+  const vol = getVolume();
+  if (vol <= 0) return;
+  const a = audio();
+  if (!a) return;
+  const t = a.currentTime;
+  switch (profile) {
+    case "swift": // corte agudo e curto
+      tone(a, t, 1400, 2200, 0.08, 0.05 * vol);
+      noiseBurst(a, t, 0.05, 0.07 * vol, 5200);
+      break;
+    case "heavy": // THOOM grave que sobe a tensão
+      tone(a, t, 70, 110, 0.34, 0.13 * vol);
+      noiseBurst(a, t, 0.12, 0.07 * vol, 420);
+      break;
+    case "cast": // assobio frio ascendente (mira)
+      tone(a, t, 600, 1500, 0.42, 0.06 * vol);
+      break;
+    case "boss": // grave dissonante (duas vozes batendo)
+      tone(a, t, 90, 70, 0.5, 0.14 * vol);
+      tone(a, t, 96, 75, 0.5, 0.1 * vol);
+      noiseBurst(a, t, 0.14, 0.08 * vol, 600);
+      break;
+    case "unblock": // golpe inquebravel: sino grave + ruido aspero ASCENDENTE (aviso de perigo)
+      tone(a, t, 160, 240, 0.4, 0.13 * vol);
+      tone(a, t + 0.04, 80, 80, 0.36, 0.1 * vol);
+      noiseBurst(a, t, 0.18, 0.09 * vol, 1400);
+      break;
+    default: // basic: swish médio
+      tone(a, t, 700, 1100, 0.12, 0.06 * vol);
+      noiseBurst(a, t, 0.06, 0.06 * vol, 3200);
+  }
+}
+
 /** Clank metálico de escudo (golpe do herói amortecido pela guarda do inimigo). */
 export function shieldClank(): void {
   const vol = getVolume();
@@ -75,6 +121,28 @@ export function shieldClank(): void {
   const t = a.currentTime;
   tone(a, t, 520, 300, 0.09, 0.1 * vol);
   noiseBurst(a, t, 0.05, 0.16 * vol, 3400);
+}
+
+/** "Cintilar" da ESQUIVA PERFEITA: assobio agudo e cristalino (quase-colisão recompensada). */
+export function perfectDodgeChime(): void {
+  const vol = getVolume();
+  if (vol <= 0) return;
+  const a = audio();
+  if (!a) return;
+  const t = a.currentTime;
+  tone(a, t, 1800, 2600, 0.16, 0.06 * vol);
+  tone(a, t + 0.03, 2400, 3200, 0.14, 0.05 * vol);
+}
+
+/** Carrilhão suave de CURA (essência/poção/braseiro): dois tons ascendentes, quente e curto. */
+export function healChime(): void {
+  const vol = getVolume();
+  if (vol <= 0) return;
+  const a = audio();
+  if (!a) return;
+  const t = a.currentTime;
+  tone(a, t, 520, 540, 0.18, 0.07 * vol);
+  tone(a, t + 0.06, 780, 800, 0.22, 0.06 * vol); // terça/quinta acima (consonante, "alívio")
 }
 
 /** Som de DANO ao herói: thud abafado e grave (mais "feio" que o acerto). `blocked` = clank metálico. */

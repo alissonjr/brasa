@@ -9,6 +9,10 @@ import type { Health, Hurtbox } from "@engine";
 export interface CombatTarget {
   readonly health: Health;
   readonly hurtbox: Hurtbox;
-  /** Recebe um golpe. Retorna se foi amortecido pela guarda (para o feedback de "bloqueado"). */
-  takeHit(damage: number, dir: Vector3, knockback: number, guardBreak?: boolean): { guarded: boolean };
+  /**
+   * Recebe um golpe. Retorna se foi amortecido pela guarda (para o feedback de "bloqueado").
+   * `poiseDamage` (opcional) drena a postura do alvo (cambaleio/interrupção); 0 = ignora.
+   * `positionalBonus` (opcional): aplica bônus de flanco/costas conforme a orientação do alvo.
+   */
+  takeHit(damage: number, dir: Vector3, knockback: number, guardBreak?: boolean, poiseDamage?: number, positionalBonus?: boolean): { guarded: boolean };
 }

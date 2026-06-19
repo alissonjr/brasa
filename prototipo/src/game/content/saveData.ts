@@ -17,6 +17,7 @@ export interface RunSave {
   pocaoVida: number;
   pocaoFuria: number;
   upgrades: string[];
+  seed: number; // semente da run (variação determinística de posições/ofertas); 0 = legado
 }
 
 export interface GameSaveData {
@@ -46,6 +47,7 @@ function readRun(v: unknown): RunSave {
     pocaoVida: Math.max(0, Math.floor(num(o.pocaoVida))),
     pocaoFuria: Math.max(0, Math.floor(num(o.pocaoFuria))),
     upgrades: strArray(o.upgrades),
+    seed: Math.max(0, Math.floor(num(o.seed))),
   };
 }
 

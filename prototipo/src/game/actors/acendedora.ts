@@ -32,6 +32,8 @@ export class Acendedora {
   private readonly controller: CharacterController;
   private readonly combat_: HeroCombat;
   private readonly aimQuat = new Quaternion();
+  private readonly aimTarget = new Vector3(); // alvo de mira (lock-on / soft-target)
+  private hasAim = false;
 
   constructor(scene: Scene, spawn: Vector3, gravity: Vector3) {
     this.model = new HeroModel(scene, { modelUrl: ACENDEDORA_MODEL, name: "acendedora" });
@@ -60,6 +62,16 @@ export class Acendedora {
   /** Combate da heroína (lido pelo CombatDirector para detecção de acerto). */
   get combat(): HeroCombat {
     return this.combat_;
+  }
+
+  /**
+   * Alvo de mira (lock-on ou soft-target): durante a antecipação do golpe/ember a heroína
+   * encara este ponto em vez do yaw da câmera, fazendo o golpe "grudar" no inimigo escolhido.
+   * null = sem alvo (volta a mirar pela câmera). Definido pelo CombatDirector a cada frame.
+   */
+  setAimTarget(pos: { x: number; y: number; z: number } | null): void {
+    this.hasAim = pos !== null;
+    if (pos) this.aimTarget.set(pos.x, pos.y, pos.z);
   }
 
   /** Direção horizontal que a heroína encara (forward do modelo). Usado para defesa frontal. */
@@ -93,7 +105,20 @@ export class Acendedora {
     // modelo) apontaria para a última direção andada e o golpe de frente erraria. Re-mira a
     // cada golpe do combo e trava ao ficar ativo; durante o ataque o ator não anda
     // (FROZEN_INPUT), logo o syncVisual do controller não sobrescreve.
-    if (this.combat_.aiming || this.combat_.isBlocking) {
+    const wantsAim = this.combat_.aiming || this.combat_.casting;
+    if (this.hasAim && wantsAim) {
+      // LOCK-ON / SOFT-TARGET: durante a antecipação do golpe/ember, encara o alvo escolhido
+      // (não o yaw da câmera). Faz a hitbox frontal cair sobre o inimigo certo na turba.
+      const p = this.position;
+      const dx = this.aimTarget.x - p.x;
+      const dz = this.aimTarget.z - p.z;
+      if (dx * dx + dz * dz > 1e-4) {
+        Quaternion.FromEulerAnglesToRef(0, Math.atan2(dx, dz), 0, this.aimQuat);
+        const root = this.model.root;
+        if (root.rotationQuaternion) root.rotationQuaternion.copyFrom(this.aimQuat);
+        else root.rotationQuaternion = this.aimQuat.clone();
+      }
+    } else if (this.combat_.aiming || this.combat_.isBlocking) {
       // Mira do golpe E do BLOQUEIO: encara para onde a câmera olha (aponta o escudo na
       // ameaça). Sem isso o herói bloqueia para a última direção andada e a defesa frontal
       // contra projétil não funcionaria.

@@ -158,4 +158,14 @@ export class ThirdPersonCamera {
     const yaw = Math.atan2(dir.x, dir.z);
     Quaternion.FromEulerAnglesToRef(0, yaw, 0, result);
   }
+
+  /** Direção horizontal (normalizada) para onde a câmera olha. Usada para mira/aquisição de alvo. */
+  getForward(out: Vector3): Vector3 {
+    this.camera.target.subtractToRef(this.camera.position, out);
+    out.y = 0;
+    const len = Math.hypot(out.x, out.z) || 1;
+    out.x /= len;
+    out.z /= len;
+    return out;
+  }
 }

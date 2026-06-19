@@ -1,14 +1,14 @@
 import { Color3, MeshBuilder, StandardMaterial, Vector3 } from "@babylonjs/core";
 import type { Mesh, Scene } from "@babylonjs/core";
-import { HitStop, overlapSpheres, type EventBus, type ThirdPersonCamera } from "@engine";
+import { HitStop, Tweens, Easings, type EventBus, type ThirdPersonCamera } from "@engine";
 import type { Acendedora } from "../actors/acendedora";
 import { TrainingDummy } from "../actors/trainingDummy";
-import { Skeleton, type SkeletonKind, type ShotSpec } from "../actors/enemies/skeleton";
+import { Skeleton, type SkeletonKind, type ShotSpec, type EnemyBounds } from "../actors/enemies/skeleton";
 import { Guardiao } from "../actors/enemies/guardiao";
 import { ABSORB, BURN } from "./tuning";
 import type { CombatTarget } from "./combatTarget";
 import { ImpactFx } from "./impactFx";
-import { hitThunk, heroHurt, shieldClank } from "./combatSound";
+import { hitThunk, heroHurt, shieldClank, healChime, perfectDodgeChime } from "./combatSound";
 
 /**
  * CAMADA JOGO. Orquestra o combate (M2.1-M2.3): a cada frame avança o hit stop, resolve os
@@ -32,6 +32,7 @@ export class CombatDirector {
   private readonly tmpDir = new Vector3();
   private readonly dead = new Set<Skeleton>(); // inimigos já creditados (1 drop de Fagulha cada)
   private heroDead = false;
+  private enemyBounds: EnemyBounds | null = null; // terreno andável do andar atual (mantém inimigos alcançáveis)
   private boss: Guardiao | null = null; // chefe Guardião (andar final); slot próprio
   private bossCredited = false;
   private wakeTimer = 0; // "despertar": inimigos ficam parados (erguendo-se) por um instante ao entrar
@@ -40,6 +41,8 @@ export class CombatDirector {
   private projMat: StandardMaterial | null = null;
   private deflectMat: StandardMaterial | null = null; // bola DEVOLVIDA (parry): azul-branca
   private readonly tmpFacing = new Vector3();
+  private readonly tmpFwd = new Vector3();
+  private lockedTarget: CombatTarget | null = null; // alvo do lock-on (T)
   // Essencias: orbes de cura que dropam do morto e curam ao serem coletadas (absorcao).
   private readonly essences: { mesh: Mesh; pos: Vector3; life: number }[] = [];
   private essMat: StandardMaterial | null = null;
@@ -53,9 +56,16 @@ export class CombatDirector {
     private readonly scene: Scene,
     private readonly camera: ThirdPersonCamera,
     private readonly hero: Acendedora,
-    private readonly events: EventBus
+    private readonly events: EventBus,
+    private readonly tweens: Tweens // ESTILO (Bloco 2): juice de spawn/coleta
   ) {
     this.fx = new ImpactFx(scene);
+  }
+
+  /** ESTILO (Bloco 2, §4.2b): pop-in de escala (0 -> 1) num mesh recém-criado. */
+  private popIn(mesh: Mesh, durMs = 240): void {
+    mesh.scaling.setAll(0.01);
+    this.tweens.to(mesh.scaling as unknown as Record<string, number>, { x: 1, y: 1, z: 1 }, durMs, Easings.easeOutBack);
   }
 
   addDummy(spawn: Vector3): TrainingDummy {
@@ -64,8 +74,15 @@ export class CombatDirector {
     return d;
   }
 
+  /** Terreno andável aplicado aos inimigos deste andar (chamado ao montar a sala). */
+  setEnemyBounds(b: EnemyBounds): void {
+    this.enemyBounds = b;
+    for (const e of this.enemies) e.setBounds(b);
+  }
+
   addSkeleton(spawn: Vector3, opts?: { kind?: SkeletonKind; respawns?: boolean }): Skeleton {
     const d = new Skeleton(this.scene, spawn, opts);
+    if (this.enemyBounds) d.setBounds(this.enemyBounds);
     this.enemies.push(d);
     return d;
   }
@@ -73,6 +90,73 @@ export class CombatDirector {
   /** Despertar: segura a IA dos inimigos por `seconds` ao entrar na câmara (encenação). */
   wake(seconds: number): void {
     this.wakeTimer = seconds;
+  }
+
+  // --- Lock-on / soft-target (mira em alvo) ---
+  /** Alterna o lock-on: trava no melhor inimigo à frente da câmera; destrava se já travado. */
+  toggleLock(): void {
+    if (this.lockedTarget && this.lockedTarget.health.alive) this.lockedTarget = null;
+    else this.lockedTarget = this.acquireTarget();
+  }
+  clearLock(): void {
+    this.lockedTarget = null;
+  }
+
+  /** Posição (tronco) do alvo travado para o retículo do HUD; null se não há. Reacquire ao morrer. */
+  getLockedPos(): { x: number; y: number; z: number } | null {
+    if (this.lockedTarget && !this.lockedTarget.health.alive) this.lockedTarget = this.acquireTarget();
+    if (!this.lockedTarget) return null;
+    const c = this.lockedTarget.hurtbox.center;
+    return { x: c.x, y: c.y, z: c.z };
+  }
+
+  /** Melhor alvo à frente da câmera: menor (distância x desalinhamento) dentro do cone e alcance. */
+  private acquireTarget(): CombatTarget | null {
+    this.camera.getForward(this.tmpFwd);
+    const o = this.hero.position;
+    let best: CombatTarget | null = null;
+    let bestScore = Infinity;
+    for (const t of this.targets) {
+      if (!t.health.alive) continue;
+      const c = t.hurtbox.center;
+      const dx = c.x - o.x;
+      const dz = c.z - o.z;
+      const dist = Math.hypot(dx, dz) || 1e-3;
+      if (dist > 16) continue;
+      const dot = (dx / dist) * this.tmpFwd.x + (dz / dist) * this.tmpFwd.z;
+      if (dot < 0.2) continue; // fora do cone frontal da câmera
+      const score = dist * (1.2 - dot);
+      if (score < bestScore) {
+        bestScore = score;
+        best = t;
+      }
+    }
+    return best;
+  }
+
+  /** Soft-target: inimigo mais próximo num cone frontal apertado (assist de mira no golpe). */
+  private softAimPos(): { x: number; y: number; z: number } | null {
+    this.camera.getForward(this.tmpFwd);
+    const o = this.hero.position;
+    let best: CombatTarget | null = null;
+    let bd = Infinity;
+    for (const t of this.targets) {
+      if (!t.health.alive) continue;
+      const c = t.hurtbox.center;
+      const dx = c.x - o.x;
+      const dz = c.z - o.z;
+      const dist = Math.hypot(dx, dz) || 1e-3;
+      if (dist > 7) continue;
+      const dot = (dx / dist) * this.tmpFwd.x + (dz / dist) * this.tmpFwd.z;
+      if (dot < 0.5) continue;
+      if (dist < bd) {
+        bd = dist;
+        best = t;
+      }
+    }
+    if (!best) return null;
+    const c = best.hurtbox.center;
+    return { x: c.x, y: c.y, z: c.z };
   }
 
   /** Instancia o chefe Guardião na arena (andar final). */
@@ -88,6 +172,18 @@ export class CombatDirector {
   }
   get bossActive(): boolean {
     return !!this.boss && this.boss.health.alive;
+  }
+
+  /** ESTILO (Bloco 4): inimigos despertos vivos (para a camada de PERIGO da ambiência). */
+  get aliveEnemyCount(): number {
+    let n = 0;
+    for (const e of this.enemies) if (e.health.alive) n++;
+    return n;
+  }
+
+  /** ESTILO (Bloco 4): luz da Brasa do chefe (0..1); 1 (calmo) quando não há chefe ativo. */
+  get bossBrasaLight(): number {
+    return this.boss && this.boss.health.alive ? this.boss.brasaLightFraction : 1;
   }
 
   // --- Execução (finisher) ---
@@ -126,6 +222,8 @@ export class CombatDirector {
     e.takeHit(99999, this.tmpDir, 2, true); // golpe letal: dispara morte + dissolução
     // Recompensa do finisher (loop do Doom: executar = sobreviver): cura + estouro + freeze + tremor.
     this.hero.combat.heal(this.hero.combat.maxHealth * 0.15);
+    this.events.emit("hero:heal", {}); // feedback positivo (brilho verde + carrilhão)
+    healChime();
     this.fx.burst(c, 40);
     this.hitStop.trigger(8 / 60);
     this.camera.shake(0.12);
@@ -154,6 +252,128 @@ export class CombatDirector {
     hitThunk(true);
   }
 
+  // --- Captura de arma (drop -> [G] pegar -> buff/munição temporária) ---
+  private spawnDrop(kind: "clava" | "cajado", at: Vector3): void {
+    const isClava = kind === "clava";
+    const mesh = isClava
+      ? MeshBuilder.CreateBox("drop_clava", { width: 0.5, height: 0.5, depth: 1.1 }, this.scene)
+      : MeshBuilder.CreateCylinder("drop_cajado", { diameter: 0.18, height: 1.4, tessellation: 8 }, this.scene);
+    const mat = new StandardMaterial("dropMat", this.scene);
+    mat.emissiveColor = Color3.FromHexString(isClava ? "#caa45a" : "#ff8a2c");
+    mat.diffuseColor = Color3.Black();
+    mat.specularColor = Color3.Black();
+    mat.disableLighting = true;
+    mesh.material = mat;
+    mesh.isPickable = false;
+    mesh.position.set(at.x, 0.7, at.z);
+    this.popIn(mesh, 260); // ESTILO (Bloco 2): a arma "salta" ao cair
+    this.drops.push({ mesh, pos: new Vector3(at.x, 0.7, at.z), kind, life: 20 });
+  }
+
+  private nearestDrop(): { mesh: Mesh; pos: Vector3; kind: "clava" | "cajado"; life: number } | null {
+    const hp = this.hero.position;
+    let best: { mesh: Mesh; pos: Vector3; kind: "clava" | "cajado"; life: number } | null = null;
+    let bd = 2.2 * 2.2;
+    for (const d of this.drops) {
+      const dd = (d.pos.x - hp.x) * (d.pos.x - hp.x) + (d.pos.z - hp.z) * (d.pos.z - hp.z);
+      if (dd < bd) {
+        bd = dd;
+        best = d;
+      }
+    }
+    return best;
+  }
+
+  /** Nome da arma dropada ao alcance (prompt "[G] Pegar X"); null = nenhuma. */
+  nearbyDrop(): string | null {
+    const d = this.nearestDrop();
+    return d ? (d.kind === "clava" ? "Clava" : "Cajado") : null;
+  }
+
+  /** Equipa a arma dropada mais próxima (tecla G). true se pegou. */
+  pickupNearby(): boolean {
+    const d = this.nearestDrop();
+    if (!d) return false;
+    this.equipWeapon(d.kind);
+    d.mesh.dispose();
+    this.drops.splice(this.drops.indexOf(d), 1);
+    return true;
+  }
+
+  private equipWeapon(kind: "clava" | "cajado"): void {
+    this.heroWeapon?.mesh.dispose();
+    const isClava = kind === "clava";
+    const mesh = isClava
+      ? MeshBuilder.CreateBox("arma_clava", { width: 0.45, height: 0.45, depth: 1.2 }, this.scene)
+      : MeshBuilder.CreateCylinder("arma_cajado", { diameter: 0.14, height: 1.3, tessellation: 8 }, this.scene);
+    const mat = new StandardMaterial("armaMat", this.scene);
+    mat.emissiveColor = Color3.FromHexString(isClava ? "#caa45a" : "#ff8a2c");
+    mat.diffuseColor = Color3.Black();
+    mat.specularColor = Color3.Black();
+    mat.disableLighting = true;
+    mesh.material = mat;
+    mesh.isPickable = false;
+    mesh.parent = this.hero.model.root;
+    mesh.position.set(0.45, 1.0, 0.5);
+    if (!isClava) mesh.rotation.x = Math.PI / 2;
+    this.heroWeapon = { kind, timer: isClava ? 10 : 999, charges: isClava ? 5 : 3, mesh };
+  }
+
+  private removeWeapon(): void {
+    this.heroWeapon?.mesh.dispose();
+    this.heroWeapon = null;
+  }
+
+  private updateWeapon(dt: number): void {
+    if (!this.heroWeapon) return;
+    if (this.heroWeapon.kind === "clava") this.heroWeapon.timer -= dt;
+    if (this.heroWeapon.charges <= 0 || this.heroWeapon.timer <= 0) this.removeWeapon();
+    // mantém os drops no chão por um tempo (some sozinho)
+    for (let i = this.drops.length - 1; i >= 0; i--) {
+      const d = this.drops[i]!;
+      d.life -= dt;
+      d.mesh.rotation.y += dt * 1.5; // gira para chamar atenção
+      if (d.life <= 0) {
+        d.mesh.dispose();
+        this.drops.splice(i, 1);
+      }
+    }
+  }
+
+  /** Arma equipada (HUD): "Clava (4)" / "Cajado (2x)" ou null. */
+  get weaponHud(): string | null {
+    if (!this.heroWeapon) return null;
+    return this.heroWeapon.kind === "clava" ? `Clava (${this.heroWeapon.charges})` : `Cajado (${this.heroWeapon.charges}x)`;
+  }
+
+  /** Bola de fogo AMIGA disparada pelo cajado capturado (fere inimigos). */
+  private spawnFriendlyFireball(target: Vector3): void {
+    if (!this.projMat) {
+      const mat = new StandardMaterial("projMat", this.scene);
+      mat.emissiveColor = Color3.FromHexString("#ff8a2c");
+      mat.diffuseColor = Color3.Black();
+      mat.specularColor = Color3.Black();
+      mat.disableLighting = true;
+      this.projMat = mat;
+    }
+    const o = this.hero.position;
+    const dx = target.x - o.x;
+    const dz = target.z - o.z;
+    const len = Math.hypot(dx, dz) || 1;
+    const mesh = MeshBuilder.CreateSphere("fireball_amiga", { diameter: 0.5, segments: 10 }, this.scene);
+    mesh.material = this.projMat;
+    mesh.isPickable = false;
+    mesh.position.set(o.x, o.y + 1.0, o.z);
+    this.projectiles.push({
+      mesh,
+      pos: new Vector3(o.x, o.y + 1.0, o.z),
+      vel: new Vector3((dx / len) * 12, 0, (dz / len) * 12),
+      life: 2.0,
+      damage: 18,
+      friendly: true,
+    });
+  }
+
   /** Descarta todos os inimigos atuais (ao trocar de andar da cripta). */
   clearEnemies(): void {
     for (const e of this.enemies) e.dispose();
@@ -166,7 +386,11 @@ export class CombatDirector {
     this.projectiles.length = 0;
     for (const e of this.essences) e.mesh.dispose();
     this.essences.length = 0;
+    for (const d of this.drops) d.mesh.dispose();
+    this.drops.length = 0;
+    this.removeWeapon();
     this.burns.clear();
+    this.lockedTarget = null; // troca de sala: solta o lock-on
   }
 
   /** Cria um projetil (esfera de fogo) viajando na direcao do disparo do conjurador. */
@@ -260,6 +484,7 @@ export class CombatDirector {
           this.hitStop.trigger(5 / 60);
           this.camera.shake(0.06);
           shieldClank();
+          this.events.emit("hero:block", {}); // parry: tinta de bronze (bloqueio bem-sucedido)
           continue; // não consome a bola: ela volta voando
         }
         if (hc.isBlocking && frontal) {
@@ -267,6 +492,7 @@ export class CombatDirector {
           this.fx.burst(p.pos, 10);
           this.camera.shake(0.03);
           shieldClank();
+          this.events.emit("hero:block", {}); // bloqueio bem-sucedido (tinta de bronze)
         } else {
           this.fx.burst(p.pos, 14);
           this.onEnemyStrike(p.damage); // esquiva (i-frames) ainda anula em takeDamage
@@ -314,16 +540,26 @@ export class CombatDirector {
     if (this.wakeTimer > 0) this.wakeTimer = Math.max(0, this.wakeTimer - combatDt);
     const sleeping = this.wakeTimer > 0;
     for (const e of this.enemies) {
-      if (!sleeping && e.update(combatDt, heroPos)) this.onEnemyStrike(e.attackDamage);
-      const shot = sleeping ? null : e.takeShot();
+      if (sleeping) {
+        e.emerge(combatDt); // despertar: sobe rasgando o chão enquanto a IA está suspensa
+        continue;
+      }
+      if (e.update(combatDt, heroPos)) {
+        // PARRY de melee: bloqueio no timing exato cambaleia o atacante e anula o dano.
+        if (!this.tryMeleeParry(e)) this.onEnemyStrike(e.attackDamage, e.attackUnblockable);
+      }
+      const shot = e.takeShot();
       if (shot) this.spawnProjectile(shot);
     }
     this.updateProjectiles(combatDt, heroPos);
     // Chefe Guardião (slot próprio): avança, resolve seu golpe e credita ao morrer.
     if (this.boss) {
-      if (!sleeping && this.boss.update(combatDt, heroPos)) this.onEnemyStrike(this.boss.attackDamage);
+      if (!sleeping && this.boss.update(combatDt, heroPos)) {
+        if (!this.tryMeleeParry(this.boss)) this.onEnemyStrike(this.boss.attackDamage, this.boss.attackUnblockable);
+      }
       if (!this.boss.health.alive && !this.bossCredited) {
         this.bossCredited = true;
+        this.hero.combat.gainSparkCharge(1); // matar repõe Fagulha (mantém o fogo na turba)
         this.events.emit("enemy:died", { reward: this.boss.reward });
       }
     }
@@ -331,6 +567,7 @@ export class CombatDirector {
     for (const e of this.enemies) {
       if (!e.health.alive && !this.dead.has(e)) {
         this.dead.add(e);
+        this.hero.combat.gainSparkCharge(1); // matar repõe 1 carga de Fagulha
         this.events.emit("enemy:died", { reward: e.reward });
         this.maybeDropEssence(e);
         const wd = e.weaponDrop;
@@ -340,6 +577,13 @@ export class CombatDirector {
     this.updateEssences(combatDt, heroPos);
     this.updateWeapon(combatDt);
     this.tickBurns(combatDt);
+
+    // Mira do herói: alvo travado (lock-on) ou, durante a antecipação do golpe/ember, o
+    // inimigo mais próximo no cone (soft-target). Senão, sem alvo (mira pela câmera).
+    const lockedPos = this.getLockedPos();
+    if (lockedPos) this.hero.setAimTarget(lockedPos);
+    else if (this.hero.combat.aiming || this.hero.combat.casting) this.hero.setAimTarget(this.softAimPos());
+    else this.hero.setAimTarget(null);
 
     return combatDt;
   }
@@ -353,7 +597,16 @@ export class CombatDirector {
     for (const target of this.targets) {
       if (!target.health.alive) continue;
       const hb = target.hurtbox;
-      if (!overlapSpheres(point, reach, hb.center, hb.radius)) continue;
+      // Acerto melee resolvido no PLANO (XZ), igual ao Golpe de Fogo: o combate é todo no
+      // chão, então a ALTURA do ponto de golpe (baixo, ~0.2) NÃO pode fazer o golpe passar
+      // por baixo do torso do alvo (hurtbox ~0.9 a 1.1). Era esse desalinhamento vertical no
+      // overlapSpheres 3D que fazia o golpe "errar" mesmo colado no inimigo/Guardião. Banda
+      // vertical larga só barra acerto absurdo (alvo muito acima/abaixo).
+      const rr = reach + hb.radius;
+      const dxh = hb.center.x - point.x;
+      const dzh = hb.center.z - point.z;
+      if (dxh * dxh + dzh * dzh > rr * rr) continue;
+      if (Math.abs(hb.center.y - point.y) > rr + 1.5) continue;
 
       const tuning = hc.strikeTuning;
       this.tmpDir.copyFrom(hb.center).subtractInPlace(this.hero.position);
@@ -365,7 +618,9 @@ export class CombatDirector {
       const burning = this.burns.has(target); // alvo queimado: leva mais dano e mais knockback
       const dmgMul = hc.damageMul * (burning ? 1 + BURN.dmgTakenBonus : 1);
       const kb = tuning.knockback * (burning ? 1 + BURN.knockbackBonus : 1);
-      const { guarded } = target.takeHit(tuning.damage * dmgMul, this.tmpDir, kb, heavy);
+      const clavaHeavy = this.heroWeapon?.kind === "clava" && heavy; // clava capturada: pesado = smash de área
+      const wMul = clavaHeavy ? 2 : 1;
+      const { guarded } = target.takeHit(tuning.damage * dmgMul * wMul, this.tmpDir, kb, heavy, tuning.poise ?? 0, true);
       if (guarded) {
         // Bloqueado pela guarda: feedback metálico curto (ensina a flanquear / usar o pesado).
         this.hitStop.trigger(2 / 60);
@@ -378,6 +633,11 @@ export class CombatDirector {
         this.fx.burst(point, heavy ? 26 : 16);
         hitThunk(heavy);
         hc.lifestealHeal(tuning.damage * hc.damageMul); // "Sede da Brasa": golpe rouba vida
+        // CAJADO capturado: cada acerto lança uma bola de fogo (amiga) no alvo (3 cargas).
+        if (this.heroWeapon?.kind === "cajado" && this.heroWeapon.charges > 0) {
+          this.spawnFriendlyFireball(hb.center);
+          this.heroWeapon.charges -= 1;
+        }
       }
       this.events.emit("combat:hit", {
         damage: tuning.damage,
@@ -386,6 +646,41 @@ export class CombatDirector {
         point: { x: point.x, y: point.y, z: point.z },
       });
       hc.markHit(); // um acerto por golpe
+      // CLAVA capturada: o smash do pesado atinge TAMBÉM os inimigos próximos do impacto.
+      if (clavaHeavy && this.heroWeapon) {
+        this.heroWeapon.charges -= 1;
+        for (const o of this.targets) {
+          if (o === target || !o.health.alive) continue;
+          const ob = o.hurtbox;
+          const ax = ob.center.x - point.x;
+          const az = ob.center.z - point.z;
+          if (ax * ax + az * az < 3 * 3) {
+            this.tmpDir.set(ax, 0, az);
+            if (this.tmpDir.lengthSquared() < 1e-4) this.tmpDir.set(0, 0, 1);
+            this.tmpDir.normalize();
+            o.takeHit(tuning.damage * dmgMul * 2, this.tmpDir, kb, true, tuning.poise ?? 0);
+          }
+        }
+        this.fx.burst(point, 30);
+        this.camera.shake(0.1);
+      }
+      // CLEAVE (finalizadora/pesado): respinga nos inimigos próximos do impacto (resposta de
+      // horda). Dano e poise parciais; não acumula com o smash da clava (que já é AoE maior).
+      if (tuning.cleave && tuning.cleave > 0 && !clavaHeavy) {
+        const r2 = tuning.cleave * tuning.cleave;
+        for (const o of this.targets) {
+          if (o === target || !o.health.alive) continue;
+          const ob = o.hurtbox;
+          const ax = ob.center.x - point.x;
+          const az = ob.center.z - point.z;
+          if (ax * ax + az * az > r2) continue;
+          this.tmpDir.set(ax, 0, az);
+          if (this.tmpDir.lengthSquared() < 1e-4) this.tmpDir.set(0, 0, 1);
+          this.tmpDir.normalize();
+          o.takeHit(tuning.damage * hc.damageMul * 0.55, this.tmpDir, tuning.knockback, heavy, (tuning.poise ?? 0) * 0.5);
+        }
+        this.fx.burst(point, heavy ? 20 : 12);
+      }
       break;
     }
   }
@@ -413,7 +708,7 @@ export class CombatDirector {
       } else {
         this.tmpDir.copyFrom(fwd);
       }
-      target.takeHit(t.damage, this.tmpDir, t.knockback, true); // guardBreak: o fogo ignora o escudo
+      target.takeHit(t.damage, this.tmpDir, t.knockback, true, t.poise ?? 0); // guardBreak: o fogo ignora o escudo
       this.applyBurn(target); // o fogo deixa Queimadura
       // W3: o fogo REACENDE a Brasa no Guardião -> cambaleio + dano dobrado (gangorra de luz).
       (target as { reignite?: () => void }).reignite?.();
@@ -490,6 +785,7 @@ export class CombatDirector {
     mesh.isPickable = false;
     const pos = new Vector3(c.x, 0.8, c.z);
     mesh.position.copyFrom(pos);
+    this.popIn(mesh, 200); // ESTILO (Bloco 2): a essência brota com um pop
     this.essences.push({ mesh, pos, life: ABSORB.essencia.lifeSec });
   }
 
@@ -506,6 +802,8 @@ export class CombatDirector {
       const got = dx * dx + dz * dz < rr;
       if (got) {
         this.hero.combat.heal(this.hero.combat.maxHealth * ABSORB.essencia.healFrac);
+        this.events.emit("hero:heal", {}); // feedback positivo de cura
+        healChime();
         this.fx.burst(e.pos, 10);
       }
       if (got || e.life <= 0) {
@@ -516,17 +814,59 @@ export class CombatDirector {
   }
 
   /** Um inimigo conectou o golpe no herói: aplica o dano DELE (i-frames anulam, bloqueio reduz) + feedback. */
-  private onEnemyStrike(damage: number): void {
+  private onEnemyStrike(damage: number, unblockable = false): void {
     const blocking = this.hero.combat.isBlocking;
-    const { applied, died } = this.hero.combat.takeDamage(damage);
-    if (!applied) return; // esquiva com i-frames anulou: sem feedback de dano (recompensa o timing)
-    this.camera.shake(blocking ? 0.05 : 0.1);
-    heroHurt(blocking);
-    this.events.emit("hero:hit", { blocked: blocking, died });
+    const wasInvuln = this.hero.combat.invulnerable; // i-frames ativos no instante do golpe?
+    const { applied, died, guardBroken } = this.hero.combat.takeDamage(damage, unblockable);
+    if (!applied) {
+      // ESQUIVA PERFEITA: anulado pelos i-frames na janela inicial -> recompensa (uma por rolamento).
+      if (wasInvuln && this.hero.combat.consumePerfectDodge()) this.rewardPerfectDodge();
+      return; // esquiva com i-frames anulou: sem feedback de dano (recompensa o timing)
+    }
+    // Bloqueio só conta se foi bloqueável E a guarda não quebrou por falta de stamina (Tier 3).
+    const blocked = blocking && !unblockable && !guardBroken;
+    this.camera.shake(blocked ? 0.05 : guardBroken ? 0.14 : 0.1);
+    heroHurt(blocked);
+    if (blocked) this.events.emit("hero:block", {}); // aparou o golpe: tinta de bronze
+    this.events.emit("hero:hit", { blocked, died });
     if (died && !this.heroDead) {
       this.heroDead = true;
       this.events.emit("hero:died", {}); // TERMINAL: o app mostra a derrota e oferece recomeçar
     }
+  }
+
+  /** Recompensa da ESQUIVA PERFEITA: freeze breve + 1 carga de Fagulha + feedback (ciano + som). */
+  private rewardPerfectDodge(): void {
+    this.hitStop.trigger(10 / 60); // quase-colisão congela um instante (sensação de slow-mo)
+    this.camera.shake(0.04);
+    this.hero.combat.gainSparkCharge(1);
+    this.fx.burst(this.hero.position.add(new Vector3(0, 1.2, 0)), 14);
+    perfectDodgeChime();
+    this.events.emit("hero:perfect", {}); // flash ciano no HUD
+  }
+
+  /**
+   * PARRY de melee: se o herói está na JANELA de parry (bloqueio recém-iniciado), encara o
+   * atacante e o golpe é BLOQUEÁVEL, apara: cambaleia o atacante, anula o dano, devolve
+   * stamina e dá feedback de bronze. Inquebrável e golpe pelas costas não se aparam.
+   */
+  private tryMeleeParry(e: { attackUnblockable: boolean; hurtbox: { center: Vector3 }; stagger: (s?: number) => void }): boolean {
+    const hc = this.hero.combat;
+    if (!hc.parryActive || e.attackUnblockable) return false;
+    this.hero.getFacing(this.tmpFacing);
+    const c = e.hurtbox.center;
+    const dx = c.x - this.hero.position.x;
+    const dz = c.z - this.hero.position.z;
+    const len = Math.hypot(dx, dz) || 1;
+    if ((this.tmpFacing.x * dx + this.tmpFacing.z * dz) / len < 0.3) return false; // não está de frente
+    e.stagger(0.8);
+    hc.rewardParry();
+    this.fx.burst(c, 18);
+    this.hitStop.trigger(6 / 60);
+    this.camera.shake(0.05);
+    shieldClank();
+    this.events.emit("hero:block", {}); // tinta de bronze (parry bem-sucedido)
+    return true;
   }
 
   /** Rearma a morte do herói (ao recomeçar o andar após a derrota). */

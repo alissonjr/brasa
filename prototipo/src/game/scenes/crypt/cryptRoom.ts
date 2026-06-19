@@ -1,4 +1,5 @@
 import {
+  Animation,
   Color3,
   DefaultRenderingPipeline,
   DirectionalLight,
@@ -17,8 +18,9 @@ import {
   Vector3,
 } from "@babylonjs/core";
 import type { AbstractMesh, AssetContainer, Camera, IDisposable, Observer, Scene } from "@babylonjs/core";
-import { loadContainer } from "@engine";
+import { loadContainer, toonifyHierarchy } from "@engine";
 import { pickLayout } from "./cryptLayouts";
+import type { EnemyBounds } from "../../actors/enemies/skeleton";
 
 /**
  * CAMADA JOGO (Brasa). Sala-cripta de referencia (KayKit Dungeon, CC0) montada para o
@@ -61,12 +63,45 @@ export interface Room {
   spawn: Vector3; // onde a Acendedora entra
   exit: { x: number; z: number; radius: number }; // a PASSAGEM (alçapão): pisar = descer
   enemyAnchor: { x: number; z: number }; // centro em torno do qual os inimigos surgem
+  /** Terreno andável dos inimigos: dentro das paredes e à frente do estrado do altar (que tem
+   *  colisão e barra o herói). Impede que um inimigo ranged recue para um ponto inalcançável. */
+  enemyBounds: EnemyBounds;
   brazier: Vector3;
+  inscriptionPos: { x: number; z: number }; // nicho de parede: ponto de leitura por proximidade
   /** Vira a luz da sala de fria (t=0) para quente (t=1): acende o braseiro + reaquece a cena. */
   setBrazierLit(t: number): void;
   /** Abre a passagem (alçapão): chamado após a Brasa ser acesa. */
   setCleared(open: boolean): void;
+  /**
+   * ARENA DO GUARDIÃO (só quando def.kind === "guardiao"): controles da gangorra de luz e dos
+   * hazards de chão. Ausente nas salas comuns. O chefe (guardiao.ts) é a fonte de verdade dos
+   * dois medidores; a arena só REAGE: escurece/esfria a câmara conforme a Brasa apaga e telegrafa
+   * as zonas de frio da fase 3. Ver spec-chefe-guardiao §3, §4, §5.6.
+   */
+  arena?: ArenaControls;
   dispose(): void;
+}
+
+export interface ArenaControls {
+  /**
+   * Lê a LUZ da Brasa (0..1) no mundo: a luz-chave da câmara segue o medidor. light=1 -> arena
+   * quente/laranja e clara (Guardião exposto); light=0 -> breu azul cerrado (Guardião perigoso).
+   * Chamado todo frame com `boss.brasaLightFraction`. Não toca a geometria, só luz/névoa/decalque.
+   */
+  setBrasaLight(light: number): void;
+  /**
+   * Maré de breu (fase 3, spec §5.6): liga/desliga o adensamento das bordas. Sutil, nunca cegante
+   * (a luz central da Brasa sempre ilumina o entorno). `on` deriva de o chefe estar na fase 3.
+   */
+  setMareDeBreu(on: boolean): void;
+  /**
+   * Frio que morde (fase 3, spec §5.6): planta uma zona de gelo telegrafada em (x,z). A zona
+   * cresce (telegrafia azul), fica ativa por `activeSec` e some. O chefe consulta `inActiveFrost`
+   * por frame para punir quem fica parado nela. Limite interno de zonas simultâneas (perf).
+   */
+  spawnFrostZone(x: number, z: number, radius: number, telegraphSec: number, activeSec: number): void;
+  /** true se (x,z) está dentro de uma zona de gelo ATIVA agora (o chefe pune quem fica parado nela). */
+  inActiveFrost(x: number, z: number): boolean;
 }
 
 // Containers do kit (carregados uma vez, compartilhados por todos os andares).
@@ -107,8 +142,11 @@ export function setupCryptScene(scene: Scene, camera: Camera): CryptCtx {
   scene.fogColor = Color3.FromHexString("#1a2636");
   scene.fogDensity = 0.006;
 
-  const glow = new GlowLayer("glow", scene, { blurKernelSize: 32 });
-  glow.intensity = 0.8;
+  // GlowLayer (só acende os EMISSIVOS incluídos: brasa, chamas, feixe) = o brilho quente
+  // sobre os itens coloridos. É determinístico e não lava a sala. O bloom do pipeline
+  // (que lavava a tela toda, intermitente) fica DESLIGADO; o drama vem daqui.
+  const glow = new GlowLayer("glow", scene, { blurKernelSize: 40 });
+  glow.intensity = 0.85;
 
   const ambient = new HemisphericLight("luz_fria", new Vector3(0, 1, 0), scene);
   ambient.intensity = 0.62;
@@ -118,20 +156,24 @@ export function setupCryptScene(scene: Scene, camera: Camera): CryptCtx {
 
   const key = new DirectionalLight("luz_sombra", new Vector3(-0.25, -1, -0.18), scene);
   key.position = new Vector3(4, 16, -2);
-  key.intensity = 1.0;
+  key.intensity = 0.62; // ambient+key somam ~1: a pedra mantém cor, não entra no bloom
   key.diffuse = Color3.FromHexString("#aebfd2");
   key.specular = Color3.Black();
-  const shadow = new ShadowGenerator(1024, key);
-  shadow.useBlurExponentialShadowMap = true;
-  shadow.blurKernel = 32;
-  shadow.darkness = 0.35;
+  const shadow = new ShadowGenerator(2048, key);
+  // PCF (não ESM): o Exponential Shadow Map vazava/estourava branco de forma intermitente
+  // com a geometria mais alta + mais casters (candelabros, 2a fileira). PCF é estável.
+  shadow.usePercentageCloserFiltering = true;
+  shadow.filteringQuality = ShadowGenerator.QUALITY_MEDIUM;
+  shadow.darkness = 0.4;
+  shadow.bias = 0.005;
+  shadow.normalBias = 0.01;
 
   // Pos-processamento (bloom da Brasa, vignette, grao); sem ACES (esmaga low-poly).
   const pipe = new DefaultRenderingPipeline("criptaPipe", true, scene, [camera]);
   pipe.fxaaEnabled = true;
-  pipe.bloomEnabled = true;
-  pipe.bloomThreshold = 0.8;
-  pipe.bloomWeight = 0.45;
+  pipe.bloomEnabled = false; // DESLIGADO: era ele que lavava a tela toda de branco (intermitente).
+  pipe.bloomThreshold = 0.85; // (sem efeito com bloom off; mantido para referência)
+  pipe.bloomWeight = 0.5;
   pipe.bloomKernel = 64;
   pipe.bloomScale = 0.5;
   pipe.imageProcessingEnabled = true;
@@ -164,6 +206,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // ignite (0..1): fator de aceso. Tochas de parede nascem 1 (sempre acesas); o BRASEIRO
   // nasce 0 (apagado) e sobe na virada frio->quente ao ser aceso.
   const flames: { mesh: Mesh; light: PointLight | null; base: number; seed: number; ignite: number }[] = [];
+  let arenaDispose: (() => void) | undefined; // descarte extra da arena do Guardião (observer/glow)
   const rng = (i: number) => Math.abs((Math.sin((i + def.index * 100) * 12.9898) * 43758.5453) % 1);
 
   const track = (m: AbstractMesh): AbstractMesh => {
@@ -368,6 +411,73 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   const fw = kitBase(P.floor_wood!, "floor");
   if (fw) kitInstances(fw, [{ x: -7, z: -3 }, { x: -7, z: -6 }]);
 
+  // --- W4: DECALQUE DE CHÃO por tipo de sala (poça / círculo ritual / rachaduras) ---
+  // Malha plana fina logo acima do piso (sem z-fight). 1 draw call cada (malha única).
+  // O material e a cor-base ficam capturados para a coreografia de luz (brilham ao acender).
+  let decalMat: StandardMaterial | null = null;
+  let decalBaseEmissive = Color3.Black();
+  {
+    const mat = new StandardMaterial("decalMat", scene);
+    mat.diffuseColor = Color3.Black();
+    mat.specularColor = Color3.Black();
+    mat.disableLighting = true;
+    let mesh: Mesh | null = null;
+    if (def.kind === "cisterna") {
+      // poça/lodo: disco azul-esverdeado translúcido (cripta inundada) com "linha" de água.
+      mesh = MeshBuilder.CreateDisc("decal_poca", { radius: Math.min(HALFX, HALFZ) * 0.38, tessellation: 44 }, scene);
+      mesh.rotation.x = Math.PI / 2;
+      mat.emissiveColor = Color3.FromHexString("#15323b");
+      mat.alpha = 0.5;
+    } else if (def.kind === "santuario") {
+      // círculo ritual: anel dourado gravado no centro.
+      mesh = MeshBuilder.CreateTorus("decal_circulo", { diameter: 5.4, thickness: 0.16, tessellation: 56 }, scene);
+      mat.emissiveColor = Color3.FromHexString("#b98f4a");
+      mat.alpha = 0.85;
+    } else if (def.kind === "guardiao") {
+      // rachaduras irradiando do centro (clímax): barras finas mescladas (1 draw call).
+      const bars: Mesh[] = [];
+      for (let i = 0; i < 9; i++) {
+        const b = MeshBuilder.CreateBox("rachadura", { width: 0.14, height: 0.03, depth: 4.5 + (i % 3) * 1.6 }, scene);
+        b.rotation.y = (i / 9) * Math.PI * 2 + rng(i) * 0.3;
+        b.bakeCurrentTransformIntoVertices();
+        bars.push(b);
+      }
+      mesh = Mesh.MergeMeshes(bars, true, true) ?? null;
+      mat.emissiveColor = Color3.FromHexString("#7a1c0c");
+      mat.alpha = 0.95;
+    }
+    if (mesh) {
+      mesh.material = mat;
+      mesh.isPickable = false;
+      mesh.position.set(0, 0.05, Math.min(0, AZ - 6)); // centro da zona de combate
+      mesh.parent = roomRoot;
+      decalMat = mat;
+      decalBaseEmissive = mat.emissiveColor.clone();
+    } else {
+      mat.dispose();
+    }
+  }
+
+  // --- W4: NICHO/ALCOVA de parede (>= 1 por sala): recuo escuro com ossada + ponto de
+  //     inscrição (lido por proximidade, item 5). Recesso = caixa escura encostada na
+  //     parede leste; uma lápide e caveiras dentro. Posição exposta como inscriptionPos. ---
+  const NICHE_Z = -(HALFZ - 5); // canto sudeste, longe do altar e da pista central
+  const inscriptionPos = { x: HALFX - 1.5, z: NICHE_Z };
+  {
+    const nm = new StandardMaterial("nichoMat", scene);
+    nm.diffuseColor = Color3.FromHexString("#0a0d12");
+    nm.specularColor = Color3.Black();
+    const recess = MeshBuilder.CreateBox("nicho", { width: 0.45, height: 2.4, depth: 2.3 }, scene);
+    recess.material = nm;
+    recess.position.set(HALFX - 0.28, 1.5, NICHE_Z);
+    recess.isPickable = false;
+    recess.receiveShadows = true;
+    recess.parent = roomRoot;
+    placeProp(P.gravestone!, { x: HALFX - 0.95, z: NICHE_Z, rotY: -Math.PI / 2 });
+    batch("skull", { x: HALFX - 1.1, z: NICHE_Z + 0.55, rotY: 0.5, scale: 0.34 });
+    batch("skull", { x: HALFX - 1.2, z: NICHE_Z - 0.55, rotY: 1.2, scale: 0.3 });
+  }
+
   // --- Paredes (thin instances) + variacao quebrada (da planta) ---
   const wallBase = kitBase(P.wall!, "base");
   const brokenBase = kitBase(P.wall_broken!, "base");
@@ -393,12 +503,19 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   track(ceilCol);
 
   for (const c of L.wallColliders) wallCollider(c.cx, c.cz, c.w, c.d);
-  for (const c of L.corners) placeProp(P.wall_corner!, { x: c.x, z: c.z });
+  // Cantoneiras: duas fileiras (acompanham a parede dupla até ROOM_H).
+  for (const c of L.corners) {
+    placeProp(P.wall_corner!, { x: c.x, z: c.z });
+    placeProp(P.wall_corner!, { x: c.x, z: c.z, y: WALL_H, cast: false });
+  }
   placeProp(P.door!, { x: 2, z: -HALFZ + 0.4 });
 
-  // --- Pilares (inteiros + quebrados) da planta - instanciados (1 draw call por tipo) ---
+  // --- Pilares: coluna INTEIRA até o teto (2 cortes empilhados nos inteiros) ---
   for (const p of L.pillars) {
     batch(p.broken ? "pillar_broken" : "pillar", { x: p.x, z: p.z, rotY: p.rotY, collider: true }, true);
+    // Pilar inteiro vai do chão ao teto: segundo corte em cima (sem colisor extra; o de
+    // baixo já barra). Os quebrados ficam baixos de propósito (ruína).
+    if (!p.broken) batch("pillar", { x: p.x, z: p.z, rotY: p.rotY, y: WALL_H }, true);
   }
 
   // --- Altar ao fundo (norte): estrado + degrau + braseiro (a Brasa) ---
@@ -467,34 +584,43 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     makeFlame(new Vector3(t.x + ix, 6.35, t.z + iz), 0.6, 0, false);
   }
 
-  // --- CANDELABROS pendentes do teto (anel de metal + velas reais + luz quente que pisca) ---
+  // --- CANDELABROS de ferro pendentes do teto: cubo central + braços radiais + aro +
+  //     6 grupos de velas acesas + luz quente. Fixtura de verdade, não um ponto de luz. ---
   const chandMat = new StandardMaterial("matCandelabro", scene);
-  chandMat.diffuseColor = Color3.FromHexString("#2a2620");
-  chandMat.specularColor = Color3.FromHexString("#6b5a3a"); // leve brilho de metal
+  chandMat.diffuseColor = Color3.FromHexString("#241f18");
+  chandMat.specularColor = Color3.FromHexString("#7a6638"); // brilho de ferro forjado
+  const ARMS = 6;
+  const R = 1.15; // raio do candelabro
   const hangChandelier = (cxp: number, czp: number): void => {
-    const ringY = ROOM_H - 1.8; // ~6.2: acima da câmera de jogo (~5.7), não atrapalha
+    const ringY = ROOM_H - 1.7; // ~6.3: acima da câmera de jogo, mas claramente visível ao olhar pra cima
+    const part = (m: Mesh): void => { m.material = chandMat; m.isPickable = false; track(m); ctx.shadow.addShadowCaster(m); casters.push(m); };
+    // corrente do teto ao cubo central
     const chain = MeshBuilder.CreateCylinder("corrente", { diameter: 0.07, height: ROOM_H - ringY, tessellation: 6 }, scene);
-    chain.position.set(cxp, (ROOM_H + ringY) / 2, czp);
-    chain.material = chandMat;
-    chain.isPickable = false;
-    track(chain);
-    const ring = MeshBuilder.CreateTorus("anel_candelabro", { diameter: 1.5, thickness: 0.12, tessellation: 18 }, scene);
-    ring.position.set(cxp, ringY, czp);
-    ring.material = chandMat;
-    ring.isPickable = false;
-    track(ring);
-    ctx.shadow.addShadowCaster(ring);
-    casters.push(ring);
-    for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * Math.PI * 2;
-      placeProp(P.candle_triple!, { x: cxp + Math.cos(a) * 0.66, z: czp + Math.sin(a) * 0.66, y: ringY, rotY: a, scale: 0.8, cast: false });
+    chain.position.set(cxp, (ROOM_H + ringY) / 2, czp); part(chain);
+    // cubo/eixo central
+    const hub = MeshBuilder.CreateCylinder("eixo_candelabro", { diameter: 0.28, height: 0.5, tessellation: 8 }, scene);
+    hub.position.set(cxp, ringY, czp); part(hub);
+    // aro de ferro
+    const ring = MeshBuilder.CreateTorus("aro_candelabro", { diameter: R * 2, thickness: 0.09, tessellation: 22 }, scene);
+    ring.position.set(cxp, ringY - 0.1, czp); part(ring);
+    for (let i = 0; i < ARMS; i++) {
+      const a = (i / ARMS) * Math.PI * 2;
+      const ex = cxp + Math.cos(a) * R;
+      const ez = czp + Math.sin(a) * R;
+      // braço radial (barra fina) do cubo ao aro
+      const arm = MeshBuilder.CreateBox("braco_candelabro", { width: R, height: 0.06, depth: 0.06 }, scene);
+      arm.position.set(cxp + Math.cos(a) * R / 2, ringY + 0.05, czp + Math.sin(a) * R / 2);
+      arm.rotation.y = -a; part(arm);
+      // copo + vela acesa na ponta do braço
+      placeProp(P.candle_triple!, { x: ex, z: ez, y: ringY + 0.05, rotY: a, scale: 0.7, cast: false });
+      makeFlame(new Vector3(ex, ringY + 0.45, ez), 0.34, 0, false); // chama da vela (emissiva, sem luz própria)
     }
-    makeFlame(new Vector3(cxp, ringY + 0.5, czp), 1.0, 0.5, true); // luz quente pendente, suave (pisca)
+    makeFlame(new Vector3(cxp, ringY + 0.2, czp), 0.8, 0, false); // brilho central (emissivo; sem point-light p/ não estourar a sala)
   };
-  // Eixo central, fora do altar (norte) e da passagem; densidade cresce com a profundidade da sala.
-  hangChandelier(0, 0);
+  // Eixo central, espaçados; densidade cresce com a profundidade da sala.
   hangChandelier(0, -(HALFZ - 6));
-  if (HALFZ >= 18) hangChandelier(0, HALFZ - 9);
+  hangChandelier(0, Math.min(2, AZ - 4));
+  if (HALFZ >= 16) hangChandelier(0, -(HALFZ - 13));
 
   // --- DRESSING por TIPO DE SALA (def.kind) ---
   // Clusters tematicos; cada tipo de sala (RoomDef.kind) liga um subconjunto. Pecas
@@ -634,6 +760,11 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // Instancia todo o dressing repetido acumulado (1 draw call por tipo) + colisores.
   flushBatches();
 
+  // ESTILO (Bloco 1, spec-estilo-visual-render §4.1a): cenário em faixas toon. Converte só as
+  // malhas do MUNDO (roomRoot) que são LIT; chamas/feixe/decalques (disableLighting) ficam
+  // lisos e os atores não estão em roomRoot, então o emissivo de combate deles fica intacto.
+  toonifyHierarchy(roomRoot, { skipDisableLighting: true, maxLights: 6 });
+
   // Materiais aceitam ate 6 luzes (evita a ambiente ser descartada).
   for (const m of scene.materials) {
     const mm = m as unknown as { maxSimultaneousLights?: number };
@@ -673,32 +804,251 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   const WARM_FOG = Color3.FromHexString("#241a14");
   const COLD_AMB = Color3.Lerp(Color3.FromHexString("#9fb4cc"), Color3.FromHexString("#6f86a6"), depth);
   const WARM_AMB = Color3.FromHexString("#a98f6e");
-  const COLD_INTENSITY = 0.7 - 0.16 * depth; // raso mais iluminado; fundo mais sombrio
+  const COLD_INTENSITY = 0.42 - 0.08 * depth; // teto fecha a luz; mantém cor/contraste sem lavar
+  // W4: COREOGRAFIA de baixo para cima. A virada frio->quente nao e um lerp uniforme: a luz
+  // quente NASCE no chao (braseiro + decalque), SOBE pelas paredes (oferendas + nevoa) e por
+  // fim alcanca a abobada (luz ambiente do "ceu"). t e fatiado em tres estagios sobrepostos.
+  const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
   const setBrazierLit = (t: number): void => {
-    const k = t < 0 ? 0 : t > 1 ? 1 : t;
-    brazierFlame.ignite = k;
-    offerL.ignite = k;
-    offerR.ignite = k;
-    scene.fogColor = Color3.Lerp(COLD_FOG, WARM_FOG, k);
-    ctx.ambient.intensity = COLD_INTENSITY - 0.22 * k; // o quente passa a vir do braseiro, não do "céu"
-    ctx.ambient.diffuse = Color3.Lerp(COLD_AMB, WARM_AMB, k);
-    ctx.key.intensity = 1.0 - 0.3 * k;
+    const k = clamp01(t);
+    const floorK = clamp01(t / 0.45); // 1o: chao (braseiro + decalque)
+    const wallK = clamp01((t - 0.35) / 0.45); // 2o: paredes (oferendas + nevoa)
+    const vaultK = clamp01((t - 0.6) / 0.4); // 3o: abobada (luz ambiente)
+    brazierFlame.ignite = floorK;
+    offerL.ignite = wallK;
+    offerR.ignite = wallK;
+    if (decalMat) {
+      // o decalque do chao "pega" a luz primeiro (brilha ao acender).
+      const g = 0.45 + 0.55 * floorK;
+      decalMat.emissiveColor.set(decalBaseEmissive.r * g, decalBaseEmissive.g * g, decalBaseEmissive.b * g);
+    }
+    scene.fogColor = Color3.Lerp(COLD_FOG, WARM_FOG, wallK);
+    ctx.ambient.intensity = COLD_INTENSITY - 0.22 * vaultK; // a abobada esfria por ultimo
+    ctx.ambient.diffuse = Color3.Lerp(COLD_AMB, WARM_AMB, vaultK);
+    ctx.key.intensity = 0.62 - 0.2 * k;
   };
   setBrazierLit(0); // a sala nasce FRIA (braseiro apagado)
   scene.fogDensity = 0.004 + 0.007 * depth; // raso límpido; fundo enevoado (não tocado pela virada)
+
+  // ===========================================================================================
+  // ARENA DO GUARDIÃO (só def.kind === "guardiao"): a gangorra de luz lida no MUNDO + os hazards
+  // de chão da fase 3. O chefe é a fonte de verdade; aqui só REAGIMOS aos medidores dele.
+  // Tudo é descartável (rastreado em roomRoot/observers/aggregates) e barato (poucas malhas).
+  // ===========================================================================================
+  let arena: ArenaControls | undefined;
+  if (def.kind === "guardiao") {
+    // --- Luz-chave da Brasa lida no mundo (spec §3, §4.1): a Brasa central é a luz-chave;
+    //     sua intensidade VARIA com o estágio (forte/bruxulejando/quase morta). Reusa a chama
+    //     do braseiro central como medidor visível: light alta -> arena clara e quente; light
+    //     baixa -> breu azul cerrado. Não acende a virada de vitória (essa é setBrazierLit). ---
+    const ARENA_COLD_FOG = Color3.FromHexString("#0e1a2b"); // breu azul (§3)
+    const ARENA_WARM_FOG = Color3.FromHexString("#3e5c7e");
+    const ARENA_COLD_AMB = Color3.FromHexString("#3e5c7e"); // azul-frio quando apaga
+    const ARENA_WARM_AMB = Color3.FromHexString("#ffa63d"); // laranja-quente quando arde (§3)
+    let brasaShown = -1; // último valor aplicado (evita recomputar quando estável)
+
+    const setBrasaLight = (light: number): void => {
+      const v = clamp01(light);
+      if (Math.abs(v - brasaShown) < 0.004) return; // estável: nada a fazer
+      brasaShown = v;
+      // A chama central da Brasa moribunda acompanha o medidor (some quase de todo no breu).
+      brazierFlame.ignite = 0.15 + 0.85 * v;
+      brazierFlame.base = 1.0 + 2.4 * v; // a luz pontual cresce com a luz da Brasa
+      // Névoa + ambiente: arde -> claro/quente; apaga -> breu azul (a luz é a leitura de fase).
+      scene.fogColor = Color3.Lerp(ARENA_COLD_FOG, ARENA_WARM_FOG, v);
+      scene.fogDensity = 0.012 - 0.006 * v; // breu mais denso quando apaga (sem cegar)
+      ctx.ambient.intensity = 0.16 + 0.34 * v; // câmara escura no breu, exposta na luz
+      ctx.ambient.diffuse = Color3.Lerp(ARENA_COLD_AMB, ARENA_WARM_AMB, v);
+      ctx.key.intensity = 0.22 + 0.5 * v;
+      if (decalMat) {
+        // as rachaduras do chão brilham em tiço quando a Brasa está fraca (leitura redundante).
+        const g = 0.4 + 0.9 * (1 - v);
+        decalMat.emissiveColor.set(decalBaseEmissive.r * g, decalBaseEmissive.g * g, decalBaseEmissive.b * g);
+      }
+    };
+
+    // --- Maré de breu (§5.6): um anel escuro semitransparente nas BORDAS da arena que adensa
+    //     na fase 3. Sutil (alpha baixo), nunca cegante; a fagulha do herói sempre ilumina o
+    //     entorno imediato (não mexemos no centro). 1 draw call (toro plano emissivo escuro). ---
+    const breuMat = new StandardMaterial("mareBreuMat", scene);
+    breuMat.diffuseColor = Color3.Black();
+    breuMat.specularColor = Color3.Black();
+    breuMat.emissiveColor = Color3.FromHexString("#05080f");
+    breuMat.disableLighting = true;
+    breuMat.alpha = 0;
+    const breuRing = MeshBuilder.CreateTorus(
+      "mare_breu",
+      { diameter: Math.min(HALFX, HALFZ) * 1.7, thickness: Math.min(HALFX, HALFZ) * 0.85, tessellation: 40 },
+      scene
+    );
+    breuRing.rotation.x = Math.PI / 2;
+    breuRing.position.set(0, 0.5, AZ - 6);
+    breuRing.material = breuMat;
+    breuRing.isPickable = false;
+    breuRing.parent = roomRoot;
+    breuRing.setEnabled(false);
+    let breuTarget = 0; // alpha-alvo da maré (0 desligada; ~0.5 ligada na fase 3)
+    const setMareDeBreu = (on: boolean): void => {
+      breuTarget = on ? 0.5 : 0;
+      if (on && !breuRing.isEnabled()) breuRing.setEnabled(true);
+    };
+
+    // --- Frio que morde (§5.6): zonas de gelo telegrafadas. Cada zona é UM disco azul que
+    //     CRESCE na telegrafia, fica ATIVA (cor saturada + cristais) e some. Pool fixo (perf):
+    //     no máximo MAX_FROST zonas; reciclamos a mais antiga. Cristais = 3 prismas finos por
+    //     zona (1 draw call por zona via merge), girando devagar. ---
+    const MAX_FROST = 4;
+    const frostMat = new StandardMaterial("geloMat", scene);
+    frostMat.diffuseColor = Color3.Black();
+    frostMat.specularColor = Color3.Black();
+    frostMat.emissiveColor = Color3.FromHexString("#3fa9c9");
+    frostMat.disableLighting = true;
+    frostMat.alpha = 0.5;
+    interface FrostZone {
+      x: number;
+      z: number;
+      radius: number;
+      telegraph: number; // segundos de antecipação restantes
+      active: number; // segundos de janela ativa restantes (após a telegrafia)
+      disc: Mesh;
+      crystals: Mesh;
+      alive: boolean;
+    }
+    const frostZones: FrostZone[] = [];
+    const makeFrostMeshes = (): { disc: Mesh; crystals: Mesh } => {
+      const disc = MeshBuilder.CreateDisc("gelo", { radius: 1, tessellation: 28 }, scene);
+      disc.rotation.x = Math.PI / 2;
+      disc.material = frostMat;
+      disc.isPickable = false;
+      disc.parent = roomRoot;
+      ctx.glow.addIncludedOnlyMesh(disc); // leve halo frio (leitura no breu)
+      // cristais: 3 prismas finos, mesclados (1 draw call), levantados do chão.
+      const prisms: Mesh[] = [];
+      for (let i = 0; i < 3; i++) {
+        const c = MeshBuilder.CreateCylinder("cristal", { diameterTop: 0, diameterBottom: 0.22, height: 0.7 + 0.2 * i, tessellation: 4 }, scene);
+        c.position.set(Math.cos(i * 2.1) * 0.4, 0.35, Math.sin(i * 2.1) * 0.4);
+        c.bakeCurrentTransformIntoVertices();
+        prisms.push(c);
+      }
+      const crystals = Mesh.MergeMeshes(prisms, true, true)!;
+      crystals.material = frostMat;
+      crystals.isPickable = false;
+      crystals.parent = roomRoot;
+      return { disc, crystals };
+    };
+    const spawnFrostZone = (x: number, z: number, radius: number, telegraphSec: number, activeSec: number): void => {
+      let zone = frostZones.find((f) => !f.alive);
+      if (!zone && frostZones.length < MAX_FROST) {
+        const { disc, crystals } = makeFrostMeshes();
+        zone = { x, z, radius, telegraph: telegraphSec, active: activeSec, disc, crystals, alive: true };
+        frostZones.push(zone);
+      } else if (!zone) {
+        zone = frostZones[0]!; // recicla a mais antiga (pool cheio)
+      }
+      zone.x = x;
+      zone.z = z;
+      zone.radius = radius;
+      zone.telegraph = telegraphSec;
+      zone.active = activeSec;
+      zone.alive = true;
+      zone.disc.position.set(x, 0.07, z);
+      zone.crystals.position.set(x, 0.07, z);
+      zone.disc.setEnabled(true);
+      zone.crystals.setEnabled(false); // os cristais sobem só quando a zona fica ativa
+    };
+    const inActiveFrost = (x: number, z: number): boolean => {
+      for (const f of frostZones) {
+        if (!f.alive || f.telegraph > 0) continue;
+        const dx = x - f.x;
+        const dz = z - f.z;
+        if (dx * dx + dz * dz <= f.radius * f.radius) return true;
+      }
+      return false;
+    };
+
+    // Observer próprio da arena (separado do flicker para descarte limpo): anima a maré de
+    // breu e o ciclo de vida das zonas de gelo. Roda só na arena do chefe.
+    const arenaObs: Observer<Scene> = scene.onBeforeRenderObservable.add(() => {
+      const dt = Math.min(0.05, scene.getEngine().getDeltaTime() / 1000);
+      const t = performance.now() / 1000;
+      // Maré de breu: aproxima o alpha do alvo (transição suave) + pulsar lento.
+      if (breuRing.isEnabled()) {
+        breuMat.alpha += (breuTarget - breuMat.alpha) * Math.min(1, dt * 2.5);
+        breuRing.rotation.y = t * 0.05;
+        if (breuMat.alpha < 0.01 && breuTarget === 0) breuRing.setEnabled(false);
+      }
+      // Zonas de gelo: telegrafia (cresce, pulsa azul-claro) -> ativa (cor saturada + cristais)
+      // -> some. Quem fica parado dentro de uma zona ativa é punido pelo chefe (inActiveFrost).
+      for (const f of frostZones) {
+        if (!f.alive) continue;
+        if (f.telegraph > 0) {
+          f.telegraph = Math.max(0, f.telegraph - dt);
+          const grow = 1 - Math.min(1, f.telegraph / 0.6); // 0..1 conforme telegrafa
+          f.disc.scaling.setAll(f.radius * (0.3 + 0.7 * grow));
+          frostMat.alpha = 0.28 + 0.18 * Math.sin(t * 14); // pisca na antecipação (leitura)
+          if (f.telegraph === 0) {
+            f.disc.scaling.setAll(f.radius);
+            f.crystals.position.set(f.x, 0.07, f.z);
+            f.crystals.setEnabled(true);
+          }
+        } else if (f.active > 0) {
+          f.active = Math.max(0, f.active - dt);
+          frostMat.alpha = 0.5;
+          f.crystals.rotation.y = t * 0.8;
+          if (f.active === 0) {
+            f.alive = false;
+            f.disc.setEnabled(false);
+            f.crystals.setEnabled(false);
+          }
+        }
+      }
+    });
+
+    arena = { setBrasaLight, setMareDeBreu, spawnFrostZone, inActiveFrost };
+    // No descarte da sala, removemos o observer da arena (o resto pende de roomRoot/glow/aggr).
+    arenaDispose = () => {
+      scene.onBeforeRenderObservable.remove(arenaObs);
+      for (const f of frostZones) ctx.glow.removeIncludedOnlyMesh(f.disc);
+      ctx.glow.removeIncludedOnlyMesh(breuRing);
+    };
+  }
+
+  // Terreno andável dos inimigos. Inset das paredes (espessura 0,8 + raio do inimigo ~0,8 +
+  // folga) e teto ao NORTE à frente do estrado: o degrau do altar (z = AZ-2,6, prof. 1,3 ->
+  // frente em AZ-3,25) e o estrado têm colisão e BARRAM o herói; um inimigo atrás deles fica
+  // imatável. maxZ os mantém em piso aberto que o herói alcança. Ver spec-combate / skeleton.ts.
+  const WALL_INSET = 1.5;
+  const enemyBounds: EnemyBounds = {
+    minX: -(HALFX - WALL_INSET),
+    maxX: HALFX - WALL_INSET,
+    minZ: -(HALFZ - WALL_INSET),
+    maxZ: AZ - 3.4,
+  };
 
   return {
     def,
     spawn: L.spawn,
     exit: L.exit, // a passagem (alçapão): pisar nela = descer
     enemyAnchor: L.enemyAnchor,
+    enemyBounds,
     brazier,
+    inscriptionPos,
     setBrazierLit,
     setCleared(open: boolean): void {
-      beam.setEnabled(open);
+      // ESTILO (Bloco 2, §4.2b): o feixe da passagem ACENDE com fade+scale, não liga seco.
+      if (open && !beam.isEnabled()) {
+        beam.setEnabled(true);
+        beam.scaling.y = 0.12;
+        Animation.CreateAndStartAnimation("feixe_in", beam, "scaling.y", 60, 22, 0.12, 1, 0);
+        Animation.CreateAndStartAnimation("feixe_alpha", beamMat, "alpha", 60, 22, 0, 0.4, 0);
+      } else if (!open) {
+        beam.setEnabled(false);
+      }
     },
+    arena,
     dispose(): void {
       scene.onBeforeRenderObservable.remove(flicker);
+      arenaDispose?.();
       for (const f of flames) ctx.glow.removeIncludedOnlyMesh(f.mesh);
       for (const c of casters) ctx.shadow.removeShadowCaster(c);
       for (const a of aggregates) a.dispose();
