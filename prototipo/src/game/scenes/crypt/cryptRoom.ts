@@ -892,7 +892,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   }
   // LAJES ERGUIDAS/TOMBADAS (1 malha fundida), fora da faixa de combate.
   {
-    const RAISED: Record<RoomKind, string> = { guarda: "#565c66", salao: "#5a5852", cisterna: "#3f5558", santuario: "#5b5a68", guardiao: "#3a3640" };
+    const RAISED: Record<RoomKind, string> = { guarda: "#444952", salao: "#484640", cisterna: "#32464a", santuario: "#484756", guardiao: "#2e2a34" };
     const raised = buildRaisedSlabs(scene, L, def.kind, def.index, floorArt.slabs, Color3.FromHexString(RAISED[def.kind]));
     if (raised) { raised.parent = roomRoot; track(raised); }
   }
