@@ -41,6 +41,8 @@ export interface Layout {
   pillars: PillarSpot[];
   torches: TorchSpot[];
   enemyAnchor: { x: number; z: number }; // centro em torno do qual os inimigos surgem
+  /** Faixa central de COMBATE (elipse spawn->saida): cenografia 3D proibida e detalhe de piso atenuado. */
+  calm: { cx: number; cz: number; rx: number; rz: number };
 }
 
 const r1 = (v: number): number => Math.round(v * 100) / 100;
@@ -139,6 +141,12 @@ function rect(kind: RoomKind, shape: string, o: ShapeOpts): Layout {
     pillars: o.pillars,
     torches,
     enemyAnchor: { x: 0, z: Math.min(2.5, halfZ - 6) },
+    calm: {
+      cx: 0,
+      cz: (-(halfZ - 3) + (halfZ - 6)) / 2,
+      rx: Math.min(6.5, halfX - 4),
+      rz: (halfZ - 6 + (halfZ - 3)) / 2 + 1,
+    },
   };
 }
 

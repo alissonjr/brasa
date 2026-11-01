@@ -17,10 +17,12 @@ import {
   StandardMaterial,
   TransformNode,
   Vector3,
+  Vector4,
 } from "@babylonjs/core";
 import type { AbstractMesh, AssetContainer, Camera, IDisposable, Material, Observer, Scene } from "@babylonjs/core";
 import { createLightPool, loadContainer, toonifyHierarchy } from "@engine";
 import { pickLayout } from "./cryptLayouts";
+import { buildPoolGroup, buildRaisedSlabs, inCalm, paintFloor } from "./cryptDecor";
 import type { EnemyBounds } from "../../actors/enemies/skeleton";
 
 /**
@@ -304,15 +306,28 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   let dressing = false;
   let dressN = 0;
   const dressMirror = rng(7) < 0.5 ? -1 : 1;
-  const dressVar = <T extends { x: number; z: number; rotY?: number }>(o: T): T => {
-    if (!dressing) return o;
-    const j = dressN++;
-    return {
-      ...o,
-      x: o.x * dressMirror + (rng(j * 3 + 1) - 0.5) * 0.7,
-      z: o.z + (rng(j * 3 + 2) - 0.5) * 0.7,
-      rotY: (o.rotY ?? 0) * dressMirror + (rng(j * 3 + 3) - 0.5) * 0.5,
-    };
+  // CAMERA ALTA: a faixa de parede do lado da camera (x ou z baixos) foi removida e pecas ALTAS
+  // ali (estante, estandarte, rack) flutuariam no ar ou tapariam o heroi. `tall` marca essas
+  // pecas: se cairem no lado da camera, desfazem o espelho (voltam ao lado de la) ou somem.
+  const nearSide = (x: number, z: number): boolean => ALTA && (x < -HALFX + 3.2 || z < -HALFZ + 3.2);
+  const dressVar = <T extends { x: number; z: number; rotY?: number; tall?: boolean }>(o: T): T | null => {
+    let r: T = o;
+    if (dressing) {
+      const j = dressN++;
+      r = {
+        ...o,
+        x: o.x * dressMirror + (rng(j * 3 + 1) - 0.5) * 0.7,
+        z: o.z + (rng(j * 3 + 2) - 0.5) * 0.7,
+        rotY: (o.rotY ?? 0) * dressMirror + (rng(j * 3 + 3) - 0.5) * 0.5,
+      };
+    }
+    if (o.tall && nearSide(r.x, r.z)) {
+      if (dressing && dressMirror < 0) {
+        r = { ...r, x: -r.x, rotY: -(r.rotY ?? 0) };
+        if (nearSide(r.x, r.z)) return null;
+      } else return null;
+    }
+    return r;
   };
 
   const track = (m: AbstractMesh): AbstractMesh => {
@@ -367,9 +382,10 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
 
   function placeProp(
     container: AssetContainer,
-    oIn: { x: number; z: number; y?: number; rotY?: number; scale?: number; targetH?: number; collider?: boolean; cast?: boolean }
+    oIn: { x: number; z: number; y?: number; rotY?: number; scale?: number; targetH?: number; collider?: boolean; cast?: boolean; tall?: boolean }
   ): TransformNode | null {
     const o = dressVar(oIn); // espelho/jitter por andar (no-op fora do dressing)
+    if (!o) return null; // peca alta no lado da camera: descartada
     // cloneMaterials=TRUE: cada andar recebe CÓPIAS dos materiais do kit, isoladas do cache.
     // Sem isso, os andares COMPARTILHAM os materiais do container em cache; ao descartar um
     // andar, o dispose mata esses materiais compartilhados e o PRÓXIMO andar nasce com as
@@ -449,13 +465,14 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // posicoes por tipo em batch() e, no flushBatches(), criamos UMA malha-base mesclada +
   // thin instances. Colisores (invisiveis, sem custo de draw call) sao criados a parte para
   // os props solidos. Props unicos (1 copia) continuam por placeProp() (clone).
-  type Spot = { x: number; z: number; y?: number; rotY?: number; scale?: number; collider?: boolean };
+  type Spot = { x: number; z: number; y?: number; rotY?: number; scale?: number; collider?: boolean; tall?: boolean };
   const batches = new Map<string, { cast: boolean; spots: Spot[] }>();
   function batch(name: string, spot: Spot, cast = false): void {
     let b = batches.get(name);
     if (!b) { b = { cast, spots: [] }; batches.set(name, b); }
     b.cast = b.cast || cast;
-    b.spots.push(dressVar(spot)); // espelho/jitter por andar (no-op fora do dressing)
+    const v = dressVar(spot); // espelho/jitter por andar (no-op fora do dressing)
+    if (v) b.spots.push(v);
   }
   function propBase(container: AssetContainer, cast: boolean): Mesh | null {
     // cloneMaterials=TRUE: cada andar recebe CÓPIAS dos materiais do kit, isoladas do cache.
@@ -484,6 +501,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   }
   function flushBatches(): void {
     for (const [name, b] of batches) {
+      if (b.spots.length === 0) continue;
       const base = propBase(P[name]!, b.cast);
       if (!base) continue;
       // CRITICO: medir o bbox de UMA peca ANTES do thinInstanceAdd. Depois de adicionar as
@@ -556,15 +574,23 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   ground.parent = roomRoot;
   aggregates.push(new PhysicsAggregate(ground, PhysicsShapeType.BOX, { mass: 0 }, scene));
 
-  // --- LAJE BASE solida sob os ladrilhos: tampa o vazio preto entre/dentro das pecas de
-  //     piso (que tem topo recuado). Sem ela, as juntas/recessos do KayKit liam como BURACOS
-  //     -> a sala parecia uma grade de plataformas sobre o nada. Topo logo abaixo do piso. ---
+  // --- LAJE BASE solida: o piso visivel. Recebe UMA textura procedural pintada (lajes
+  //     irregulares, rachaduras, sujeira, sangue, ossos, assinatura do tipo de sala; ver
+  //     cryptDecor.paintFloor), o que tambem substitui a antiga grade de juntas (1 draw a menos).
+  //     Topo em y=0; as faces laterais amostram um bolsao escuro da textura (faceUV). ---
+  const floorArt = paintFloor(scene, L, def.kind, def.index);
   {
     const baseMat = new StandardMaterial("lajeBaseMat", scene);
-    baseMat.diffuseColor = Color3.FromHexString("#545b66"); // pedra media-clara: piso LE como solido
-    baseMat.emissiveColor = Color3.FromHexString("#0e1116"); // fill minimo: nunca cai pra preto puro
+    baseMat.diffuseTexture = floorArt.tex;
+    baseMat.diffuseColor = Color3.White();
+    baseMat.emissiveColor = Color3.FromHexString("#0e1116");
     baseMat.specularColor = Color3.Black();
-    const slab = MeshBuilder.CreateBox("laje_base", { width: HALFX * 2, height: 1.0, depth: HALFZ * 2 }, scene);
+    const side = new Vector4(0, 0, floorArt.sideUV.u, floorArt.sideUV.v);
+    const slab = MeshBuilder.CreateBox(
+      "laje_base",
+      { width: HALFX * 2, height: 1.0, depth: HALFZ * 2, faceUV: [side, side, side, side, new Vector4(0, 0, 1, 1), side] },
+      scene
+    );
     slab.material = baseMat;
     slab.position.set(0, -0.5, 0); // topo em y=0 = a superficie caminhavel (E o piso visivel agora)
     slab.isPickable = false;
@@ -591,31 +617,6 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   if (fd) kitInstances(fd, [{ x: 0, z: 0 }], 0.04);
   const fw = kitBase(P.floor_wood!, "floor");
   if (fw) kitInstances(fw, [{ x: -7, z: -3 }, { x: -7, z: -6 }], 0.05);
-  // Grelha sutil de juntas de pedra (linhas finas escuras) sobre a laje: leitura de "lajota"
-  // sem recesso preto. Uma malha mesclada (1 draw call), levemente acima da laje.
-  {
-    const seams: Mesh[] = [];
-    const seamW = 0.06, span = Math.max(HALFX, HALFZ) * 2 + 1;
-    for (let x = -HALFX + 3; x <= HALFX - 3 + 1e-6; x += 3) {
-      const s = MeshBuilder.CreateBox("junta", { width: seamW, height: 0.02, depth: span }, scene);
-      s.position.set(x, 0.02, 0); seams.push(s);
-    }
-    for (let z = -HALFZ + 3; z <= HALFZ - 3 + 1e-6; z += 3) {
-      const s = MeshBuilder.CreateBox("junta", { width: span, height: 0.02, depth: seamW }, scene);
-      s.position.set(0, 0.02, z); seams.push(s);
-    }
-    const seamMesh = Mesh.MergeMeshes(seams, true, true);
-    if (seamMesh) {
-      const sm = new StandardMaterial("juntaMat", scene);
-      sm.diffuseColor = Color3.FromHexString("#33383f"); // junta um pouco mais escura que a laje
-      sm.specularColor = Color3.Black();
-      seamMesh.material = sm;
-      seamMesh.isPickable = false;
-      seamMesh.parent = roomRoot;
-      track(seamMesh);
-    }
-  }
-
   // --- W4: DECALQUE DE CHÃO por tipo de sala (poça / círculo ritual / rachaduras) ---
   // Malha plana fina logo acima do piso (sem z-fight). 1 draw call cada (malha única).
   // O material e a cor-base ficam capturados para a coreografia de luz (brilham ao acender).
@@ -627,13 +628,8 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     mat.specularColor = Color3.Black();
     mat.disableLighting = true;
     let mesh: Mesh | null = null;
-    if (def.kind === "cisterna") {
-      // poça/lodo: disco azul-esverdeado translúcido (cripta inundada) com "linha" de água.
-      mesh = MeshBuilder.CreateDisc("decal_poca", { radius: Math.min(HALFX, HALFZ) * 0.38, tessellation: 44 }, scene);
-      mesh.rotation.x = Math.PI / 2;
-      mat.emissiveColor = Color3.FromHexString("#15323b");
-      mat.alpha = 0.5;
-    } else if (def.kind === "santuario") {
+    // (cisterna: as poças viraram pintura de piso, ver cryptDecor.paintFloor; sem decalque proprio)
+    if (def.kind === "santuario") {
       // círculo ritual: anel dourado gravado no centro.
       mesh = MeshBuilder.CreateTorus("decal_circulo", { diameter: 5.4, thickness: 0.16, tessellation: 56 }, scene);
       mat.emissiveColor = Color3.FromHexString("#b98f4a");
@@ -825,30 +821,80 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   //     perto da pista (lado da entrada) ganham LUZ QUENTE REAL de curto alcance (candelabro
   //     que ilumina a parede/chão, não só emissivo). Limitado a 2 p/ caber no teto de 6 luzes
   //     da cena (ambiente + chave + fagulha + braseiro). As demais ficam emissivas (glow). ---
+  // POCAS DE LUZ por tipo de sala (paleta propria). Fundidas por cor/alpha: 1 draw call por grupo
+  // (antes: 1 por tocha). O alpha de cada grupo acompanha a gangorra frio->quente (applyPools).
+  const POOL_COL: Record<RoomKind, { torch: string; accent: string; warm: boolean }> = {
+    guarda: { torch: "#ff9a40", accent: "#ff9a40", warm: true },
+    salao: { torch: "#ffb25a", accent: "#ffcf80", warm: true },
+    cisterna: { torch: "#ff9a50", accent: "#43b6cf", warm: false },
+    santuario: { torch: "#ffc070", accent: "#e8c060", warm: true },
+    guardiao: { torch: "#ff6a30", accent: "#ff4a18", warm: true },
+  };
+  const poolCol = POOL_COL[def.kind];
+  type PoolGroup = { mesh: Mesh; base: number; mode: "torch" | "warm" | "cold" | "brazier" };
+  const poolGroups: PoolGroup[] = [];
+  const addPools = (spots: { x: number; z: number; r: number }[], color: string, alpha: number, mode: PoolGroup["mode"]): void => {
+    const m = buildPoolGroup(scene, spots, color, alpha, 0.19);
+    if (!m) return;
+    m.parent = roomRoot;
+    track(m);
+    poolGroups.push({ mesh: m, base: alpha, mode });
+  };
+  const torchPoolsLit: { x: number; z: number; r: number }[] = [];
+  const torchPoolsDim: { x: number; z: number; r: number }[] = [];
   const torchesV = L.torches.filter((t) => !(ALTA && (t.z < -HALFZ + 1 || t.x < -HALFX + 1)));
   const litTorches = [...torchesV].sort((a, b) => a.z - b.z).slice(0, 2); // mais ao sul (entrada)
   for (const t of torchesV) {
     const ix = Math.abs(t.x) >= HALFX - 0.6 ? -Math.sign(t.x) * 0.25 : 0;
     const iz = Math.abs(t.z) >= HALFZ - 0.6 ? -Math.sign(t.z) * 0.25 : 0;
     const realLight = litTorches.includes(t);
-    placeProp(P.torch_wall!, { x: t.x, z: t.z, y: 2.4, rotY: t.rotY, cast: false });
+    batch("torch_wall", { x: t.x, z: t.z, y: 2.4, rotY: t.rotY });
     const fl = makeFlame(new Vector3(t.x + ix, 2.75, t.z + iz), 0.7, realLight ? (ALTA ? 1.5 : 0.6) : 0, realLight);
     if (ALTA) {
       // Poça quente no chão, no lado de dentro da parede (as tochas apagadas ganham halo fraco).
       const inX = Math.abs(t.x) >= HALFX - 0.6 ? -Math.sign(t.x) * 2.2 : 0;
       const inZ = Math.abs(t.z) >= HALFZ - 0.6 ? -Math.sign(t.z) * 2.2 : 0;
-      const pool = createLightPool(scene, { radius: realLight ? 4.6 : 3.2, color: "#ff9a40", alpha: realLight ? 0.42 : 0.24 });
-      pool.position.x = t.x + inX;
-      pool.position.z = t.z + inZ;
-      track(pool);
+      (realLight ? torchPoolsLit : torchPoolsDim).push({ x: t.x + inX, z: t.z + inZ, r: realLight ? 4.6 : 3.2 });
     }
     if (realLight && fl.light) {
       fl.light.range = ALTA ? 14 : 9; // curto: ilumina o entorno do candelabro sem lavar a sala
       fl.light.diffuse = Color3.FromHexString("#f0b878"); // candeia quente suave (sem estourar vermelho)
     }
     if (ALTA) continue;
-    placeProp(P.torch_wall!, { x: t.x, z: t.z, y: 6.0, rotY: t.rotY, cast: false });
+    batch("torch_wall", { x: t.x, z: t.z, y: 6.0, rotY: t.rotY });
     makeFlame(new Vector3(t.x + ix, 6.35, t.z + iz), 0.6, 0, false);
+  }
+
+  addPools(torchPoolsLit, poolCol.torch, 0.42, "torch");
+  addPools(torchPoolsDim, poolCol.torch, 0.24, "torch");
+  // Pool do BRASEIRO: nasce apagada e cresce/acende com o aquecimento (gangorra frio -> quente).
+  {
+    const bp = createLightPool(scene, { radius: 7.5, color: "#ffb870", alpha: 0.5, y: 0.19 });
+    bp.position.set(0, 0.19, AZ - 3.2);
+    bp.parent = roomRoot;
+    track(bp);
+    poolGroups.push({ mesh: bp, base: 0.5, mode: "brazier" });
+  }
+  // ACENTOS por tipo de sala (assinatura de luz), apoiados nas pecas pintadas no piso.
+  {
+    const zc = Math.min(0, AZ - 6);
+    if (def.kind === "salao") {
+      addPools([{ x: -7.5 * dressMirror, z: -3, r: 3.6 }, { x: 7 * dressMirror, z: 4, r: 3.2 }], poolCol.accent, 0.26, "warm");
+    } else if (def.kind === "cisterna") {
+      addPools(floorArt.puddles.map((p) => ({ x: p.x, z: p.z, r: p.r * 1.9 })), poolCol.accent, 0.3, "cold");
+    } else if (def.kind === "santuario") {
+      addPools(floorArt.candles, poolCol.accent, 0.4, "warm");
+      addPools([{ x: 0, z: zc, r: 5.6 }], "#7a6cc8", 0.16, "cold");
+    } else if (def.kind === "guardiao") {
+      addPools(floorArt.embers, poolCol.accent, 0.24, "warm");
+      addPools([{ x: 0, z: zc, r: 6.5 }], "#a01810", 0.14, "warm");
+    }
+  }
+  // LAJES ERGUIDAS/TOMBADAS (1 malha fundida), fora da faixa de combate.
+  {
+    const RAISED: Record<RoomKind, string> = { guarda: "#565c66", salao: "#5a5852", cisterna: "#3f5558", santuario: "#5b5a68", guardiao: "#3a3640" };
+    const raised = buildRaisedSlabs(scene, L, def.kind, def.index, floorArt.slabs, Color3.FromHexString(RAISED[def.kind]));
+    if (raised) { raised.parent = roomRoot; track(raised); }
   }
 
   // --- CANDELABROS de ferro pendentes do teto: cubo central + braços radiais + aro +
@@ -902,12 +948,12 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // demais formas os props seguem as paredes/altar reais em vez de coordenadas fixas.
   function clusterBanners(count: number): void {
     const spots: Spot[] = [
-      { x: -3.8, z: HALFZ - 0.5, y: 1.4 }, { x: 3.8, z: HALFZ - 0.5, y: 1.4 },
-      { x: -HALFX + 0.5, z: 2, y: 1.4, rotY: Math.PI / 2 }, { x: HALFX - 0.5, z: -6, y: 1.4, rotY: -Math.PI / 2 },
+      { x: -3.8, z: HALFZ - 0.5, y: 1.4, tall: true }, { x: 3.8, z: HALFZ - 0.5, y: 1.4, tall: true },
+      { x: -HALFX + 0.5, z: 2, y: 1.4, rotY: Math.PI / 2, tall: true }, { x: HALFX - 0.5, z: -6, y: 1.4, rotY: -Math.PI / 2, tall: true },
     ];
     spots.slice(0, count).forEach((s) => batch("banner", s));
-    batch("wall_deco_a", { x: -4, z: HALFZ - 0.3 });
-    if (count > 2) batch("wall_deco_a", { x: HALFX - 2, z: -HALFZ + 0.3 });
+    batch("wall_deco_a", { x: -4, z: HALFZ - 0.3, tall: true });
+    if (count > 2) batch("wall_deco_a", { x: HALFX - 2, z: -HALFZ + 0.3, tall: true });
   }
 
   function clusterMess(): void {
@@ -916,7 +962,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     placeProp(P.bench!, { x: -7.5, z: -4.4, rotY: 0.2, collider: true });
     batch("chair", { x: -6, z: -2.2, rotY: -1.2, collider: true }, true);
     batch("chair", { x: -8.8, z: -2, rotY: 0.6, collider: true }, true);
-    placeProp(P.weapon_rack!, { x: -2, z: -HALFZ + 0.7, collider: true });
+    placeProp(P.weapon_rack!, { x: -2, z: -HALFZ + 0.7, collider: true, tall: true });
     placeProp(P.bucket!, { x: -6.6, z: -1.2, rotY: 0.4 });
     placeProp(P.plate_food_A!, { x: -7.2, z: -3.1, cast: false });
     placeProp(P.sword_shield!, { x: -3.0, z: -6.5, rotY: -0.6, cast: false });
@@ -939,13 +985,13 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   function clusterAlchemy(): void {
     // Estantes + pocoes (parede leste, na faixa entre o centro e o altar).
     const zb = Math.min(AZ - 3.7, HALFZ - 4.5);
-    placeProp(P.bookcase!, { x: HALFX - 0.7, z: zb, rotY: -Math.PI / 2, collider: true });
-    placeProp(P.bookcase!, { x: HALFX - 0.7, z: zb - 3, rotY: -Math.PI / 2, collider: true });
-    placeProp(P.bookcase!, { x: -HALFX + 0.7, z: zb - 1.5, rotY: Math.PI / 2, collider: true });
-    placeProp(P.shelf_small_candles!, { x: HALFX - 0.7, z: zb + 1.9, rotY: -Math.PI / 2, collider: true });
-    placeProp(P.bottle_A_green!, { x: HALFX - 1.0, z: zb + 0.7, cast: false });
-    placeProp(P.bottle_B_green!, { x: HALFX - 1.0, z: zb + 0.45, cast: false });
-    placeProp(P.bottle_C_brown!, { x: HALFX - 1.0, z: zb + 0.95, cast: false });
+    placeProp(P.bookcase!, { x: HALFX - 0.7, z: zb, rotY: -Math.PI / 2, collider: true, tall: true });
+    placeProp(P.bookcase!, { x: HALFX - 0.7, z: zb - 3, rotY: -Math.PI / 2, collider: true, tall: true });
+    if (!ALTA) placeProp(P.bookcase!, { x: -HALFX + 0.7, z: zb - 1.5, rotY: Math.PI / 2, collider: true }); // (camera alta: lado da camera, vazio)
+    placeProp(P.shelf_small_candles!, { x: HALFX - 0.7, z: zb + 1.9, rotY: -Math.PI / 2, collider: true, tall: true });
+    placeProp(P.bottle_A_green!, { x: HALFX - 1.0, z: zb + 0.7, cast: false, tall: true });
+    placeProp(P.bottle_B_green!, { x: HALFX - 1.0, z: zb + 0.45, cast: false, tall: true });
+    placeProp(P.bottle_C_brown!, { x: HALFX - 1.0, z: zb + 0.95, cast: false, tall: true });
   }
 
   function clusterCatacomb(full: boolean): void {
@@ -963,8 +1009,8 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     batch("candle_triple", { x: 2.3, z: AZ + 0.2, y: 0.9 });
     placeProp(P.skull_candle!, { x: 1.3, z: AZ - 0.7, y: 0.9, scale: 0.9, cast: false });
     placeProp(P.shrine_candles!, { x: -5.2, z: AZ + 0.2, rotY: 0.4, collider: true });
-    placeProp(P.plaque_candles!, { x: 4.0, z: HALFZ - 0.3, y: 1.6, cast: false });
-    placeProp(P.lantern_standing!, { x: -(HALFX - 4), z: 2.6 });
+    placeProp(P.plaque_candles!, { x: 4.0, z: HALFZ - 0.3, y: 1.6, cast: false, tall: true });
+    placeProp(P.lantern_standing!, { x: -(HALFX - 4), z: 2.6, tall: true });
   }
 
   function clusterTreasure(gold: boolean): void {
@@ -980,26 +1026,36 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     }
   }
 
+  /** Pontos de cenografia 3D FORA da faixa de combate (L.calm), da saida, do spawn e do estrado. */
+  function scatterRim(n: number, salt: number, margin = 1.6): { x: number; z: number; k: number }[] {
+    const out: { x: number; z: number; k: number }[] = [];
+    for (let t = 0; t < n * 12 && out.length < n; t++) {
+      const x = (rng(salt + t * 3) - 0.5) * (HALFX * 2 - margin * 2);
+      const z = (rng(salt + t * 3 + 1) - 0.5) * (HALFZ * 2 - margin * 2);
+      if (inCalm(L, x, z, 1.05)) continue;
+      if (Math.hypot(x - L.exit.x, z - L.exit.z) < 4.2) continue;
+      if (Math.abs(x) < 5.2 && z > AZ - 3.6) continue; // estrado e degrau
+      if (L.pillars.some((p) => Math.hypot(p.x - x, p.z - z) < 1.7)) continue;
+      out.push({ x, z, k: rng(salt + t * 3 + 2) });
+    }
+    return out;
+  }
+
   function clusterGrime(density: number): void {
-    // Caveiras, escombros e ossadas. density (0..1) escala a quantidade.
-    const rubblePts: [number, number, number][] = [[-3.5, -7, 0.9], [8.5, 8.5, 1], [4, -4, 0.8], [-9.2, AZ + 0.2, 0.9]];
-    rubblePts.slice(0, Math.max(2, Math.round(density * 4))).forEach(([x, z, s], i) =>
-      batch("rubble", { x: x + (rng(i) - 0.5), z: z + (rng(i + 5) - 0.5), rotY: seedRot(i), scale: s })
+    // Escombros, caveiras e ossadas 3D (batch: nenhum draw call novo), so fora da faixa de combate.
+    scatterRim(3 + Math.round(density * 7), 400).forEach((p, i) =>
+      batch("rubble", { x: p.x, z: p.z, rotY: seedRot(i), scale: 0.65 + p.k * 0.6 })
     );
-    const skullPts: [number, number, number][] = [
-      [-2, 2, 0.4], [5, -1, 0.38], [-5, 1, 0.42], [1.5, 5.5, 0.36], [-4.5, -3.5, 0.4], [6.5, 5, 0.38],
-    ];
-    skullPts.slice(0, Math.max(2, Math.round(density * 6))).forEach(([x, z, s], i) =>
-      batch("skull", { x: x + (rng(i) - 0.5), z: z + (rng(i + 5) - 0.5), rotY: seedRot(i), scale: s })
+    scatterRim(3 + Math.round(density * 8), 700).forEach((p, i) =>
+      batch("skull", { x: p.x, z: p.z, rotY: seedRot(i + 9), scale: 0.34 + p.k * 0.1 })
     );
     const pile = Math.round(density * 7);
     for (let i = 0; i < pile; i++)
       batch("skull", { x: -(HALFX - 2.6) + rng(i + 30) * 1.6, z: (AZ - 0.6) + rng(i + 40) * 1.6, y: rng(i + 50) * 0.25, rotY: seedRot(i), scale: 0.3 + rng(i + 10) * 0.1 });
     if (density > 0.6) {
-      placeProp(P.bone_A!, { x: 5.5, z: 2.5, rotY: 0.8, cast: false });
-      placeProp(P.bone_B!, { x: -4.5, z: 5.5, rotY: 2.1, cast: false });
-      placeProp(P.bone_C!, { x: 8.5, z: -2.0, rotY: 1.5, cast: false });
-      placeProp(P.ribcage!, { x: 6.5, z: -3.2, rotY: 1.2, cast: false });
+      const bones = scatterRim(5, 900);
+      const names = ["bone_A", "bone_B", "bone_C", "ribcage", "bone_A"];
+      bones.forEach((p, i) => batch(names[i % names.length]!, { x: p.x, z: p.z, rotY: seedRot(i + 20) }));
     }
   }
 
@@ -1056,37 +1112,44 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       m.backFaceCulling = false;
       decayMossMat = m;
     }
-    // Teias triangulares nos 4 cantos superiores (e em alguns pilares), tamanho/seed variados.
+    // Teias triangulares nos cantos superiores LONGE da camera (os do lado da camera perderam a
+    // parede). Todas fundidas numa malha so (1 draw call), em vez de um plano por teia.
+    const webParts: Mesh[] = [];
     const webAt = (x: number, z: number, sx: number, sz: number, y: number, i: number): void => {
       const web = MeshBuilder.CreatePlane(`teia_${i}`, { size: 1, sideOrientation: Mesh.DOUBLESIDE }, scene);
-      web.material = decayWebMat!;
       web.position.set(x, y, z);
       web.scaling.set(sx, sz, 1);
       web.rotation.set(Math.PI / 2.6, Math.atan2(x, z) + Math.PI, rng(i) * 0.4);
-      web.isPickable = false;
-      web.parent = roomRoot;
-      track(web);
+      web.bakeCurrentTransformIntoVertices();
+      webParts.push(web);
     };
     const corners: [number, number][] = [[-HALFX + 1, HALFZ - 1], [HALFX - 1, HALFZ - 1], [-HALFX + 1, -HALFZ + 1], [HALFX - 1, -HALFZ + 1]];
     corners.forEach(([cx, cz], i) => {
+      if (ALTA && nearSide(cx - 3.5, cz - 3.5)) return; // canto do lado da camera
       if (rng(i + 60) > 0.35) webAt(cx, cz, 1.6 + rng(i + 1) * 1.4, 1.6 + rng(i + 2) * 1.2, WALL_H - 1.2 + rng(i + 3), i);
     });
-    // Trepadeira/musgo pendente: tiras finas verticais escorrendo de pontos altos das paredes.
+    const webMesh = webParts.length ? Mesh.MergeMeshes(webParts, true, true) : null;
+    if (webMesh) { webMesh.material = decayWebMat!; webMesh.isPickable = false; webMesh.parent = roomRoot; track(webMesh); }
+    // Trepadeira/musgo pendente: tiras finas escorrendo do topo das paredes (so as do fundo/leste),
+    // fundidas numa malha so.
+    const vineParts: Mesh[] = [];
     const vineN = 5 + Math.round(rng(70) * 5);
     for (let i = 0; i < vineN; i++) {
       const onX = rng(i + 80) > 0.5;
       const wallSign = rng(i + 81) > 0.5 ? 1 : -1;
-      const len = 1.2 + rng(i + 82) * 2.4;
-      const px = onX ? wallSign * (HALFX - 0.4) : (rng(i + 83) - 0.5) * (HALFX * 1.6);
-      const pz = onX ? (rng(i + 84) - 0.5) * (HALFZ * 1.6) : wallSign * (HALFZ - 0.4);
+      if (ALTA && wallSign < 0) continue; // paredes do lado da camera nao existem mais
+      const len = ALTA ? 0.9 + rng(i + 82) * 1.5 : 1.2 + rng(i + 82) * 2.4;
+      const inset = ALTA ? 0.55 : 0.4;
+      const px = onX ? wallSign * (HALFX - inset) : (rng(i + 83) - 0.5) * (HALFX * 1.6);
+      const pz = onX ? (rng(i + 84) - 0.5) * (HALFZ * 1.6) : wallSign * (HALFZ - inset);
       const vine = MeshBuilder.CreateBox(`trepadeira_${i}`, { width: 0.12 + rng(i + 85) * 0.12, height: len, depth: 0.04 }, scene);
-      vine.material = decayMossMat!;
-      vine.position.set(px, WALL_H + 1 - len / 2 + rng(i + 86), pz);
+      vine.position.set(px, ALTA ? WALL_H - 0.15 - len / 2 : WALL_H + 1 - len / 2 + rng(i + 86), pz);
       vine.rotation.y = onX ? Math.PI / 2 : 0;
-      vine.isPickable = false;
-      vine.parent = roomRoot;
-      track(vine);
+      vine.bakeCurrentTransformIntoVertices();
+      vineParts.push(vine);
     }
+    const vineMesh = vineParts.length ? Mesh.MergeMeshes(vineParts, true, true) : null;
+    if (vineMesh) { vineMesh.material = decayMossMat!; vineMesh.isPickable = false; vineMesh.parent = roomRoot; track(vineMesh); }
     // BICHOS: ratos/aranhas/baratas (modelos reais CC0/Tripo, se presentes). Espalha alguns
     // rente as paredes/cantos. Sem modelo disponivel, nao desenha (nada de primitiva p/ bicho).
     scatterCritters();
@@ -1141,6 +1204,8 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   }
   clusterDecay(); // abandono: teias, mofo/vegetacao envelhecida e bichos (varia por andar)
   dressing = false;
+  // Velas votivas do santuario (reais, 1 batch ja usado pelo ritual) sobre as pintadas no piso.
+  if (def.kind === "santuario") for (const c of floorArt.candles) batch("candle_triple", { x: c.x, z: c.z, scale: 1.15 });
   clusterInteractive(); // cadeiras/vasos interativos (fora do jitter: hitbox = visual)
 
   // Instancia todo o dressing repetido acumulado (1 draw call por tipo) + colisores.
@@ -1195,12 +1260,29 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // quente NASCE no chao (braseiro + decalque), SOBE pelas paredes (oferendas + nevoa) e por
   // fim alcanca a abobada (luz ambiente do "ceu"). t e fatiado em tres estagios sobrepostos.
   const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+  // Gangorra das POCAS DE LUZ: tochas ganham forca ao aquecer, o braseiro nasce apagado, acentos
+  // quentes crescem e acentos frios (agua, runas) recuam. floorK/wallK como em setBrazierLit.
+  const applyPools = (floorK: number, wallK: number): void => {
+    for (const g of poolGroups) {
+      const mat = g.mesh.material as StandardMaterial | null;
+      if (!mat) continue;
+      let a = g.base;
+      if (g.mode === "torch") a *= 0.55 + 0.45 * wallK;
+      else if (g.mode === "warm") a *= 0.4 + 0.6 * wallK;
+      else if (g.mode === "cold") a *= 1 - 0.5 * floorK;
+      else a *= floorK;
+      mat.alpha = a;
+      g.mesh.setEnabled(a > 0.01);
+      if (g.mode === "brazier") g.mesh.scaling.setAll(0.65 + 0.35 * floorK);
+    }
+  };
   const setBrazierLit = (t: number): void => {
     const k = clamp01(t);
     const floorK = clamp01(t / 0.45); // 1o: chao (braseiro + decalque)
     const wallK = clamp01((t - 0.35) / 0.45); // 2o: paredes (oferendas + nevoa)
     const vaultK = clamp01((t - 0.6) / 0.4); // 3o: abobada (luz ambiente)
     brazierFlame.ignite = floorK;
+    applyPools(floorK, wallK);
     offerL.ignite = wallK;
     offerR.ignite = wallK;
     if (decalMat) {
@@ -1239,6 +1321,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       brasaShown = v;
       // A chama central da Brasa moribunda acompanha o medidor (some quase de todo no breu).
       brazierFlame.ignite = 0.15 + 0.85 * v;
+      applyPools(v, v);
       brazierFlame.base = 1.0 + 2.4 * v; // a luz pontual cresce com a luz da Brasa
       // Névoa + ambiente: arde -> claro/quente; apaga -> breu azul (a luz é a leitura de fase).
       scene.fogColor = Color3.Lerp(ARENA_COLD_FOG, ARENA_WARM_FOG, v);
