@@ -27,6 +27,7 @@ export {
   QuestLogScreen,
   CharacterCreateScreen,
   VictoryScreen,
+  DefeatScreen,
   createAutosaveIndicator,
   createPauseButton,
 } from "./ui/screens";

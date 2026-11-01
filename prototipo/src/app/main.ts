@@ -17,6 +17,7 @@ import {
   WorldMapScreen,
   CharacterCreateScreen,
   VictoryScreen,
+  DefeatScreen,
   GameHud,
   DEFAULT_CHAPTER,
   DEFAULT_CHARACTER,
@@ -536,7 +537,7 @@ async function main(): Promise<void> {
       // dádiva de cada ramo é determinística pela semente da run (mesma run -> mesma oferta).
       const rand = mulberry32(runSeed + (floorIndex + 1) * 7919 + 13);
       const offer = [pickFromRamo("agressao", rand), pickFromRamo("defesa", rand), pickFromRamo("utilidade", rand), FREE_BOON];
-      const panel = el("div", { class: "menu-panel" });
+      const panel = el("div", { class: "ds-frame menu-panel" });
       const overlay = el("div", { class: "menu-backdrop" }, panel);
       overlay.style.zIndex = "60";
       const close = (): void => {
@@ -553,7 +554,7 @@ async function main(): Promise<void> {
           "button",
           { class: "choice" },
           el("strong", { text: `${label}  (x${get()}/${cap})` }),
-          el("span", { text: note, style: `color:${full ? "#8c9aa8" : afford ? "#ffcf8a" : "#8c9aa8"};font-weight:600` })
+          el("span", { text: note, style: `color:${full ? "var(--text-lo)" : afford ? "var(--gold-200)" : "var(--text-lo)"};font-weight:600` })
         );
         if (full || !afford) b.style.opacity = "0.45";
         else
@@ -577,7 +578,7 @@ async function main(): Promise<void> {
             { class: "choice" },
             el("strong", { text: bn.name }),
             el("span", { text: bn.desc }),
-            el("span", { text: afford ? priceTxt : `${priceTxt} (sem Fagulha)`, style: `color:${afford ? "#ffcf8a" : "#8c9aa8"};font-weight:600` })
+            el("span", { text: afford ? priceTxt : `${priceTxt} (sem Fagulha)`, style: `color:${afford ? "var(--gold-200)" : "var(--text-lo)"};font-weight:600` })
           );
           if (!afford) c.style.opacity = "0.45";
           else
@@ -594,15 +595,19 @@ async function main(): Promise<void> {
         panel.append(
           el("h2", { class: "menu-title", text: "Acender o braseiro" }),
           el("p", { class: "menu-subtitle", text: `A chama curou suas feridas. Você tem ✦ ${fagulhas}.` }),
-          el("p", { class: "menu-subtitle", text: "Banca do alquimista (poções para a descida):" }),
           el(
             "div",
-            { class: "choice-group" },
-            shopItem("Poção de Recuperação", POTIONS.vida.cost, POTIONS.vida.cap, () => inv.vida, () => (inv.vida += 1)),
-            shopItem("Elixir de Fúria", POTIONS.furia.cost, POTIONS.furia.cap, () => inv.furia, () => (inv.furia += 1))
-          ),
-          el("p", { class: "menu-subtitle", text: "Escolha uma dádiva para descer:" }),
-          el("div", { class: "choice-group" }, ...boonCards)
+            { class: "menu-body" },
+            el("p", { class: "menu-subtitle", text: "Banca do alquimista (poções para a descida):" }),
+            el(
+              "div",
+              { class: "choice-group" },
+              shopItem("Poção de Recuperação", POTIONS.vida.cost, POTIONS.vida.cap, () => inv.vida, () => (inv.vida += 1)),
+              shopItem("Elixir de Fúria", POTIONS.furia.cost, POTIONS.furia.cap, () => inv.furia, () => (inv.furia += 1))
+            ),
+            el("p", { class: "menu-subtitle", text: "Escolha uma dádiva para descer:" }),
+            el("div", { class: "choice-group" }, ...boonCards)
+          )
         );
       };
 
@@ -702,13 +707,6 @@ async function main(): Promise<void> {
     }
   };
 
-  // Botão simples no estilo do tema (para os overlays raw-DOM de derrota).
-  const btnEl = (label: string, onClick: () => void, primary = false): HTMLElement => {
-    const b = el("button", { class: "ds-btn" + (primary ? " ds-btn--primary" : "") }, el("span", { class: "ds-btn__label", text: label }));
-    b.addEventListener("click", onClick);
-    return b;
-  };
-
   // --- Derrota: a fagulha apagou. Tela de fim com recomeço do andar (mantém Fagulha/dádivas). ---
   const retryFloor = (): void => {
     defeated = false;
@@ -721,24 +719,11 @@ async function main(): Promise<void> {
     input.clearPressed();
   };
   const showDefeat = (): void => {
-    const overlay = el(
-      "div",
-      { class: "menu-backdrop" },
-      el(
-        "div",
-        { class: "menu-panel" },
-        el("h2", { class: "menu-title", text: "A fagulha apagou" }),
-        el("p", { class: "menu-subtitle", text: "O frio tomou a câmara. Mas a Brasa ainda chama." }),
-        el(
-          "div",
-          { class: "menu-actions" },
-          btnEl("Tentar novamente", () => { document.body.removeChild(overlay); retryFloor(); }, true),
-          btnEl("Sair para o título", () => { document.body.removeChild(overlay); quitToTitle(); })
-        )
-      )
-    );
+    // Fica acima do HUD (anexada ao body); a própria tela se remove ao escolher.
+    const overlay = new DefeatScreen(ctx, { onRetry: retryFloor, onQuit: quitToTitle }).element;
     overlay.style.zIndex = "60";
     document.body.appendChild(overlay);
+    overlay.querySelector("button")?.focus();
   };
   // --- Vitória: a Brasa foi reavivada. Tela temática com leaderboard (top 5).
   // VictoryScreen grava o tempo (só se timedRun) e mostra o ranking; consistente com os

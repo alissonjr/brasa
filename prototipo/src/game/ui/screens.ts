@@ -39,11 +39,32 @@ import {
 
 // --- helpers de tema ---
 
+/**
+ * Moldura padrão das telas de menu: painel `.ds-frame` com cabeçalho (título e subtítulo),
+ * corpo que rola e rodapé fixo (Voltar/Fechar ou a linha de ações). Assim, em telas longas,
+ * o botão de saída nunca some e as cantoneiras da moldura ficam no lugar.
+ * Pilhas de botões (pausa) ficam inteiras no corpo, sem rodapé.
+ */
 function backdrop(panelChildren: Array<Node | string>, panelClass = "", backdropClass = ""): HTMLElement {
+  const isEl = (n: Node | string | undefined): n is HTMLElement => typeof n === "object" && n instanceof HTMLElement;
+  const kids = [...panelChildren];
+  const head: Array<Node | string> = [];
+  while (kids.length > 1 && isEl(kids[0]) && (kids[0].matches(".menu-title") || kids[0].matches(".menu-subtitle"))) {
+    head.push(kids.shift()!);
+  }
+  const last = kids[kids.length - 1];
+  const prev = kids[kids.length - 2];
+  const lastIsAction = isEl(last) && (last.matches(".menu-actions") || last.matches(".ds-btn"));
+  const prevIsButton = isEl(prev) && prev.matches(".ds-btn");
+  const foot: Array<Node | string> = [];
+  if (kids.length > 1 && lastIsAction && !prevIsButton) foot.push(kids.pop()!);
+  const parts: Array<Node | string> = [...head];
+  if (kids.length) parts.push(el("div", { class: "menu-body" }, ...kids));
+  if (foot.length) parts.push(el("div", { class: "menu-foot" }, ...foot));
   return el(
     "div",
     { class: ("menu-backdrop " + backdropClass).trim() },
-    el("div", { class: ("menu-panel " + panelClass).trim() }, ...panelChildren)
+    el("div", { class: ("ds-frame menu-panel " + panelClass).trim() }, ...parts)
   );
 }
 
@@ -317,8 +338,8 @@ export class SavesScreen implements Screen {
     this.element = backdrop([
       el("h2", { class: "menu-title", text: this.canSave ? T.salvarCarregar : T.carregar }),
       this.listEl,
-      el("div", { class: "menu-actions" }, ...actions),
       fileInput,
+      el("div", { class: "menu-actions" }, ...actions),
     ]);
   }
 
@@ -379,7 +400,7 @@ export class SavesScreen implements Screen {
           { variant: "danger", glyph: ICONS.trash, iconOnly: true }
         )
       );
-      this.listEl.append(el("div", { class: "slot-row" }, info, el("div", { class: "slot-actions" }, ...acts)));
+      this.listEl.append(el("div", { class: "ds-row slot-row" }, info, el("div", { class: "slot-actions" }, ...acts)));
     }
   }
 
@@ -411,28 +432,41 @@ export class OptionsScreen implements Screen {
   constructor(ctx: UiContext) {
     const s = ctx.settings.get();
 
+    // Deslizante do design system: o preenchimento em brasa segue o valor via --p.
     const slider = (label: string, value: number, onChange: (v: number) => void): HTMLElement => {
       const input = el("input", {
         type: "range",
         min: "0",
         max: "100",
         value: String(Math.round(value * 100)),
-        class: "slider",
+        class: "ds-range",
+        "aria-label": label,
       });
-      input.addEventListener("input", () => onChange(Number(input.value) / 100));
-      return el("label", { class: "opt-row" }, el("span", { text: label }), input);
+      const paint = (): void => input.style.setProperty("--p", `${input.value}%`);
+      paint();
+      input.addEventListener("input", () => {
+        paint();
+        onChange(Number(input.value) / 100);
+      });
+      return el("label", { class: "opt-row opt-row--range" }, el("span", { text: label }), input);
     };
 
+    // Interruptor do design system (span.ds-toggle com o input escondido dentro).
     const toggle = (label: string, checked: boolean, onChange: (v: boolean) => void): HTMLElement => {
-      const input = el("input", { type: "checkbox", class: "checkbox" }) as HTMLInputElement;
+      const input = el("input", { type: "checkbox", role: "switch" }) as HTMLInputElement;
       input.checked = checked;
       input.addEventListener("change", () => onChange(input.checked));
-      return el("label", { class: "opt-row" }, el("span", { text: label }), input);
+      return el(
+        "label",
+        { class: "opt-row" },
+        el("span", { text: label }),
+        el("span", { class: "ds-toggle" }, input, el("span"))
+      );
     };
 
     const langSel = el(
       "select",
-      { class: "select" },
+      { class: "ds-select" },
       el("option", { value: "pt", text: "Português" }),
       el("option", { value: "en", text: "English" })
     );
@@ -445,7 +479,7 @@ export class OptionsScreen implements Screen {
       ctx.ui.push(new OptionsScreen(ctx));
     });
 
-    const scaleSel = el("select", { class: "select" });
+    const scaleSel = el("select", { class: "ds-select" });
     for (const p of [90, 100, 110, 125]) scaleSel.append(el("option", { value: String(p / 100), text: `${p}%` }));
     scaleSel.value = String(s.uiScale);
     scaleSel.addEventListener("change", () => {
@@ -455,7 +489,7 @@ export class OptionsScreen implements Screen {
     });
 
     // Qualidade gráfica (resolução de render + sombras): aplica ao vivo via ctx.
-    const qualitySel = el("select", { class: "select" });
+    const qualitySel = el("select", { class: "ds-select" });
     const qualityLabels: Record<Quality, string> = { baixo: T.qualBaixo, medio: T.qualMedio, alto: T.qualAlto };
     for (const q of ["baixo", "medio", "alto"] as Quality[]) qualitySel.append(el("option", { value: q, text: qualityLabels[q] }));
     qualitySel.value = s.quality;
@@ -466,7 +500,7 @@ export class OptionsScreen implements Screen {
     });
 
     // Velocidade do typewriter de diálogo (persiste; a caixa de diálogo consome no futuro).
-    const speedSel = el("select", { class: "select" });
+    const speedSel = el("select", { class: "ds-select" });
     const speedLabels: Record<DialogueSpeed, string> = {
       lento: T.velLento,
       normal: T.velNormal,
@@ -492,7 +526,7 @@ export class OptionsScreen implements Screen {
       el("label", { class: "opt-row" }, el("span", { text: T.velocidadeTexto }), speedSel),
       el("p", { class: "opt-note", text: T.dialogoEmBreve }),
       el("div", { class: "opt-section", text: T.controles }),
-      btn(T.controles, () => ctx.ui.push(new ControlsScreen(ctx))),
+      btn(T.remapear, () => ctx.ui.push(new ControlsScreen(ctx))),
       el("div", { class: "opt-section", text: T.acessibilidade }),
       el("label", { class: "opt-row" }, el("span", { text: T.escalaInterface }), scaleSel),
       toggle(T.reduzirMovimento, s.reducedMotion, (v) => {
@@ -561,7 +595,7 @@ export class VictoryScreen implements Screen {
         board.append(
           el(
             "div",
-            { class: "score-row" + (isRun ? " current" : "") },
+            { class: "ds-row score-row" + (isRun ? " current" : "") },
             el("span", { class: "score-rank", text: `${i + 1}.` }),
             el("span", { class: "score-time", text: formatTime(t) }),
             el("span", { class: "score-tag", text: isRun ? T.estaCorrida : "" })
@@ -589,10 +623,40 @@ export class VictoryScreen implements Screen {
   }
 }
 
+// --- Derrota (A fagulha apagou) ---
+
+/**
+ * Tela de derrota. O fluxo de jogo a anexa direto ao body (acima do HUD), então ela se
+ * remove sozinha ao escolher; as ações de jogo vêm por callback.
+ */
+export class DefeatScreen implements Screen {
+  readonly element: HTMLElement;
+
+  constructor(_ctx: UiContext, o: { onRetry: () => void; onQuit: () => void }) {
+    const done = (next: () => void) => () => {
+      this.element.remove();
+      next();
+    };
+    this.element = backdrop(
+      [
+        el("h2", { class: "menu-title", text: T.fagulhaApagou }),
+        el("p", { class: "menu-subtitle", text: T.derrotaSub }),
+        el(
+          "div",
+          { class: "menu-actions" },
+          btn(T.tentarNovamente, done(o.onRetry), { variant: "primary", glyph: ICONS.play }),
+          btn(T.sairTitulo, done(o.onQuit), { glyph: ICONS.exit })
+        ),
+      ],
+      "dialog-panel defeat-panel"
+    );
+  }
+}
+
 // --- Perfil (nome + estatísticas) ---
 
 function statRow(k: string, v: string): HTMLElement {
-  return el("div", { class: "stat-row" }, el("span", { class: "k", text: k }), el("span", { class: "v", text: v }));
+  return el("div", { class: "ds-row stat-row" }, el("span", { class: "k", text: k }), el("span", { class: "v", text: v }));
 }
 
 function fmtTime(sec: number): string {
@@ -608,12 +672,12 @@ export class ProfileScreen implements Screen {
   constructor(ctx: UiContext, onBack: () => void = () => ctx.ui.back()) {
     const p = ctx.profile.current();
     const ch = ctx.character();
-    const input = el("input", { class: "text-input", type: "text", value: p.name, maxlength: "24" }) as HTMLInputElement;
+    const input = el("input", { class: "ds-input ds-input--sm", type: "text", value: p.name, maxlength: "24", "aria-label": T.nome }) as HTMLInputElement;
     const save = btn(T.salvar, () => {
       const v = input.value.trim();
       if (!v) return;
       ctx.profile.rename(v);
-      const lbl = save.querySelector(".btn-label") ?? save;
+      const lbl = save.querySelector(".ds-btn__label") ?? save;
       lbl.textContent = T.salvo;
       window.setTimeout(() => (lbl.textContent = T.salvar), 900);
     });
@@ -657,7 +721,7 @@ export class AchievementsScreen implements Screen {
       list.append(
         el(
           "div",
-          { class: "ach-row" + (unlocked ? " unlocked" : "") },
+          { class: "ds-row ach-row" + (unlocked ? " unlocked" : " locked") },
           el("span", { class: "ach-medal" }),
           el(
             "div",
@@ -679,15 +743,21 @@ export class AchievementsScreen implements Screen {
 
 // --- Mapa da Descida (corte do poço-cripta) ---
 
-const MAP_COLORS: Record<LandmarkKind, string> = {
-  entrada: "#7c8a98",
-  camara: "#9aa6b3",
-  brasa: "#ff8a3c",
+/** Cor de cada marco, como token do design system (o canvas resolve o valor ao desenhar). */
+const MAP_TOKEN: Record<LandmarkKind, string> = {
+  entrada: "--text-lo",
+  camara: "--text-mid",
+  brasa: "--ember-400",
 };
 
+/** Lê um token do design system (canvas não entende var()). */
+function token(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
 function mapMarker(c: CanvasRenderingContext2D, x: number, y: number, kind: LandmarkKind): void {
-  c.fillStyle = MAP_COLORS[kind];
-  c.strokeStyle = "#0c1118";
+  c.fillStyle = token(MAP_TOKEN[kind]);
+  c.strokeStyle = token("--ink-950");
   c.lineWidth = 1.5;
   if (kind === "camara") {
     c.fillRect(x - 7, y - 7, 14, 14);
@@ -695,17 +765,18 @@ function mapMarker(c: CanvasRenderingContext2D, x: number, y: number, kind: Land
   } else if (kind === "entrada") {
     c.beginPath();
     c.arc(x, y, 7, 0, Math.PI * 2);
+    c.fill();
     c.stroke();
   } else {
     // A Brasa: círculo com halo quente.
     const halo = c.createRadialGradient(x, y, 1, x, y, 16);
-    halo.addColorStop(0, "rgba(255,138,60,0.9)");
-    halo.addColorStop(1, "rgba(255,138,60,0)");
+    halo.addColorStop(0, "rgba(255, 138, 44, 0.9)");
+    halo.addColorStop(1, "rgba(255, 138, 44, 0)");
     c.fillStyle = halo;
     c.beginPath();
     c.arc(x, y, 16, 0, Math.PI * 2);
     c.fill();
-    c.fillStyle = MAP_COLORS.brasa;
+    c.fillStyle = token(MAP_TOKEN.brasa);
     c.beginPath();
     c.arc(x, y, 6, 0, Math.PI * 2);
     c.fill();
@@ -713,8 +784,13 @@ function mapMarker(c: CanvasRenderingContext2D, x: number, y: number, kind: Land
   }
 }
 
-function legendItem(color: string, label: string): HTMLElement {
-  return el("span", {}, el("span", { class: "legend-dot", style: `background:${color}` }), el("span", { text: label }));
+function legendItem(colorVar: string, label: string): HTMLElement {
+  return el(
+    "span",
+    {},
+    el("span", { class: "legend-dot", style: `background:var(${colorVar})` }),
+    el("span", { text: label })
+  );
 }
 
 export class WorldMapScreen implements Screen {
@@ -724,7 +800,7 @@ export class WorldMapScreen implements Screen {
 
   constructor(ctx: UiContext, onBack: () => void = () => ctx.ui.back()) {
     this.ctx = ctx;
-    this.canvas = el("canvas", { class: "map-canvas", width: "680", height: "460" }) as HTMLCanvasElement;
+    this.canvas = el("canvas", { class: "map-canvas", width: "680", height: "360" }) as HTMLCanvasElement;
     this.element = backdrop(
       [
         el("h2", { class: "menu-title", text: T.mapaTitulo }),
@@ -733,10 +809,10 @@ export class WorldMapScreen implements Screen {
         el(
           "div",
           { class: "map-legend" },
-          legendItem(MAP_COLORS.entrada, "Boca do poço"),
-          legendItem(MAP_COLORS.camara, "Câmara"),
-          legendItem(MAP_COLORS.brasa, "A Brasa"),
-          legendItem("#ffd27a", T.voceEstaAqui)
+          legendItem(MAP_TOKEN.entrada, "Boca do poço"),
+          legendItem(MAP_TOKEN.camara, "Câmara"),
+          legendItem(MAP_TOKEN.brasa, "A Brasa"),
+          legendItem("--gold-200", T.voceEstaAqui)
         ),
         btn(T.fechar, onBack),
       ],
@@ -753,20 +829,20 @@ export class WorldMapScreen implements Screen {
     if (!c) return;
     const W = this.canvas.width;
     const H = this.canvas.height;
-    const m = 48;
+    const m = 40;
     // Corte vertical do poço: profundidade = eixo Z do mundo (entrada no topo, Brasa no fundo).
     const toY = (z: number) => m + ((z + WORLD_HALF) / (2 * WORLD_HALF)) * (H - 2 * m);
     const shaftX = W / 2;
 
-    // Fundo frio do poço.
+    // Fundo do poço (do quase-preto de cima ao preto do fundo).
     const g = c.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, "#1a2230");
-    g.addColorStop(1, "#0a0e14");
+    g.addColorStop(0, token("--ink-800"));
+    g.addColorStop(1, token("--ink-950"));
     c.fillStyle = g;
     c.fillRect(0, 0, W, H);
 
-    // O eixo do poço (parede de pedra fria descendo).
-    c.strokeStyle = "rgba(120,140,160,0.5)";
+    // O eixo do poço (parede de pedra descendo).
+    c.strokeStyle = token("--ink-600");
     c.lineWidth = 26;
     c.lineCap = "round";
     c.beginPath();
@@ -780,24 +856,24 @@ export class WorldMapScreen implements Screen {
     for (const lm of LANDMARKS) {
       const py = toY(lm.z);
       mapMarker(c, shaftX, py, lm.kind);
-      c.fillStyle = "#cdd6e0";
-      c.font = "15px 'EB Garamond', serif";
-      c.fillText(lm.name, shaftX + 22, py);
+      c.fillStyle = token("--text-hi");
+      c.font = "17px 'EB Garamond', serif";
+      c.fillText(lm.name, shaftX + 24, py);
     }
 
     // A Acendedora ("Você está aqui"), pela profundidade atual.
     const pp = this.ctx.playerPos();
     const py = toY(pp.z);
-    c.fillStyle = "#ffd27a";
+    c.fillStyle = token("--gold-200");
     c.beginPath();
     c.arc(shaftX - 22, py, 6, 0, Math.PI * 2);
     c.fill();
-    c.strokeStyle = "#0c1118";
+    c.strokeStyle = token("--ink-950");
     c.lineWidth = 1.5;
     c.stroke();
 
     // Indicador de profundidade.
-    c.fillStyle = "#7c8a98";
+    c.fillStyle = token("--text-mid");
     c.font = "bold 14px Cinzel, serif";
     c.textAlign = "center";
     c.fillText("FUNDO", shaftX, H - m / 2);
@@ -887,10 +963,10 @@ export class ControlsScreen implements Screen {
     for (const action of INPUT_ACTIONS) {
       const keyText = this.capturing === action ? T.pressioneTecla : this.bindings[action].map(codeLabel).join(" / ");
       const keyBtn = btn(keyText, () => this.startCapture(action));
-      keyBtn.classList.add("ctrl-key");
+      keyBtn.classList.add("ctrl-key", "ds-btn--sm");
       if (this.capturing === action) keyBtn.classList.add("capturing");
       this.listEl.append(
-        el("div", { class: "ctrl-row" }, el("span", { class: "ctrl-action", text: ACTION_LABEL[action]() }), keyBtn),
+        el("div", { class: "ds-row ctrl-row" }, el("span", { class: "ctrl-action", text: ACTION_LABEL[action]() }), keyBtn),
       );
     }
   }
@@ -965,7 +1041,7 @@ export class CodexScreen implements Screen {
         const open = isCodexUnlocked(entry, state);
         const row = el(
           "div",
-          { class: "codex-row" + (open ? "" : " locked") },
+          { class: "ds-row codex-row" + (open ? "" : " locked") },
           el("span", { class: "codex-seal codex-seal-" + cat }),
           el(
             "div",
@@ -975,7 +1051,7 @@ export class CodexScreen implements Screen {
           ),
         );
         if (open) {
-          row.classList.add("clickable");
+          row.classList.add("clickable", "ds-row--interactive");
           row.setAttribute("tabindex", "0");
           const openEntry = (): void => ctx.ui.push(new CodexEntryScreen(ctx, entry.title, entry.body, entry.model));
           row.addEventListener("click", openEntry);
@@ -1068,7 +1144,7 @@ export class QuestLogScreen implements Screen {
       let currentMarked = false;
       for (const obj of chapter.objectives) {
         const isDone = done.has(obj.id);
-        let cls = "quest-row";
+        let cls = "ds-row quest-row";
         if (isDone) cls += " done";
         else if (isActive && !currentMarked) {
           cls += " current";
