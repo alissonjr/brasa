@@ -48,6 +48,7 @@ import {
   playStir,
   CombatDirector,
   CombatHud,
+  DamageNumbers,
   DIFFICULTY_DAMAGE_TAKEN,
   POTIONS,
   ABSORB,
@@ -892,6 +893,8 @@ async function main(): Promise<void> {
   platform.events.on("hero:block", () => combatHud.flashBlock());
   platform.events.on("hero:heal", () => combatHud.flashHeal());
   platform.events.on("hero:perfect", () => combatHud.flashPerfect());
+  // Numeros de dano flutuantes (inimigos via `combat:damage`; herói pela variação de vida em update()).
+  const damageNumbers = new DamageNumbers({ scene, engine, reducedMotion: () => platform.settings.get().reducedMotion }).bindEvents(platform.events);
 
   let pausedOpen = false;
 
@@ -1213,6 +1216,8 @@ async function main(): Promise<void> {
       combatHud.update(hero.combat.healthFraction, hero.combat.staminaFraction, hero.combat.sparkCharges, hero.combat.sparkChargeMax, dt / 1000);
       combatHud.setResonance(hero.combat.resonanceStreak, hero.combat.resonanceActive);
     }
+    const hc = hero.combat;
+    damageNumbers.update(dt / 1000, gameActive && !descending ? { hp: hc.healthFraction * hc.maxHealth, max: hc.maxHealth, x: hero.position.x, y: hero.position.y, z: hero.position.z } : null);
     if (gameActive) updateIgnite(dt / 1000); // recuperar estilha / abrir passagem
     if (gameActive) {
       updateReadables(); // ler inscrições/pergaminhos ([R] perto)
