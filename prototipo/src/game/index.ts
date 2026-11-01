@@ -64,3 +64,4 @@ export { CombatDirector } from "./combat/combatDirector";
 export { configureCombatSound, healChime } from "./combat/combatSound";
 export { DIFFICULTY_DAMAGE_TAKEN, POTIONS, ABSORB } from "./combat/tuning";
 export { CombatHud } from "./ui/combatHud";
+export { DamageNumbers } from "./ui/damageNumbers";

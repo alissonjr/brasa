@@ -9,6 +9,7 @@ import { ABSORB, BURN } from "./tuning";
 import type { CombatTarget } from "./combatTarget";
 import { ImpactFx } from "./impactFx";
 import { hitThunk, heroHurt, shieldClank, healChime, perfectDodgeChime } from "./combatSound";
+import type { DamageKind } from "../ui/damageNumbers";
 
 /**
  * CAMADA JOGO. Orquestra o combate (M2.1-M2.3): a cada frame avança o hit stop, resolve os
@@ -196,6 +197,39 @@ export class CombatDirector {
     return this.boss && this.boss.health.alive ? this.boss.brasaLightFraction : 1;
   }
 
+  /**
+   * Aplica um golpe medindo o dano REAL (vida que o alvo perdeu: já inclui flanco, cambaleio,
+   * guarda e queimadura) e emite `combat:damage` para os números flutuantes (ui/damageNumbers).
+   * Evento separado de `combat:hit` de propósito: este não enche a Brasa nem pisca o HUD.
+   */
+  private hitTracked(
+    target: CombatTarget,
+    kind: DamageKind,
+    damage: number,
+    dir: Vector3,
+    knockback: number,
+    guardBreak?: boolean,
+    poise?: number,
+    positional?: boolean,
+    big = false
+  ): { guarded: boolean } {
+    const before = target.health.current;
+    const res = target.takeHit(damage, dir, knockback, guardBreak, poise, positional);
+    const dealt = before - target.health.current;
+    if (dealt >= 0.5) {
+      const c = target.hurtbox.center;
+      this.events.emit("combat:damage", {
+        amount: dealt,
+        x: c.x,
+        y: c.y + target.hurtbox.radius + 0.5, // acima da cabeça (a câmera alta é distante)
+        z: c.z,
+        kind: res.guarded ? "block" : kind,
+        big,
+      });
+    }
+    return res;
+  }
+
   // --- Execução (finisher) ---
   private nearestExecutable(): Skeleton | null {
     const hp = this.hero.position;
@@ -229,7 +263,7 @@ export class CombatDirector {
     this.tmpDir.set(c.x - this.hero.position.x, 0, c.z - this.hero.position.z);
     if (this.tmpDir.lengthSquared() < 1e-4) this.tmpDir.set(0, 0, 1);
     this.tmpDir.normalize();
-    e.takeHit(99999, this.tmpDir, 2, true); // golpe letal: dispara morte + dissolução
+    this.hitTracked(e, "crit", 99999, this.tmpDir, 2, true, 0, false, true); // golpe letal: dispara morte + dissolução
     // Recompensa do finisher (loop do Doom: executar = sobreviver): cura + estouro + freeze + tremor.
     this.hero.combat.heal(this.hero.combat.maxHealth * 0.15);
     this.events.emit("hero:heal", {}); // feedback positivo (brilho verde + carrilhão)
@@ -250,7 +284,7 @@ export class CombatDirector {
       this.tmpDir.set(c.x - origin.x, 0, c.z - origin.z);
       if (this.tmpDir.lengthSquared() < 1e-4) this.tmpDir.set(0, 0, 1);
       this.tmpDir.normalize();
-      target.takeHit(60, this.tmpDir, 6, true); // o fogo da Erupção ignora escudo
+      this.hitTracked(target, "crit", 60, this.tmpDir, 6, true, 0, false, true); // o fogo da Erupção ignora escudo
     }
     for (let k = 0; k < 8; k++) {
       const a = (k / 8) * Math.PI * 2;
@@ -460,7 +494,7 @@ export class CombatDirector {
           const ddz = hb.center.z - p.pos.z;
           if (ddx * ddx + ddz * ddz < (hb.radius + 0.4) * (hb.radius + 0.4)) {
             this.tmpDir.set(p.vel.x, 0, p.vel.z).normalize();
-            target.takeHit(p.damage, this.tmpDir, 4, true);
+            this.hitTracked(target, "crit", p.damage, this.tmpDir, 4, true); // devolvida/cajado: brasa
             this.fx.burst(p.pos, 18);
             this.hitStop.trigger(3 / 60);
             hitThunk(true);
@@ -660,7 +694,23 @@ export class CombatDirector {
       const clavaHeavy = this.heroWeapon?.kind === "clava" && heavy; // clava capturada: pesado = smash de área
       const espada = this.heroWeapon?.kind === "espada"; // espada capturada: todo golpe corta mais forte
       const wMul = clavaHeavy ? 2 : espada ? 1.5 : 1;
-      const { guarded } = target.takeHit(tuning.damage * dmgMul * wMul, this.tmpDir, kb, heavy, tuning.poise ?? 0, true);
+      // Dano esperado SEM bônus de posição/cambaleio: se o dano real passar disso (costas, flanco,
+      // cambaleado) ou a Ressonância estiver alta, o número sai como crítico (brasa, maior).
+      const expected = tuning.damage * dmgMul * wMul;
+      const resoHigh = hc.resonanceActive && hc.resonanceStreak >= 3;
+      const hpBefore = target.health.current;
+      const { guarded } = target.takeHit(expected, this.tmpDir, kb, heavy, tuning.poise ?? 0, true);
+      const dealt = hpBefore - target.health.current;
+      if (dealt >= 0.5) {
+        this.events.emit("combat:damage", {
+          amount: dealt,
+          x: hb.center.x,
+          y: hb.center.y + hb.radius + 0.5,
+          z: hb.center.z,
+          kind: guarded ? "block" : dealt > expected * 1.15 || resoHigh ? "crit" : "hit",
+          big: heavy,
+        });
+      }
       if (guarded) {
         // Bloqueado pela guarda: feedback metálico curto (ensina a flanquear / usar o pesado).
         this.hitStop.trigger(2 / 60);
@@ -700,7 +750,7 @@ export class CombatDirector {
             this.tmpDir.set(ax, 0, az);
             if (this.tmpDir.lengthSquared() < 1e-4) this.tmpDir.set(0, 0, 1);
             this.tmpDir.normalize();
-            o.takeHit(tuning.damage * dmgMul * 2, this.tmpDir, kb, true, tuning.poise ?? 0);
+            this.hitTracked(o, "hit", tuning.damage * dmgMul * 2, this.tmpDir, kb, true, tuning.poise ?? 0, false, true);
           }
         }
         this.fx.burst(point, 30);
@@ -719,7 +769,7 @@ export class CombatDirector {
           this.tmpDir.set(ax, 0, az);
           if (this.tmpDir.lengthSquared() < 1e-4) this.tmpDir.set(0, 0, 1);
           this.tmpDir.normalize();
-          o.takeHit(tuning.damage * hc.damageMul * 0.55, this.tmpDir, tuning.knockback, heavy, (tuning.poise ?? 0) * 0.5);
+          this.hitTracked(o, "hit", tuning.damage * hc.damageMul * 0.55, this.tmpDir, tuning.knockback, heavy, (tuning.poise ?? 0) * 0.5);
         }
         this.fx.burst(point, heavy ? 20 : 12);
       }
@@ -750,7 +800,7 @@ export class CombatDirector {
       } else {
         this.tmpDir.copyFrom(fwd);
       }
-      target.takeHit(t.damage, this.tmpDir, t.knockback, true, t.poise ?? 0); // guardBreak: o fogo ignora o escudo
+      this.hitTracked(target, "crit", t.damage, this.tmpDir, t.knockback, true, t.poise ?? 0); // guardBreak: o fogo ignora o escudo
       this.applyBurn(target); // o fogo deixa Queimadura
       // W3: o fogo REACENDE a Brasa no Guardião -> cambaleio + dano dobrado (gangorra de luz).
       (target as { reignite?: () => void }).reignite?.();
@@ -794,7 +844,7 @@ export class CombatDirector {
       if (b.tick >= 1) {
         b.tick -= 1;
         this.tmpDir.set(0, 0, 1);
-        target.takeHit(BURN.dps * b.stacks, this.tmpDir, 0, true);
+        this.hitTracked(target, "burn", BURN.dps * b.stacks, this.tmpDir, 0, true);
         this.fx.burst(target.hurtbox.center, 6);
       }
       if (b.time <= 0) {
