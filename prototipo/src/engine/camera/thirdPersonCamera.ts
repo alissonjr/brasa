@@ -1,5 +1,5 @@
-import { ArcRotateCamera, Quaternion, Scalar, Vector3 } from "@babylonjs/core";
-import type { Scene } from "@babylonjs/core";
+import { ArcRotateCamera, Quaternion, Ray, Scalar, Vector3 } from "@babylonjs/core";
+import type { AbstractMesh, Scene } from "@babylonjs/core";
 
 /**
  * CAMADA ENGINE. Câmera de 3a pessoa estilo action-RPG (GTA-like): mouse-look livre
@@ -9,10 +9,21 @@ import type { Scene } from "@babylonjs/core";
  */
 export class ThirdPersonCamera {
   readonly camera: ArcRotateCamera;
+  private readonly scene: Scene;
   private readonly canvas: HTMLCanvasElement;
   private readonly smoothedTarget: Vector3;
-  private readonly targetHeight = 1.2;
+  // Ponto que a câmera mira, ACIMA da posição do herói. Mira na parte de cima das costas
+  // (~ombros), não acima da cabeça: evita encarar o topo do capuz quando a câmera é forçada
+  // para perto (ex.: spawn encostado na parede). Antes era 1.2 (acima da cabeça ~1.9 m).
+  private readonly targetHeight = 0.95;
   private readonly defaultRadius = 6; // distância padrão (reaplicada a cada sala, view consistente)
+  // Raio "desejado" (o que o jogador pediu via zoom/sala); o raio EFETIVO encurta sozinho
+  // quando há parede entre o herói e a câmera (colisão manual, ver update). Sem isso, a
+  // colisão embutida do ArcRotateCamera reescrevia alpha/beta e jogava a câmera num
+  // top-down colado (o herói virava um borrão visto de cima) perto das paredes.
+  private desiredRadius = 6;
+  private readonly camDir = new Vector3(); // dir unitária alvo->câmera (reusada por frame)
+  private readonly collidePredicate = (m: AbstractMesh): boolean => m.checkCollisions && m.isEnabled();
 
   // Sensibilidade do mouse (rad por pixel).
   private readonly lookSensitivity = 0.0028;
@@ -28,6 +39,7 @@ export class ThirdPersonCamera {
   private readonly betaMax = Math.PI / 2.05;
 
   constructor(scene: Scene, canvas: HTMLCanvasElement, initialTarget: Vector3) {
+    this.scene = scene;
     this.canvas = canvas;
     this.smoothedTarget = initialTarget.add(new Vector3(0, this.targetHeight, 0));
 
@@ -44,12 +56,11 @@ export class ThirdPersonCamera {
     this.camera.upperRadiusLimit = 14;
     this.camera.minZ = 0.1;
 
-    // Colisão de câmera: em ambiente fechado a câmera não atravessa parede; ela encurta
-    // o raio ao bater (pull-in). Usa o sistema de colisão do Babylon (independente do
-    // Havok do jogador); os colisores da sala marcam checkCollisions=true.
-    scene.collisionsEnabled = true;
-    this.camera.checkCollisions = true;
-    this.camera.collisionRadius = new Vector3(0.5, 0.5, 0.5);
+    // Colisão de câmera MANUAL (ver update): um raycast alvo->câmera encurta só o RAIO ao
+    // achar parede, mantendo alpha/beta estáveis. NÃO usar a colisão embutida do
+    // ArcRotateCamera: ela chama rebuildAnglesAndRadius e reescreve alpha/beta, empurrando
+    // a câmera para um top-down colado perto das paredes (o herói virava um borrão de cima).
+    this.camera.checkCollisions = false;
 
     this.setupPointerLook();
     this.setupWheelZoom();
@@ -86,10 +97,10 @@ export class ThirdPersonCamera {
       (e: WheelEvent) => {
         e.preventDefault();
         // Passo proporcional à distância atual: zoom suave tanto perto quanto longe.
-        const step = Math.sign(e.deltaY) * this.camera.radius * 0.12;
-        const next = this.camera.radius + step;
-        this.camera.radius = Scalar.Clamp(
-          next,
+        // Ajusta o raio DESEJADO; o efetivo ainda encurta por colisão (ver update).
+        const step = Math.sign(e.deltaY) * this.desiredRadius * 0.12;
+        this.desiredRadius = Scalar.Clamp(
+          this.desiredRadius + step,
           this.camera.lowerRadiusLimit ?? 4,
           this.camera.upperRadiusLimit ?? 45
         );
@@ -108,6 +119,8 @@ export class ThirdPersonCamera {
     const desired = targetPosition.add(new Vector3(0, this.targetHeight, 0));
     const lerpFactor = 1 - Math.exp(-12 * deltaSeconds);
     Vector3.LerpToRef(this.smoothedTarget, desired, lerpFactor, this.smoothedTarget);
+
+    this.resolveCollisionRadius(deltaSeconds);
 
     if (this.shakeAmp > 0.0006) {
       this.shakeAmp *= Math.exp(-deltaSeconds / 0.04); // decai a ~5% em ~0,12 s
@@ -139,8 +152,36 @@ export class ThirdPersonCamera {
       this.camera.alpha = -Math.PI / 2; // atrás do herói
       this.camera.beta = 1.05; // levemente de cima
       this.camera.radius = this.defaultRadius; // reseta o zoom: view consistente a cada andar
+      this.desiredRadius = this.defaultRadius; // a colisão manual parte do raio padrão
     }
     this.camera.setTarget(this.smoothedTarget);
+  }
+
+  /**
+   * COLISÃO MANUAL: encurta só o raio quando há parede entre o herói e a câmera, mantendo
+   * alpha/beta (sem o top-down colado que a colisão embutida do ArcRotateCamera causava).
+   * Raycast do alvo na direção da câmera (derivada de alpha/beta); bate numa parede ->
+   * recolhe rápido; livre -> volta devagar ao raio desejado (sem pop). Mira só nos colisores
+   * da sala (checkCollisions=true), que são invisíveis/não-pickáveis.
+   */
+  private resolveCollisionRadius(deltaSeconds: number): void {
+    const { alpha, beta } = this.camera;
+    const sb = Math.sin(beta);
+    // Dir unitária alvo->câmera na convenção do ArcRotateCamera.
+    this.camDir.set(Math.cos(alpha) * sb, Math.cos(beta), Math.sin(alpha) * sb);
+
+    const BUFFER = 0.4; // folga p/ a câmera não encostar na parede (near plane + margem)
+    let goalRadius = this.desiredRadius;
+    const ray = new Ray(this.smoothedTarget, this.camDir, this.desiredRadius + BUFFER);
+    const hit = this.scene.pickWithRay(ray, this.collidePredicate);
+    if (hit?.hit && hit.distance > 0) {
+      goalRadius = Math.max(this.camera.lowerRadiusLimit ?? 2, hit.distance - BUFFER);
+    }
+
+    // Recolhe rápido (não atravessar parede); estende devagar (sem solavanco ao limpar).
+    const pullingIn = goalRadius < this.camera.radius;
+    const k = 1 - Math.exp(-(pullingIn ? 30 : 8) * deltaSeconds);
+    this.camera.radius += (goalRadius - this.camera.radius) * k;
   }
 
   /** Dispara um kick de câmera (impacto). Amplitude em unidades de mundo; pega o maior pedido. */

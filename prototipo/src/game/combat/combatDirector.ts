@@ -24,6 +24,9 @@ import { hitThunk, heroHurt, shieldClank, healChime, perfectDodgeChime } from ".
  */
 const HIT_RADIUS = 0.7; // raio da hitbox à frente do herói (alcance generoso, golpe confiável)
 
+/** Armas que o herói pode capturar de mortos (cada familia larga a sua). */
+type WeaponKind = "clava" | "cajado" | "espada";
+
 export class CombatDirector {
   private readonly hitStop = new HitStop();
   private readonly fx: ImpactFx;
@@ -49,8 +52,10 @@ export class CombatDirector {
   // W2: Queimadura por alvo (status do ember). time = segundos restantes; stacks = pilha.
   private readonly burns = new Map<CombatTarget, { time: number; stacks: number; tick: number }>();
   // CAPTURA DE ARMA: drops no chão (mesh + tipo) e a arma EQUIPADA (buff temporário/cargas).
-  private readonly drops: { mesh: Mesh; pos: Vector3; kind: "clava" | "cajado"; life: number }[] = [];
-  private heroWeapon: { kind: "clava" | "cajado"; timer: number; charges: number; mesh: Mesh } | null = null;
+  private readonly drops: { mesh: Mesh; pos: Vector3; kind: WeaponKind; life: number }[] = [];
+  private heroWeapon: { kind: WeaponKind; timer: number; charges: number; mesh: Mesh } | null = null;
+  // Props interativos do andar (vasos quebram, cadeiras tombam ao golpe). Setados por sala.
+  private strikeProps: { pos: Vector3; r: number; kind: "break" | "kick"; strike: () => void }[] = [];
 
   constructor(
     private readonly scene: Scene,
@@ -85,6 +90,11 @@ export class CombatDirector {
     if (this.enemyBounds) d.setBounds(this.enemyBounds);
     this.enemies.push(d);
     return d;
+  }
+
+  /** Props interativos do andar (vasos/cadeiras): substituidos a cada sala montada. */
+  setStrikeProps(list: { pos: Vector3; r: number; kind: "break" | "kick"; strike: () => void }[]): void {
+    this.strikeProps = list;
   }
 
   /** Despertar: segura a IA dos inimigos por `seconds` ao entrar na câmara (encenação). */
@@ -253,13 +263,15 @@ export class CombatDirector {
   }
 
   // --- Captura de arma (drop -> [G] pegar -> buff/munição temporária) ---
-  private spawnDrop(kind: "clava" | "cajado", at: Vector3): void {
-    const isClava = kind === "clava";
-    const mesh = isClava
-      ? MeshBuilder.CreateBox("drop_clava", { width: 0.5, height: 0.5, depth: 1.1 }, this.scene)
-      : MeshBuilder.CreateCylinder("drop_cajado", { diameter: 0.18, height: 1.4, tessellation: 8 }, this.scene);
+  private spawnDrop(kind: WeaponKind, at: Vector3): void {
+    const mesh =
+      kind === "clava"
+        ? MeshBuilder.CreateBox("drop_clava", { width: 0.5, height: 0.5, depth: 1.1 }, this.scene)
+        : kind === "espada"
+          ? MeshBuilder.CreateBox("drop_espada", { width: 0.14, height: 0.14, depth: 1.5 }, this.scene)
+          : MeshBuilder.CreateCylinder("drop_cajado", { diameter: 0.18, height: 1.4, tessellation: 8 }, this.scene);
     const mat = new StandardMaterial("dropMat", this.scene);
-    mat.emissiveColor = Color3.FromHexString(isClava ? "#caa45a" : "#ff8a2c");
+    mat.emissiveColor = Color3.FromHexString(kind === "clava" ? "#caa45a" : kind === "espada" ? "#cfe2ff" : "#ff8a2c");
     mat.diffuseColor = Color3.Black();
     mat.specularColor = Color3.Black();
     mat.disableLighting = true;
@@ -270,9 +282,9 @@ export class CombatDirector {
     this.drops.push({ mesh, pos: new Vector3(at.x, 0.7, at.z), kind, life: 20 });
   }
 
-  private nearestDrop(): { mesh: Mesh; pos: Vector3; kind: "clava" | "cajado"; life: number } | null {
+  private nearestDrop(): { mesh: Mesh; pos: Vector3; kind: WeaponKind; life: number } | null {
     const hp = this.hero.position;
-    let best: { mesh: Mesh; pos: Vector3; kind: "clava" | "cajado"; life: number } | null = null;
+    let best: { mesh: Mesh; pos: Vector3; kind: WeaponKind; life: number } | null = null;
     let bd = 2.2 * 2.2;
     for (const d of this.drops) {
       const dd = (d.pos.x - hp.x) * (d.pos.x - hp.x) + (d.pos.z - hp.z) * (d.pos.z - hp.z);
@@ -287,7 +299,7 @@ export class CombatDirector {
   /** Nome da arma dropada ao alcance (prompt "[G] Pegar X"); null = nenhuma. */
   nearbyDrop(): string | null {
     const d = this.nearestDrop();
-    return d ? (d.kind === "clava" ? "Clava" : "Cajado") : null;
+    return d ? (d.kind === "clava" ? "Clava" : d.kind === "espada" ? "Espada" : "Cajado") : null;
   }
 
   /** Equipa a arma dropada mais próxima (tecla G). true se pegou. */
@@ -300,14 +312,16 @@ export class CombatDirector {
     return true;
   }
 
-  private equipWeapon(kind: "clava" | "cajado"): void {
+  private equipWeapon(kind: WeaponKind): void {
     this.heroWeapon?.mesh.dispose();
-    const isClava = kind === "clava";
-    const mesh = isClava
-      ? MeshBuilder.CreateBox("arma_clava", { width: 0.45, height: 0.45, depth: 1.2 }, this.scene)
-      : MeshBuilder.CreateCylinder("arma_cajado", { diameter: 0.14, height: 1.3, tessellation: 8 }, this.scene);
+    const mesh =
+      kind === "clava"
+        ? MeshBuilder.CreateBox("arma_clava", { width: 0.45, height: 0.45, depth: 1.2 }, this.scene)
+        : kind === "espada"
+          ? MeshBuilder.CreateBox("arma_espada", { width: 0.12, height: 0.12, depth: 1.5 }, this.scene)
+          : MeshBuilder.CreateCylinder("arma_cajado", { diameter: 0.14, height: 1.3, tessellation: 8 }, this.scene);
     const mat = new StandardMaterial("armaMat", this.scene);
-    mat.emissiveColor = Color3.FromHexString(isClava ? "#caa45a" : "#ff8a2c");
+    mat.emissiveColor = Color3.FromHexString(kind === "clava" ? "#caa45a" : kind === "espada" ? "#cfe2ff" : "#ff8a2c");
     mat.diffuseColor = Color3.Black();
     mat.specularColor = Color3.Black();
     mat.disableLighting = true;
@@ -315,8 +329,11 @@ export class CombatDirector {
     mesh.isPickable = false;
     mesh.parent = this.hero.model.root;
     mesh.position.set(0.45, 1.0, 0.5);
-    if (!isClava) mesh.rotation.x = Math.PI / 2;
-    this.heroWeapon = { kind, timer: isClava ? 10 : 999, charges: isClava ? 5 : 3, mesh };
+    if (kind === "cajado") mesh.rotation.x = Math.PI / 2;
+    // clava: forte mas breve. espada: golpe forte e durador (cargas por acerto). cajado: 3 bolas.
+    const stats =
+      kind === "clava" ? { timer: 10, charges: 5 } : kind === "espada" ? { timer: 999, charges: 12 } : { timer: 999, charges: 3 };
+    this.heroWeapon = { kind, timer: stats.timer, charges: stats.charges, mesh };
   }
 
   private removeWeapon(): void {
@@ -343,7 +360,8 @@ export class CombatDirector {
   /** Arma equipada (HUD): "Clava (4)" / "Cajado (2x)" ou null. */
   get weaponHud(): string | null {
     if (!this.heroWeapon) return null;
-    return this.heroWeapon.kind === "clava" ? `Clava (${this.heroWeapon.charges})` : `Cajado (${this.heroWeapon.charges}x)`;
+    const w = this.heroWeapon;
+    return w.kind === "clava" ? `Clava (${w.charges})` : w.kind === "espada" ? `Espada (${w.charges})` : `Cajado (${w.charges}x)`;
   }
 
   /** Bola de fogo AMIGA disparada pelo cajado capturado (fere inimigos). */
@@ -594,6 +612,27 @@ export class CombatDirector {
     if (!hc.canHit) return;
     const point = hc.weaponHitPoint();
     const reach = HIT_RADIUS + hc.extraReach; // alcance base + upgrades
+    // PROPS INTERATIVOS: golpe quebra vaso / tomba cadeira ao alcance (antes dos inimigos).
+    for (let i = this.strikeProps.length - 1; i >= 0; i--) {
+      const sp = this.strikeProps[i]!;
+      const ddx = sp.pos.x - point.x;
+      const ddz = sp.pos.z - point.z;
+      const rr = reach + sp.r;
+      if (ddx * ddx + ddz * ddz > rr * rr) continue;
+      sp.strike();
+      if (sp.kind === "break") {
+        this.fx.burst(sp.pos, 22); // estilhaco
+        this.hitStop.trigger(3 / 60);
+        this.camera.shake(0.04);
+        hitThunk(false);
+        if (Math.random() < 0.5) this.spawnEssenceAt(sp.pos); // as vezes solta essencia (cura)
+        this.strikeProps.splice(i, 1); // quebrado: sai da lista
+      } else {
+        this.camera.shake(0.05);
+        hitThunk(true); // baque da cadeira tombando
+        this.strikeProps.splice(i, 1); // tombou: nao reage mais
+      }
+    }
     for (const target of this.targets) {
       if (!target.health.alive) continue;
       const hb = target.hurtbox;
@@ -619,7 +658,8 @@ export class CombatDirector {
       const dmgMul = hc.damageMul * (burning ? 1 + BURN.dmgTakenBonus : 1);
       const kb = tuning.knockback * (burning ? 1 + BURN.knockbackBonus : 1);
       const clavaHeavy = this.heroWeapon?.kind === "clava" && heavy; // clava capturada: pesado = smash de área
-      const wMul = clavaHeavy ? 2 : 1;
+      const espada = this.heroWeapon?.kind === "espada"; // espada capturada: todo golpe corta mais forte
+      const wMul = clavaHeavy ? 2 : espada ? 1.5 : 1;
       const { guarded } = target.takeHit(tuning.damage * dmgMul * wMul, this.tmpDir, kb, heavy, tuning.poise ?? 0, true);
       if (guarded) {
         // Bloqueado pela guarda: feedback metálico curto (ensina a flanquear / usar o pesado).
@@ -638,6 +678,8 @@ export class CombatDirector {
           this.spawnFriendlyFireball(hb.center);
           this.heroWeapon.charges -= 1;
         }
+        // ESPADA capturada: gasta uma carga por golpe conectado (dura ~12 acertos).
+        if (espada && this.heroWeapon) this.heroWeapon.charges -= 1;
       }
       this.events.emit("combat:hit", {
         damage: tuning.damage,
@@ -786,6 +828,25 @@ export class CombatDirector {
     const pos = new Vector3(c.x, 0.8, c.z);
     mesh.position.copyFrom(pos);
     this.popIn(mesh, 200); // ESTILO (Bloco 2): a essência brota com um pop
+    this.essences.push({ mesh, pos, life: ABSORB.essencia.lifeSec });
+  }
+
+  /** Spawna uma essência de cura num ponto (usado pelos vasos quebrados). */
+  private spawnEssenceAt(at: { x: number; y: number; z: number }): void {
+    if (!this.essMat) {
+      const mat = new StandardMaterial("essMat", this.scene);
+      mat.emissiveColor = Color3.FromHexString("#ffd27a");
+      mat.diffuseColor = Color3.Black();
+      mat.specularColor = Color3.Black();
+      mat.disableLighting = true;
+      this.essMat = mat;
+    }
+    const mesh = MeshBuilder.CreateSphere("essencia", { diameter: 0.5, segments: 8 }, this.scene);
+    mesh.material = this.essMat;
+    mesh.isPickable = false;
+    const pos = new Vector3(at.x, 0.8, at.z);
+    mesh.position.copyFrom(pos);
+    this.popIn(mesh, 200);
     this.essences.push({ mesh, pos, life: ABSORB.essencia.lifeSec });
   }
 

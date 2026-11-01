@@ -210,10 +210,22 @@ export class Skeleton implements CombatTarget {
   }
 
   /** Arma que este inimigo DROPA ao morrer (captura de arma): brutamonte=clava, conjurador=cajado. */
-  get weaponDrop(): "clava" | "cajado" | null {
-    if (this.kind_ === "brutamonte") return "clava";
-    if (this.kind_ === "conjurador") return "cajado";
-    return null;
+  get weaponDrop(): "clava" | "cajado" | "espada" | null {
+    // Cada FAMILIA de morto larga uma arma propria (matar tipos diferentes = armas diferentes).
+    switch (this.kind_) {
+      case "brutamonte":
+      case "heavy":
+      case "antigo":
+        return "clava"; // brutos largam a clava (smash de area)
+      case "conjurador":
+      case "demonio":
+        return "cajado"; // conjuradores largam o cajado (bola de fogo)
+      case "warrior":
+      case "sentinela":
+        return "espada"; // guardas largam a espada (golpe forte e com alcance)
+      default:
+        return null; // minions/rogues/etc. nao largam arma (mantem o drop especial)
+    }
   }
 
   /** Dano que este morto causa no heroi ao conectar o golpe (lido pelo CombatDirector). */
@@ -298,9 +310,12 @@ export class Skeleton implements CombatTarget {
 
     const rootNode = new TransformNode("skeleton", this.scene);
     this.rootNode = rootNode;
-    rootNode.position.copyFrom(spawn);
-    rootNode.position.y = spawn.y - RISE_DEPTH; // nasce enterrado: sobe rasgando o chão (emerge)
-    this.emergeTimer = EMERGE_SEC;
+    // CRÍTICO: medir e aterrar o modelo com o root na ORIGEM (world == local). Se o root já
+    // estivesse no spawn e/ou enterrado (RISE_DEPTH), getHierarchyBoundingVectors devolve
+    // bounds em MUNDO e o offset do spawn/emergência vazaria para model.position - o esqueleto
+    // ficava FLUTUANDO ~RISE_DEPTH acima do chão e DESLOCADO horizontalmente do seu ponto
+    // lógico (hurtbox/IA), por isso "nunca aparecia em cena". Só depois levo o root ao spawn.
+    rootNode.position.setAll(0);
 
     model.parent = rootNode;
     model.rotationQuaternion = null;
@@ -313,8 +328,14 @@ export class Skeleton implements CombatTarget {
     model.scaling.setAll(scale);
     model.computeWorldMatrix(true);
     b = model.getHierarchyBoundingVectors(true);
+    // root na origem => bounds locais: centra em XZ e aterra os pés na cota do root.
     model.position.set(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
     this.torsoY = this.stats.height * 0.5;
+
+    // agora sim posiciona no spawn e enterra para a animação de emergir (sobe rasgando o chão).
+    rootNode.position.copyFrom(spawn);
+    rootNode.position.y = spawn.y - RISE_DEPTH;
+    this.emergeTimer = EMERGE_SEC;
 
     const meshes = model.getChildMeshes(false) as AbstractMesh[];
     for (const m of meshes) {

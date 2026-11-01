@@ -82,6 +82,10 @@ export function readCharacter(blob: Record<string, unknown> | undefined): Charac
 export function mantoName(id: string): string {
   return pick(MANTOS, id, MANTOS[0]!).name;
 }
+/** Cor (hex) do manto escolhido; usada para tingir o modelo da Acendedora em jogo. */
+export function mantoColor(id: string): string {
+  return pick(MANTOS, id, MANTOS[0]!).color;
+}
 export function domName(id: string): string {
   return pick(DONS, id, DONS[0]!).name;
 }

@@ -1,5 +1,5 @@
-import { ImportMeshAsync, TransformNode } from "@babylonjs/core";
-import type { AnimationGroup, Scene } from "@babylonjs/core";
+import { ImportMeshAsync, Texture, TransformNode } from "@babylonjs/core";
+import type { AnimationGroup, BaseTexture, Material, Scene } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF"; // registra o loader glTF
 import { assetUrl, outlineHierarchy, type CharacterVisual } from "@engine";
 
@@ -49,6 +49,12 @@ export class HeroModel implements CharacterVisual {
   private wWalk = 0;
   private wRun = 0;
   private loaded = false;
+  // Manto escolhido na criação: troca o ATLAS de albedo por uma variante recolorida
+  // (public/models/rogue_<id>.png), gerada a partir do atlas verde base por hue-shift só
+  // na região do manto. Aplicada ao carregar e a cada começo de jogo. Sem id, fica o atlas
+  // base do KayKit (verde).
+  private mantleId?: string;
+  private mantleTex?: Texture;
 
   /**
    * @param opts.modelUrl glb do herói (default: KayKit Mage). A Acendedora passa o
@@ -91,6 +97,36 @@ export class HeroModel implements CharacterVisual {
 
     this.setupAnimations(result.animationGroups);
     this.loaded = true;
+    this.applyMantle(); // aplica a variante de manto se já escolhida quando o modelo terminou
+  }
+
+  /**
+   * Define o manto (id da escolha: brasa/cinza/noite/ferro). Troca o atlas de albedo do
+   * KayKit pela variante recolorida correspondente (mesmo layout/UV, só o matiz do manto
+   * muda), preservando a sombra. Pode ser chamada antes do modelo carregar (fica pendente).
+   */
+  setMantle(id: string): void {
+    this.mantleId = id;
+    if (this.loaded) this.applyMantle();
+  }
+
+  private applyMantle(): void {
+    if (!this.mantleId) return;
+    const url = assetUrl(`/models/rogue_${this.mantleId}.png`);
+    // invertY=false: casa com a convenção do atlas carregado pelo loader glTF (origem
+    // topo-esquerda); senão o atlas sai espelhado em V e o manto pega o swatch errado.
+    const tex = new Texture(url, this.scene, false, false);
+    tex.name = `manto_${this.mantleId}`;
+    const old = this.mantleTex;
+    const seen = new Set<Material>();
+    for (const m of this.root.getChildMeshes(false)) {
+      const mat = m.material as (Material & { albedoTexture?: BaseTexture | null }) | null;
+      if (!mat || seen.has(mat) || !("albedoTexture" in mat)) continue;
+      seen.add(mat);
+      mat.albedoTexture = tex;
+    }
+    this.mantleTex = tex;
+    if (old && old !== tex) old.dispose(); // libera a variante anterior ao trocar
   }
 
   private setupAnimations(groups: AnimationGroup[]): void {

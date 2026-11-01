@@ -1,5 +1,5 @@
 import { Matrix, Scene, Vector3 } from "@babylonjs/core";
-import { addFinishingPass, addSceneOutline, createEngine, el, enableHavokPhysics, enableSsao, Easings, InputState, ThirdPersonCamera, Tweens, UiManager } from "@engine";
+import { addFinishingPass, addSceneOutline, createEngine, el, enableHavokPhysics, enableSsao, InputState, ThirdPersonCamera, Tweens, UiManager } from "@engine";
 import type { KeyBindings } from "@engine";
 import {
   WORLD_GRAVITY,
@@ -174,11 +174,28 @@ async function main(): Promise<void> {
   input.attach(window);
 
   const combat = new CombatDirector(scene, camera, hero, platform.events, tweens);
+  // DEV: gancho de depuracao (so em dev) para inspecionar/afinar a cena ao vivo no playtest.
+  if (import.meta.env.DEV) {
+    (window as unknown as { __brasa?: unknown }).__brasa = {
+      scene, camera, hero, combat, input,
+      cam: () => {
+        const c = camera.camera;
+        return { alpha: c.alpha, beta: c.beta, radius: c.radius, posY: c.position.y, targetY: c.target.y };
+      },
+      hp: () => ({ cur: hero.combat.health.current, max: hero.combat.health.max, frac: hero.combat.health.fraction }),
+      pos: () => { const p = hero.position; return { x: p.x, y: p.y, z: p.z }; },
+      enemiesAlive: () => combat.enemiesAlive,
+      tp: (x: number, z: number, y = 1.5) => hero.teleport(new Vector3(x, y, z)),
+      heal: () => hero.combat.health.heal(9999),
+    };
+  }
   // Gate de performance (NORMATIVO): mede draw calls + fps por sala. Overlay sob ?perf ou F9.
   const perf = new PerfHud(scene, engine);
   window.addEventListener("keydown", (e) => { if (e.code === "F9") perf.toggle(); });
-  const applyDifficulty = (): void =>
+  const applyDifficulty = (): void => {
     hero.combat.setDamageTakenMultiplier(DIFFICULTY_DAMAGE_TAKEN[character.difficulty] ?? 1);
+    hero.setMantle(character.manto); // aplica a variante de textura do manto escolhido
+  };
   applyDifficulty();
 
   // Sequência de andares do slice: 5 câmaras + a câmara do Guardião.
@@ -199,17 +216,19 @@ async function main(): Promise<void> {
   let descending = false;
   let descentDone = false;
   let roomCleared = false;
-  // Acender a Brasa: ao limpar a sala, a Acendedora canaliza no altar (channelT) e a luz
-  // vira de fria a quente (lightT); só então o alçapão libera (passageOpen). Ver spec-top5.
-  let channelT = 0;
-  let lightT = 0;
   let floorDepth = 0; // ESTILO (Bloco 4): profundidade do andar atual (0..1) p/ a ambiência
   let ambAcc = 0; // acumulador de throttle do setAmbience
   let passageOpen = false;
-  const CHANNEL_SEC = 1.3; // tempo segurando [R] no altar
+  // NARRATIVA (W8): a Acendedora desce o poço para reacender a GRANDE BRASA no fundo. Cada
+  // câmara guarda uma ESTILHA de Brasa (no relicário/altar) que os mortos velam; recuperá-la
+  // (limpar a sala + tocar o relicário) libera a descida. Só no FUNDO (andar final), com as
+  // estilhas reunidas, o fosso é reaceso. Nada de "acender o fogo" a cada andar.
+  let fragments = 0; // estilhas de Brasa recuperadas até agora
+  let fragmentTaken = false; // estilha do andar atual já recuperada?
+  const readShown = new Set<string>(); // inscrições/pergaminhos já lidos neste andar
+  let nearReadable: { x: number; z: number; text: string } | null = null;
   let bossChannelT = 0; // canalização da Brasa central DURANTE o confronto do Guardião
   const BOSS_CHANNEL_SEC = 1.1;
-  const LIGHT_SEC = 1.0; // duração da virada frio->quente
   let fagulhas = 0; // moeda: cinza quente dos mortos, gasta nas dádivas do braseiro
   let runActive = false; // há uma descida em andamento (para persistência/retomar)
   let runSeed = newSeed(); // semente da run: jitter de posição e ordem de oferta determinísticos
@@ -294,7 +313,7 @@ async function main(): Promise<void> {
     "position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:35;padding:10px 20px;border-radius:8px;" +
     "background:rgba(12,17,24,0.8);color:#ffcf8a;font:600 16px Cinzel,serif;border:1px solid #6e5a3a;opacity:0;" +
     "transition:opacity .3s ease;pointer-events:none;text-shadow:0 1px 2px #000;white-space:nowrap;";
-  promptEl.textContent = "Câmara limpa: vá ao altar e segure [R] para acender a Brasa";
+  promptEl.textContent = "Câmara limpa: recupere a estilha de Brasa no relicário";
   document.body.appendChild(promptEl);
 
   // Barra de progresso da canalização do acender (aparece só enquanto canaliza).
@@ -430,9 +449,9 @@ async function main(): Promise<void> {
     floorIndex = i;
     runActive = true; // há uma descida em andamento (persistível)
     roomCleared = false; // passagem selada até limpar a câmara
-    channelT = 0; // canalização do acender (0..1)
-    lightT = 0; // virada de luz frio->quente (0..1)
-    passageOpen = false; // alçapão só libera após acender a Brasa
+    passageOpen = false; // alçapão só libera após recuperar a estilha
+    fragmentTaken = false; // a estilha deste andar ainda está no relicário
+    readShown.clear(); // inscrições do andar anterior não contam mais
     hero.teleport(currentRoom.spawn);
     camera.snap(currentRoom.spawn); // cola a câmera atrás do herói na nova sala (sem varrer o cenário)
     hero.combat.refillSpark(); // entra no andar com a fagulha cheia
@@ -452,6 +471,7 @@ async function main(): Promise<void> {
     ];
     const anchor = currentRoom.enemyAnchor; // centro do spawn (varia com a planta)
     combat.setEnemyBounds(currentRoom.enemyBounds); // inimigos não recuam para trás do altar/paredes
+    combat.setStrikeProps(currentRoom.strikeProps); // vasos quebráveis / cadeiras chutáveis deste andar
     if (def.boss) {
       // Andar do Guardião: 1 contra 1 na arena (surge à frente do altar).
       currentBoss = combat.addBoss(new Vector3(anchor.x, 0, anchor.z + 4));
@@ -620,6 +640,21 @@ async function main(): Promise<void> {
     descending = false;
   };
 
+  /** Leitura de inscrições/pergaminhos: perto + [R] mostra a lore (uma vez por texto). */
+  const updateReadables = (): void => {
+    nearReadable = null;
+    if (!currentRoom || descending || defeated || !gameActive) return;
+    for (const rd of currentRoom.readables) {
+      if (readShown.has(rd.text)) continue;
+      if (Math.hypot(hero.position.x - rd.x, hero.position.z - rd.z) <= 2.3) { nearReadable = rd; break; }
+    }
+    if (nearReadable && input.isHeld("interact")) {
+      showStory(nearReadable.text, 6500, false);
+      readShown.add(nearReadable.text);
+      nearReadable = null;
+    }
+  };
+
   /** Chamado no loop: desce quando a sala está limpa e a Acendedora alcança o braseiro. */
   const tryDescend = (): void => {
     if (descending || descentDone || defeated || !currentRoom) return;
@@ -651,31 +686,26 @@ async function main(): Promise<void> {
       channelFill.style.width = `${Math.round(bossChannelT * 100)}%`;
       return;
     }
-    if (!currentRoom || !roomCleared || passageOpen || descending || defeated) {
-      channelBar.style.opacity = "0";
-      return;
-    }
-    if (channelT < 1) {
-      const b = currentRoom.brazier;
-      const near = Math.hypot(hero.position.x - b.x, hero.position.z - b.z) <= 3.2;
-      if (near && input.isHeld("interact")) channelT = Math.min(1, channelT + dtSec / CHANNEL_SEC);
-      else channelT = Math.max(0, channelT - dtSec / CHANNEL_SEC); // decai se soltar/afastar
-      promptEl.textContent = near
-        ? "Segure [R] para acender a Brasa"
-        : "Vá até o altar para acender a Brasa";
-      channelBar.style.opacity = channelT > 0.01 ? "1" : "0";
-      channelFill.style.width = `${Math.round(channelT * 100)}%`;
-    } else {
-      // Virada de luz frio->quente; ao completar, abre a passagem.
-      channelBar.style.opacity = "0";
-      lightT = Math.min(1, lightT + dtSec / LIGHT_SEC);
-      currentRoom.setBrazierLit(Easings.easeInOutCubic(lightT)); // ESTILO (Bloco 2): virada com easing
-      if (lightT >= 1 && !passageOpen) {
-        currentRoom.setCleared(true);
+    channelBar.style.opacity = "0"; // sem mais "segurar [R]": recuperar a estilha é por toque
+    if (!currentRoom || !roomCleared || passageOpen || descending || defeated) return;
+    // RECUPERAR A ESTILHA: sala limpa -> ir ao relicário (altar). Ao tocar, a estilha é colhida,
+    // o relicário lampeja e MORRE (não fica um fogo aceso no andar), e o alçapão abre.
+    const b = currentRoom.brazier;
+    const near = Math.hypot(hero.position.x - b.x, hero.position.z - b.z) <= 3.2;
+    if (!fragmentTaken) {
+      promptEl.textContent = near ? "" : "Recupere a estilha de Brasa no relicário";
+      if (near) {
+        fragmentTaken = true;
+        fragments += 1;
         passageOpen = true;
-        playStinger("fagulha"); // o braseiro pegou (stinger curto e brilhante)
-        promptEl.textContent = "A Brasa arde: pise no feixe de luz para descer";
+        currentRoom.setCleared(true); // abre o alçapão + acende o feixe da passagem
+        currentRoom.setBrazierLit(1); // lampejo do relicário ao ceder a estilha (não permanece)
+        window.setTimeout(() => currentRoom?.setBrazierLit(0), 900); // e some logo (sem fogo no andar)
+        playStinger("fagulha");
+        showStory(`Estilha de Brasa recuperada (${fragments}). Desça pelo alçapão.`, 3200, true);
       }
+    } else {
+      promptEl.textContent = "Desça pelo alçapão";
     }
   };
 
@@ -1111,8 +1141,10 @@ async function main(): Promise<void> {
     if (descentDone) return "A Brasa foi reavivada. O frio recua.";
     const n = combat.enemiesAlive;
     const andar = `Andar ${floorIndex + 1}/${DESCENT.length}`;
+    const last = floorIndex >= DESCENT.length - 1;
     if (n > 0) return `${andar}: derrote os mortos despertos (${n})`;
-    return `${andar}: alcance o braseiro para descer`;
+    if (fragmentTaken) return last ? `${andar}: desça ao fosso e reacenda a Brasa` : `${andar}: desça pelo alçapão`;
+    return last ? `${andar}: recupere a última estilha de Brasa` : `${andar}: recupere a estilha de Brasa (${fragments})`;
   };
 
   let acc = 0;
@@ -1188,7 +1220,11 @@ async function main(): Promise<void> {
       combatHud.update(hero.combat.healthFraction, hero.combat.staminaFraction, hero.combat.sparkCharges, hero.combat.sparkChargeMax, dt / 1000);
       combatHud.setResonance(hero.combat.resonanceStreak, hero.combat.resonanceActive);
     }
-    if (gameActive) updateIgnite(dt / 1000); // canalização/virada de luz: todo frame
+    if (gameActive) updateIgnite(dt / 1000); // recuperar estilha / abrir passagem
+    if (gameActive) {
+      updateReadables(); // ler inscrições/pergaminhos ([R] perto)
+      if (nearReadable) { promptEl.textContent = "Pressione [R] para ler"; promptEl.style.opacity = "1"; }
+    }
     if (acc > 250) {
       fpsEl.textContent = `${engine.getFps().toFixed(0)} fps`;
       acc = 0;

@@ -59,6 +59,11 @@ export class Acendedora {
     this.controller.teleport(pos);
   }
 
+  /** Aplica o manto escolhido na criação (variante de textura), delegado ao modelo visual. */
+  setMantle(id: string): void {
+    this.model.setMantle(id);
+  }
+
   /** Combate da heroína (lido pelo CombatDirector para detecção de acerto). */
   get combat(): HeroCombat {
     return this.combat_;

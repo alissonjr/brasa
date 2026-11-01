@@ -57,7 +57,7 @@ export type { GameSaveData, RunSave } from "./content/saveData";
 export { readLeaderboard, submitTime, formatTime } from "./content/leaderboard";
 export { CODEX, isCodexUnlocked } from "./content/codex";
 export type { CodexEntry, CodexCategory } from "./content/codex";
-export { DEFAULT_CHARACTER, readCharacter, MANTOS, DONS, DIFFICULTIES } from "./content/character";
+export { DEFAULT_CHARACTER, readCharacter, MANTOS, DONS, DIFFICULTIES, mantoColor } from "./content/character";
 export type { CharacterSave, Difficulty } from "./content/character";
 export { CombatDirector } from "./combat/combatDirector";
 export { configureCombatSound, healChime } from "./combat/combatSound";
