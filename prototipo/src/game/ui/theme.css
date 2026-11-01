@@ -479,6 +479,12 @@
   min-width: 320px;
   max-width: min(90vw, 460px);
 }
+.defeat-panel .menu-title {
+  background: linear-gradient(180deg, var(--text-hi) 0%, var(--blood-400) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 0 14px rgba(217, 71, 58, 0.3)) drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5));
+}
 /* Diálogos e vitória são estreitos: título um degrau menor para não quebrar em duas linhas. */
 .dialog-panel .menu-title,
 .victory-panel .menu-title {
@@ -982,41 +988,45 @@
 .choice-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-2);
 }
+/* Escolha do braseiro (dádivas e poções): mesma linha do design system (.ds-row), em botão. */
 .choice {
   appearance: none;
+  font-family: var(--font-text);
   cursor: pointer;
   display: flex;
   flex-direction: column;
   gap: 2px;
   text-align: left;
-  padding: 10px 14px;
-  color: var(--texto);
-  background: linear-gradient(180deg, rgba(246, 227, 176, 0.05), rgba(0, 0, 0, 0.14));
-  border: 1px solid var(--borda);
-  border-radius: 4px;
-  transition: border-color 0.14s ease, background 0.14s ease;
+  padding: var(--sp-3) var(--sp-4);
+  color: var(--text-mid);
+  background: var(--surface-card);
+  border: var(--line) solid var(--ink-600);
+  border-radius: var(--radius-md);
+  transition: border-color var(--dur-base) ease, background var(--dur-base) ease, box-shadow var(--dur-base) ease;
 }
 .choice:hover {
-  border-color: var(--ambar);
+  border-color: var(--gold-400);
+  box-shadow: var(--shadow-1);
 }
 .choice.selected {
-  border-color: var(--ouro);
-  background: linear-gradient(180deg, rgba(231, 189, 113, 0.12), rgba(0, 0, 0, 0.12));
+  border-color: var(--ember-400);
+  background: var(--surface-card-hot);
 }
 .choice:focus-visible {
-  outline: 2px solid var(--ouro);
+  outline: 2px solid var(--ember-300);
   outline-offset: 2px;
 }
 .choice strong {
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 15px;
-  color: var(--osso);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.06em;
+  color: var(--text-hi);
 }
 .choice span {
-  font-size: 14px;
-  color: var(--texto-suave);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
 }
 
 @keyframes pulse {

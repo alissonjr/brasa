@@ -623,6 +623,36 @@ export class VictoryScreen implements Screen {
   }
 }
 
+// --- Derrota (A fagulha apagou) ---
+
+/**
+ * Tela de derrota. O fluxo de jogo a anexa direto ao body (acima do HUD), então ela se
+ * remove sozinha ao escolher; as ações de jogo vêm por callback.
+ */
+export class DefeatScreen implements Screen {
+  readonly element: HTMLElement;
+
+  constructor(_ctx: UiContext, o: { onRetry: () => void; onQuit: () => void }) {
+    const done = (next: () => void) => () => {
+      this.element.remove();
+      next();
+    };
+    this.element = backdrop(
+      [
+        el("h2", { class: "menu-title", text: T.fagulhaApagou }),
+        el("p", { class: "menu-subtitle", text: T.derrotaSub }),
+        el(
+          "div",
+          { class: "menu-actions" },
+          btn(T.tentarNovamente, done(o.onRetry), { variant: "primary", glyph: ICONS.play }),
+          btn(T.sairTitulo, done(o.onQuit), { glyph: ICONS.exit })
+        ),
+      ],
+      "dialog-panel defeat-panel"
+    );
+  }
+}
+
 // --- Perfil (nome + estatísticas) ---
 
 function statRow(k: string, v: string): HTMLElement {
