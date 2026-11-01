@@ -16,6 +16,13 @@ export class ThirdPersonCamera {
   // (~ombros), não acima da cabeça: evita encarar o topo do capuz quando a câmera é forçada
   // para perto (ex.: spawn encostado na parede). Antes era 1.2 (acima da cabeça ~1.9 m).
   private readonly targetHeight = 0.95;
+  // MODO ALTA (protótipo de direção de arte): câmera alta e fixa, estilo Hades/diorama. O mouse
+  // não gira a câmera; o enquadramento é o mesmo em toda sala. Liga por ?cam=alta (padrão no lab).
+  private readonly alta =
+    typeof location === "undefined" || !/[?&]cam=terceira\b/.test(location.search);
+  private readonly altaAlpha = -Math.PI / 2 - Math.PI / 5; // diagonal: duas paredes à vista
+  private readonly altaBeta = 0.82; // ~47 graus da vertical: vê o chão, esconde menos
+  private readonly altaRadius = 15;
   private readonly defaultRadius = 6; // distância padrão (reaplicada a cada sala, view consistente)
   // Raio "desejado" (o que o jogador pediu via zoom/sala); o raio EFETIVO encurta sozinho
   // quando há parede entre o herói e a câmera (colisão manual, ver update). Sem isso, a
@@ -55,6 +62,17 @@ export class ThirdPersonCamera {
     this.camera.lowerRadiusLimit = 2;
     this.camera.upperRadiusLimit = 14;
     this.camera.minZ = 0.1;
+    if (this.alta) {
+      this.camera.fov = 0.62; // lente mais longa: menos distorção, leitura de diorama
+      this.camera.lowerRadiusLimit = 9;
+      this.camera.upperRadiusLimit = 24;
+      this.camera.alpha = this.altaAlpha;
+      this.camera.beta = this.altaBeta;
+      this.camera.radius = this.altaRadius;
+      this.desiredRadius = this.altaRadius;
+      this.camera.minZ = 0.5;
+      this.camera.maxZ = 140;
+    }
 
     // Colisão de câmera MANUAL (ver update): um raycast alvo->câmera encurta só o RAIO ao
     // achar parede, mantendo alpha/beta estáveis. NÃO usar a colisão embutida do
@@ -79,7 +97,7 @@ export class ThirdPersonCamera {
     });
 
     document.addEventListener("mousemove", (e: MouseEvent) => {
-      if (!this.locked) return;
+      if (!this.locked || this.alta) return;
       // Mouse para a direita -> olhar para a direita; para cima -> olhar para cima.
       this.camera.alpha -= e.movementX * this.lookSensitivity;
       this.camera.beta = Scalar.Clamp(
@@ -120,7 +138,8 @@ export class ThirdPersonCamera {
     const lerpFactor = 1 - Math.exp(-12 * deltaSeconds);
     Vector3.LerpToRef(this.smoothedTarget, desired, lerpFactor, this.smoothedTarget);
 
-    this.resolveCollisionRadius(deltaSeconds);
+    if (!this.alta) this.resolveCollisionRadius(deltaSeconds);
+    else this.camera.radius += (this.desiredRadius - this.camera.radius) * (1 - Math.exp(-8 * deltaSeconds));
 
     if (this.shakeAmp > 0.0006) {
       this.shakeAmp *= Math.exp(-deltaSeconds / 0.04); // decai a ~5% em ~0,12 s
@@ -147,7 +166,12 @@ export class ThirdPersonCamera {
     this.smoothedTarget.copyFrom(targetPosition);
     this.smoothedTarget.y += this.targetHeight;
     this.shakeAmp = 0;
-    if (faceInto) {
+    if (this.alta) {
+      this.camera.alpha = this.altaAlpha;
+      this.camera.beta = this.altaBeta;
+      this.camera.radius = this.altaRadius;
+      this.desiredRadius = this.altaRadius;
+    } else if (faceInto) {
       // Enquadramento PADRÃO: idêntico em toda sala (atrás do herói, mesma distância/ângulo).
       this.camera.alpha = -Math.PI / 2; // atrás do herói
       this.camera.beta = 1.05; // levemente de cima

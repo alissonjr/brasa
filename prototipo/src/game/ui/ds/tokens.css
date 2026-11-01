@@ -1,0 +1,106 @@
+/* CAMADA JOGO (Brasa). DESIGN SYSTEM, parte 1: TOKENS.
+   Direção: "preto e ouro de brasa". Quase-preto azulado (o poço frio) com ouro envelhecido
+   para moldura e a BRASA (laranja) reservada ao que está vivo: foco, fogo, ação principal.
+   Regra de ouro: tudo na UI usa estes tokens. Nenhum valor de cor, tamanho, sombra ou tempo
+   é escrito solto em componente ou tela. */
+
+:root {
+  /* ---------- Cor: tinta (superfícies, do mais fundo ao mais alto) ---------- */
+  --ink-950: #06080c;
+  --ink-900: #0a0d13;
+  --ink-850: #0f131b;
+  --ink-800: #141924;
+  --ink-700: #1c2230;
+  --ink-600: #272e3f;
+  --ink-500: #394256;
+
+  /* ---------- Cor: ouro (moldura, rótulo, texto de destaque) ---------- */
+  --gold-100: #fff1cf;
+  --gold-200: #ffe0a0;
+  --gold-300: #f2c46d;
+  --gold-400: #d9a441;
+  --gold-500: #b5832d;
+  --gold-600: #8a621f;
+  --gold-700: #5c4115;
+  --gold-800: #3a2a10;
+
+  /* ---------- Cor: brasa (SÓ fogo, foco e ação principal) ---------- */
+  --ember-200: #ffd9a8;
+  --ember-300: #ffb259;
+  --ember-400: #ff8a2c;
+  --ember-500: #ff6a13;
+  --ember-600: #d94e0a;
+
+  /* ---------- Cor: semânticas ---------- */
+  --frost-300: #8fd6e6; /* ameaça dos mortos, gelo (nunca positivo) */
+  --frost-500: #4aa3ba;
+  --blood-400: #d9473a; /* vida, dano, perigo */
+  --blood-600: #8e2a20;
+  --life-400: #7fcf8f; /* cura */
+
+  /* ---------- Cor: texto ---------- */
+  --text-hi: #f3e8d0; /* osso: títulos e texto principal */
+  --text-mid: #bdb299; /* texto de leitura */
+  --text-lo: #7f776a; /* apoio, rótulos desativados */
+
+  /* ---------- Metal (gradientes prontos) ---------- */
+  --metal-gold: linear-gradient(180deg, var(--gold-300) 0%, var(--gold-500) 55%, var(--gold-600) 100%);
+  --metal-gold-soft: linear-gradient(180deg, var(--gold-500), var(--gold-700));
+  --surface-panel: linear-gradient(165deg, var(--ink-700) 0%, var(--ink-800) 40%, var(--ink-900) 100%);
+  --surface-card: linear-gradient(180deg, rgba(40, 46, 63, 0.72), rgba(10, 13, 19, 0.94));
+  --surface-card-hot: linear-gradient(180deg, rgba(120, 66, 24, 0.4), rgba(10, 13, 19, 0.95));
+
+  /* ---------- Tipografia ---------- */
+  --font-display: "Cinzel", "Trajan Pro", Georgia, serif; /* títulos, rótulos, botões */
+  --font-text: "EB Garamond", Georgia, serif; /* leitura */
+  /* Escala (razão ~1.25, ajustada à mão) */
+  --fs-2xs: 11px;
+  --fs-xs: 12px;
+  --fs-sm: 14px;
+  --fs-md: 17px;
+  --fs-lg: 20px;
+  --fs-xl: 26px;
+  --fs-2xl: 34px;
+  --fs-3xl: 46px;
+  --fs-4xl: 64px;
+  --ls-caps: 0.2em; /* rótulos em caixa-alta */
+  --ls-title: 0.08em;
+
+  /* ---------- Espaço (base 4) ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+
+  /* ---------- Forma ---------- */
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --line: 1px;
+
+  /* ---------- Elevação e brilho ---------- */
+  --shadow-1: 0 2px 6px rgba(0, 0, 0, 0.45);
+  --shadow-2: 0 10px 24px rgba(0, 0, 0, 0.5);
+  --shadow-3: 0 22px 54px rgba(0, 0, 0, 0.65);
+  --glow-ember: 0 0 22px rgba(255, 138, 44, 0.42);
+  --glow-ember-lg: 0 0 36px rgba(255, 138, 44, 0.5);
+  --glow-gold: 0 0 14px rgba(242, 196, 109, 0.35);
+  --glow-frost: 0 0 16px rgba(143, 214, 230, 0.35);
+
+  /* ---------- Movimento ---------- */
+  --dur-fast: 120ms; /* hover, pressionar */
+  --dur-base: 220ms; /* trocas de estado */
+  --dur-slow: 420ms; /* entradas de tela, cartas */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* barras, "estalo" */
+
+  /* ---------- Camadas ---------- */
+  --z-hud: 20;
+  --z-menu: 40;
+  --z-modal: 60;
+  --z-toast: 80;
+}

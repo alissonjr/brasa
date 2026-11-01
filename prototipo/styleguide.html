@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brasa - Sistema de Design</title>
+<link rel="stylesheet" href="/src/game/ui/ds/tokens.css">
+<link rel="stylesheet" href="/src/game/ui/ds/components.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(ellipse at 50% -10%, #1a2030 0%, var(--ink-950) 55%); color: var(--text-mid); font-family: var(--font-text); font-size: var(--fs-md); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: var(--sp-8) var(--sp-5) 120px; }
+  header.hero { text-align: center; padding: var(--sp-7) 0 var(--sp-6); position: relative; overflow: hidden; }
+  header.hero .ds-display { font-size: var(--fs-4xl); margin: var(--sp-3) 0; }
+  section { margin-top: var(--sp-8); }
+  section > h2 { margin: 0 0 var(--sp-2); }
+  section > p.ds-lead { margin: 0 0 var(--sp-5); }
+  .sub { margin: var(--sp-5) 0 var(--sp-3); }
+  .row { display: flex; flex-wrap: wrap; gap: var(--sp-4); align-items: center; }
+  .grid { display: grid; gap: var(--sp-4); }
+  .chip-sw { display: flex; flex-direction: column; gap: 6px; font-size: var(--fs-xs); font-family: var(--font-display); letter-spacing: .08em; color: var(--text-lo); }
+  .chip-sw b { display: block; height: 56px; border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,.08); box-shadow: var(--shadow-1); }
+  .chip-sw span { color: var(--text-mid); }
+  .ramp { display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr)); gap: var(--sp-3); }
+  .spec { display: grid; grid-template-columns: 150px 1fr; gap: var(--sp-4); align-items: baseline; padding: var(--sp-3) 0; border-bottom: 1px solid var(--ink-700); }
+  .spec code { font-size: var(--fs-xs); color: var(--text-lo); font-family: ui-monospace, monospace; }
+  .icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: var(--sp-3); }
+  .icon-cell { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-4) var(--sp-2) var(--sp-3); background: var(--ink-850); border: 1px solid var(--ink-700); border-radius: var(--radius-md); color: var(--gold-300); font-size: var(--fs-xs); font-family: var(--font-display); letter-spacing: .12em; text-transform: uppercase; }
+  .icon-cell small { color: var(--text-lo); }
+  .stage { position: relative; min-height: 380px; border-radius: var(--radius-lg); overflow: hidden; border: 1px solid var(--ink-600); background:
+      radial-gradient(ellipse at 50% 85%, rgba(255,138,44,.22), transparent 55%),
+      linear-gradient(180deg, #141a26 0%, #0b0f17 60%, #07090d 100%); }
+  .stage .floor { position: absolute; left: 0; right: 0; bottom: 0; height: 38%; background: repeating-linear-gradient(90deg, rgba(255,255,255,.035) 0 2px, transparent 2px 120px), linear-gradient(180deg, #1b2230, #0c1018); transform: perspective(500px) rotateX(55deg); transform-origin: bottom; }
+  .hud-tl { position: absolute; left: 20px; top: 20px; display: flex; flex-direction: column; gap: 8px; width: 260px; }
+  .hud-tr { position: absolute; right: 20px; top: 20px; display: flex; gap: 8px; align-items: center; }
+  .hud-top { position: absolute; left: 50%; top: 20px; transform: translateX(-50%); text-align: center; }
+  .hud-bottom { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); }
+  .objective { padding: 8px 22px; background: rgba(10,13,19,.8); border: 1px solid var(--gold-700); border-radius: 999px; font-style: italic; color: var(--text-hi); }
+  .objective b { font-family: var(--font-display); font-style: normal; font-size: var(--fs-2xs); letter-spacing: .3em; color: var(--gold-400); margin-right: 10px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-5); }
+  @media (max-width: 800px) { .two { grid-template-columns: 1fr; } .spec { grid-template-columns: 1fr; } }
+  .pause-demo { display: flex; align-items: center; justify-content: center; min-height: 420px; background: radial-gradient(ellipse at 50% 40%, rgba(255,138,44,.1), transparent 60%), #05070a; border-radius: var(--radius-lg); border: 1px solid var(--ink-600); }
+  .motion-demo { display: flex; gap: var(--sp-4); }
+  .motion-demo div { width: 70px; height: 70px; background: var(--metal-gold); border-radius: var(--radius-md); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <div class="ds-label">Sistema de design · versão 0.1</div>
+  <div class="ds-display">Brasa</div>
+  <p class="ds-lead">Preto profundo, ouro envelhecido, e a brasa só no que está vivo.</p>
+  <div class="ds-divider" style="max-width:420px;margin:var(--sp-4) auto 0"><i></i></div>
+</header>
+
+<section>
+  <h2 class="ds-h2">1. Princípios</h2>
+  <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+    <div class="ds-frame ds-frame--quiet"><div class="ds-h3">A brasa é rara</div><p class="ds-body">O laranja aparece só no foco, no fogo e na ação principal. Se tudo brilha, nada brilha.</p></div>
+    <div class="ds-frame ds-frame--quiet"><div class="ds-h3">Ouro é moldura</div><p class="ds-body">O dourado delimita e hierarquiza (bordas, rótulos, selos). Nunca preenche áreas grandes.</p></div>
+    <div class="ds-frame ds-frame--quiet"><div class="ds-h3">A cena manda</div><p class="ds-body">No jogo, a interface é discreta e some quando não é necessária. Nos menus, ela é palco.</p></div>
+    <div class="ds-frame ds-frame--quiet"><div class="ds-h3">Tudo reage</div><p class="ds-body">Cada peça tem estado de passar o mouse, teclado, seleção e desativado, com movimento curto.</p></div>
+  </div>
+</section>
+
+<section>
+  <h2 class="ds-h2">2. Cor</h2>
+  <p class="ds-lead">Cinco famílias. Cada token tem um papel; ninguém escreve cor solta.</p>
+  <div class="ds-label sub">Tinta (superfícies)</div><div class="ramp" id="r-ink"></div>
+  <div class="ds-label sub">Ouro (moldura e destaque)</div><div class="ramp" id="r-gold"></div>
+  <div class="ds-label sub">Brasa (vivo)</div><div class="ramp" id="r-ember"></div>
+  <div class="ds-label sub">Semânticas e texto</div><div class="ramp" id="r-sem"></div>
+</section>
+
+<section>
+  <h2 class="ds-h2">3. Tipografia</h2>
+  <p class="ds-lead">Cinzel para o que se grava (títulos, rótulos, botões). EB Garamond para o que se lê.</p>
+  <div class="spec"><code>display · 64</code><div class="ds-display" style="font-size:var(--fs-4xl)">A Última Chama</div></div>
+  <div class="spec"><code>h1 · 46</code><div class="ds-h1">Desça ao Poço</div></div>
+  <div class="spec"><code>h2 · 26</code><div class="ds-h2">Acenda o Braseiro</div></div>
+  <div class="spec"><code>h3 · 20 caixa-alta</code><div class="ds-h3">Golpe de Fogo</div></div>
+  <div class="spec"><code>lead · 20 itálico</code><div class="ds-lead">O que a fagulha dela guarda no escuro.</div></div>
+  <div class="spec"><code>body · 17</code><div class="ds-body" style="max-width:640px">Enquanto a Brasa arder, o frio não vence. Cada sala é uma câmara selada: limpe os mortos, acenda o braseiro e a porta se abre.</div></div>
+  <div class="spec"><code>small · 14</code><div class="ds-small">Apoio, legendas e textos de ajuda.</div></div>
+  <div class="spec"><code>label · 11 espaçado</code><div class="ds-label">Nome da Acendedora</div></div>
+</section>
+
+<section>
+  <h2 class="ds-h2">4. Espaço, forma, elevação e movimento</h2>
+  <div class="two">
+    <div>
+      <div class="ds-label sub">Espaço (base 4)</div>
+      <div id="spaces"></div>
+    </div>
+    <div>
+      <div class="ds-label sub">Elevação</div>
+      <div class="row">
+        <div class="ds-frame ds-frame--quiet" style="padding:var(--sp-4);box-shadow:var(--shadow-1)">sombra 1</div>
+        <div class="ds-frame ds-frame--quiet" style="padding:var(--sp-4);box-shadow:var(--shadow-2)">sombra 2</div>
+        <div class="ds-frame ds-frame--quiet" style="padding:var(--sp-4);box-shadow:var(--shadow-3)">sombra 3</div>
+      </div>
+      <div class="ds-label sub">Brilho</div>
+      <div class="row">
+        <div class="ds-chip" style="box-shadow:var(--glow-gold)">ouro</div>
+        <div class="ds-chip ds-chip--ember" style="box-shadow:var(--glow-ember)">brasa</div>
+        <div class="ds-chip ds-chip--frost" style="box-shadow:var(--glow-frost)">gelo</div>
+      </div>
+      <div class="ds-label sub">Movimento (120 · 220 · 420 ms)</div>
+      <div class="motion-demo" id="motion"><div></div><div></div><div></div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2 class="ds-h2">5. Ícones</h2>
+  <p class="ds-lead">Um conjunto só: grade 24, traço 1.6, pontas redondas, cor herdada do texto.</p>
+  <div class="icons" id="icons"></div>
+</section>
+
+<section>
+  <h2 class="ds-h2">6. Componentes</h2>
+
+  <div class="ds-label sub">Botões (passe o mouse, use Tab, clique)</div>
+  <div class="row">
+    <button class="ds-btn ds-btn--primary">Iniciar a descida</button>
+    <button class="ds-btn">Continuar</button>
+    <button class="ds-btn ds-btn--ghost">Voltar</button>
+    <button class="ds-btn ds-btn--danger">Abandonar</button>
+    <button class="ds-btn" disabled>Desativado</button>
+    <button class="ds-btn ds-btn--icon" aria-label="Opções" data-icon="gear"></button>
+    <button class="ds-btn ds-btn--sm">Pequeno</button>
+    <button class="ds-btn ds-btn--primary ds-btn--lg">Grande</button>
+  </div>
+
+  <div class="ds-label sub">Cartas de escolha (normal, passar o mouse, selecionada, desativada)</div>
+  <div class="grid" style="grid-template-columns:repeat(4,minmax(0,1fr))" id="cards"></div>
+
+  <div class="two">
+    <div>
+      <div class="ds-label sub">Campo de texto</div>
+      <input class="ds-input" value="Jogador" aria-label="Nome">
+      <div class="ds-label sub">Cor do manto</div>
+      <div class="row" id="swatches"></div>
+      <div class="ds-label sub">Passos</div>
+      <div class="ds-steps" id="steps"></div>
+    </div>
+    <div>
+      <div class="ds-label sub">Barras e cargas</div>
+      <div class="grid" style="gap:12px;max-width:340px">
+        <div class="ds-bar"><span class="ds-bar__label">VIDA</span><div class="ds-bar__fill" style="--v:78%"></div></div>
+        <div class="ds-bar ds-bar--stamina"><div class="ds-bar__fill" style="--v:55%"></div></div>
+        <div class="ds-bar ds-bar--ember"><span class="ds-bar__label">BRASA</span><div class="ds-bar__fill" style="--v:36%"></div></div>
+        <div class="ds-pips"><span class="ds-label" style="margin-right:6px">Fagulha</span><i class="ds-pip lit"></i><i class="ds-pip lit"></i><i class="ds-pip lit"></i><i class="ds-pip"></i></div>
+      </div>
+      <div class="ds-label sub">Chips e teclas</div>
+      <div class="row">
+        <span class="ds-chip">Dom</span><span class="ds-chip ds-chip--ember">Em chamas</span><span class="ds-chip ds-chip--frost">Gelo</span><span class="ds-chip ds-chip--blood">Sangrando</span><span class="ds-chip ds-chip--life">Cura</span>
+      </div>
+      <div class="row" style="margin-top:var(--sp-3)"><span class="ds-kbd">W</span><span class="ds-kbd">A</span><span class="ds-kbd">S</span><span class="ds-kbd">D</span><span class="ds-kbd">Espaço</span><span class="ds-kbd">Esc</span></div>
+      <div class="ds-label sub">Opções</div>
+      <div class="grid" style="gap:14px;max-width:340px">
+        <label class="row" style="justify-content:space-between"><span class="ds-body">Movimento reduzido</span><span class="ds-toggle"><input type="checkbox" checked><span></span></span></label>
+        <label class="row" style="justify-content:space-between"><span class="ds-body">Sombras</span><span class="ds-toggle"><input type="checkbox"><span></span></span></label>
+        <div><div class="row" style="justify-content:space-between"><span class="ds-body">Volume</span><span class="ds-small" id="vol">60%</span></div><input class="ds-range" id="range" type="range" min="0" max="100" value="60"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ds-label sub">Moldura e divisor</div>
+  <div class="ds-frame" style="max-width:560px">
+    <div class="ds-label">Inscrição</div>
+    <div class="ds-h2" style="margin:var(--sp-2) 0">Aqui jaz a última Acendedora</div>
+    <div class="ds-divider" style="margin:var(--sp-3) 0"><i></i></div>
+    <p class="ds-body" style="margin:0">Quem acende o braseiro paga com a própria luz. Mas a escuridão paga em dobro.</p>
+  </div>
+</section>
+
+<section>
+  <h2 class="ds-h2">7. Composições</h2>
+  <p class="ds-lead">As mesmas peças em uso: HUD do jogo e menu de pausa.</p>
+  <div class="ds-label sub">HUD em jogo</div>
+  <div class="stage">
+    <div class="floor"></div>
+    <div class="hud-tl">
+      <div class="row" style="gap:10px"><div class="ds-btn ds-btn--icon ds-btn--sm" style="border-radius:50%" data-icon="flame"></div><div><div class="ds-h3" style="font-size:var(--fs-sm)">Jogador</div><div class="ds-small">10 pontos</div></div></div>
+      <div class="ds-bar"><span class="ds-bar__label">VIDA</span><div class="ds-bar__fill" style="--v:78%"></div></div>
+      <div class="ds-bar ds-bar--stamina"><div class="ds-bar__fill" style="--v:70%"></div></div>
+      <div class="ds-pips"><span class="ds-label" style="margin-right:6px">Fagulha</span><i class="ds-pip lit"></i><i class="ds-pip lit"></i><i class="ds-pip lit"></i></div>
+    </div>
+    <div class="hud-top"><div class="objective"><b>OBJETIVO</b>Andar 1/7: derrote os mortos despertos (3)</div></div>
+    <div class="hud-tr"><span class="ds-chip"><span data-icon="coin" data-size="14"></span>&nbsp;0</span><button class="ds-btn ds-btn--sm" data-icon="gear" data-label="Menu"></button></div>
+    <div class="hud-bottom"><div class="ds-toast"><span class="ds-kbd">J</span><span>Atacar</span><span class="ds-kbd">K</span><span>Esquiva</span><span class="ds-kbd">C</span><span>Fogo</span></div></div>
+  </div>
+
+  <div class="ds-label sub">Menu de pausa</div>
+  <div class="pause-demo">
+    <div class="ds-frame" style="padding:var(--sp-6) var(--sp-5)">
+      <div class="ds-h2" style="text-align:center">Pausa</div>
+      <div class="ds-divider" style="margin:var(--sp-3) 0 var(--sp-4)"><i></i></div>
+      <div class="ds-menu">
+        <button class="ds-menu__item selected">Continuar</button>
+        <button class="ds-menu__item">Diário</button>
+        <button class="ds-menu__item">Opções</button>
+        <button class="ds-menu__item">Salvar e sair</button>
+        <button class="ds-menu__item" disabled>Carregar</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+</div>
+<script type="module">
+  import "/src/game/ui/fonts.ts";
+  import { ICON_PATHS, icon } from "/src/game/ui/ds/icons.ts";
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const ramp = (id, names) => {
+    const el = document.getElementById(id);
+    el.innerHTML = names.map((n) => `<div class="chip-sw"><b style="background:var(--${n})"></b><span>${n}</span><small>${css("--" + n)}</small></div>`).join("");
+  };
+  ramp("r-ink", ["ink-950","ink-900","ink-850","ink-800","ink-700","ink-600","ink-500"]);
+  ramp("r-gold", ["gold-100","gold-200","gold-300","gold-400","gold-500","gold-600","gold-700","gold-800"]);
+  ramp("r-ember", ["ember-200","ember-300","ember-400","ember-500","ember-600"]);
+  ramp("r-sem", ["frost-300","frost-500","blood-400","blood-600","life-400","text-hi","text-mid","text-lo"]);
+  document.getElementById("spaces").innerHTML = [1,2,3,4,5,6,7,8].map((i) => `<div class="row" style="gap:12px;margin:6px 0"><code style="width:60px;color:var(--text-lo);font-size:12px">sp-${i}</code><div style="height:14px;width:var(--sp-${i});background:var(--metal-gold);border-radius:2px"></div><span class="ds-small">${css("--sp-" + i)}</span></div>`).join("");
+  document.getElementById("icons").innerHTML = Object.keys(ICON_PATHS).map((n) => `<div class="icon-cell">${icon(n, 32)}<small>${n}</small></div>`).join("");
+  document.querySelectorAll("[data-icon]").forEach((el) => { el.innerHTML = icon(el.dataset.icon, +(el.dataset.size || 20)) + (el.dataset.label ? `<span>${el.dataset.label}</span>` : ""); });
+  // cartas
+  const cards = [
+    ["luz","Luz","A fagulha arde um pouco mais firme no escuro.", ""],
+    ["eye","Memória","Ler inscrições e ecos do poço.", ""],
+    ["flame","Calor","Resistir mais ao frio que avança.", "selected"],
+    ["lock","Selo","Ainda não revelado.", "disabled"],
+  ];
+  document.getElementById("cards").innerHTML = cards.map(([ic,t,d,s],i) => `<button class="ds-card ds-rise ${s==='selected'?'selected':''}" style="--i:${i}" ${s==='disabled'?'disabled':''}><div class="ds-card__icon">${icon(ic==='luz'?'spark':ic)}</div><strong class="ds-card__title">${t}</strong><span class="ds-card__text">${d}</span></button>`).join("");
+  document.getElementById("cards").addEventListener("click", (e) => { const c = e.target.closest(".ds-card:not(:disabled)"); if (!c) return; c.parentElement.querySelectorAll(".ds-card").forEach((x) => x.classList.toggle("selected", x === c)); });
+  // swatches
+  const sw = [["#d8702a","Brasa"],["#6b6660","Cinza"],["#2f4a6b","Poço"],["#48505a","Ferro"]];
+  document.getElementById("swatches").innerHTML = sw.map(([c,n],i) => `<button class="ds-swatch ${i===0?'selected':''}" style="--c:${c}"><span class="ds-swatch__dot"></span><span>${n}</span></button>`).join("");
+  document.getElementById("swatches").addEventListener("click", (e) => { const b = e.target.closest(".ds-swatch"); if (!b) return; document.querySelectorAll(".ds-swatch").forEach((x) => x.classList.toggle("selected", x === b)); });
+  // passos
+  const steps = ["Quem desce","O dom","O risco"];
+  document.getElementById("steps").innerHTML = steps.map((s,i) => `<button class="ds-step ${i===0?'done':i===1?'current':''}"><i></i>${s}</button>` + (i<2?`<span class="ds-steps__line ${i===0?'done':''}"></span>`:"")).join("");
+  // movimento
+  const m = document.getElementById("motion").children;
+  [["120ms",""],["220ms",""],["420ms",""]].forEach(([d],i) => { m[i].style.transition = `transform ${d} var(--ease-out)`; });
+  setInterval(() => { [...m].forEach((el,i) => { el.style.transform = el.style.transform ? "" : "translateY(-16px)"; }); }, 1400);
+  // range
+  const r = document.getElementById("range"); const upd = () => { r.style.setProperty("--p", r.value + "%"); document.getElementById("vol").textContent = r.value + "%"; }; r.addEventListener("input", upd); upd();
+</script>
+</body>
+</html>

@@ -1665,3 +1665,244 @@
 .score-time { flex: 1; font-family: "Cinzel", Georgia, serif; font-size: 16px; color: var(--osso); }
 .score-row.current .score-time { color: var(--ouro-claro); }
 .score-tag { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--ambar); }
+
+/* --- Criação de personagem (3 passos): layout. As peças vêm do design system (ds/). --- */
+.cc-root {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(420px, 0.9fr);
+  background:
+    radial-gradient(ellipse at 26% 62%, rgba(255, 138, 44, 0.14), rgba(255, 138, 44, 0) 55%),
+    linear-gradient(100deg, rgba(4, 7, 12, 0.5) 0%, rgba(6, 8, 12, 0.9) 58%, rgba(6, 8, 12, 0.97) 100%);
+  backdrop-filter: blur(6px);
+  animation: fadeIn 0.35s ease both;
+}
+.cc-hero { position: relative; min-height: 0; overflow: hidden; }
+.cc-hero .model-stage {
+  position: absolute; inset: 0; width: 100%; height: 100%; aspect-ratio: auto;
+  border: none; border-radius: 0; background: none; box-shadow: none;
+  -webkit-mask-image: radial-gradient(ellipse 62% 70% at 50% 50%, #000 55%, transparent 100%);
+  mask-image: radial-gradient(ellipse 62% 70% at 50% 50%, #000 55%, transparent 100%);
+}
+.cc-hero-name {
+  position: absolute; left: 0; right: 0; bottom: 11%; display: flex; align-items: center; justify-content: center;
+  gap: var(--sp-4); padding: 0 8%; white-space: nowrap; pointer-events: none;
+  font-family: var(--font-display); font-weight: 600; font-size: clamp(22px, 2.6vw, 34px);
+  letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-hi);
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.8), 0 0 24px rgba(255, 138, 44, 0.25);
+}
+.cc-hero-name::before, .cc-hero-name::after { content: ""; flex: 0 1 90px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold-400)); }
+.cc-hero-name::after { transform: scaleX(-1); }
+.cc-hero-hint { position: absolute; left: 0; right: 0; bottom: 5%; text-align: center; font-family: var(--font-text); font-size: var(--fs-xs); letter-spacing: 0.3em; text-transform: uppercase; color: var(--text-lo); pointer-events: none; }
+.cc-embers { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.cc-ember { position: absolute; bottom: -10px; border-radius: 50%; opacity: 0; animation: ds-ember linear infinite;
+  background: radial-gradient(circle, var(--ember-200) 0%, var(--ember-400) 60%, transparent 100%); box-shadow: 0 0 8px 2px rgba(255, 138, 44, 0.55); }
+.cc-side { display: flex; flex-direction: column; justify-content: center; gap: var(--sp-2); max-width: 600px; padding: 5vh 5vw 5vh 1vw; }
+.cc-title { color: var(--ember-400); letter-spacing: 0.42em; font-size: var(--fs-xs); text-shadow: 0 0 14px rgba(255, 138, 44, 0.45); }
+.ds-steps { margin: var(--sp-2) 0 var(--sp-3); }
+.cc-heading { margin: var(--sp-1) 0 0; font-size: clamp(30px, 3.4vw, var(--fs-3xl)); }
+.cc-sub { margin: 0; }
+.cc-content { margin-top: var(--sp-2); min-height: 0; }
+.cc-field { margin: var(--sp-5) 0 var(--sp-2); }
+.cc-swatches { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-3); }
+.cc-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--sp-3); }
+.cc-cards .ds-card { min-height: 250px; }
+.cc-actions { display: flex; justify-content: flex-end; gap: var(--sp-3); margin-top: var(--sp-5); }
+@media (max-width: 900px) {
+  .cc-root { grid-template-columns: 1fr; grid-template-rows: 36vh 1fr; overflow-y: auto; }
+  .cc-side { padding: 2vh 6vw 4vh; max-width: none; }
+  .cc-hero-name { bottom: 6%; }
+  .cc-hero-hint { display: none; }
+}
+
+/* --- Ponte legada: o tema antigo passa a ler os tokens do design system (preto e ouro). --- */
+:root {
+  --cripta: var(--ink-900);
+  --ardosia: var(--ink-700);
+  --aco-frio: var(--ink-500);
+  --ciano: var(--frost-300);
+  --brasa-nucleo: var(--ember-500);
+  --ambar: var(--ember-400);
+  --ouro-fagulha: var(--gold-200);
+  --bronze-patina: var(--gold-600);
+  --bronze-aquecido: var(--gold-400);
+  --osso: var(--text-hi);
+  --areia: var(--text-mid);
+  --pergaminho: var(--text-hi);
+  --ouro: var(--gold-300);
+  --ouro-claro: var(--gold-200);
+  --bronze: var(--gold-600);
+  --bronze-claro: var(--gold-400);
+  --rotulo: var(--gold-500);
+  --texto: var(--text-hi);
+  --texto-suave: var(--text-lo);
+  --borda: var(--ink-600);
+  --borda-clara: var(--ink-500);
+  --painel-1: var(--ink-700);
+  --painel-2: var(--ink-800);
+  --painel-3: var(--ink-900);
+  --perigo: var(--blood-600);
+  --perigo-borda: var(--blood-400);
+}
+
+/* --- HUD de jogo no design system: chip, bússola, objetivo, menu, avisos --- */
+.hud-chip {
+  padding: 5px 16px 5px 5px;
+  background: linear-gradient(180deg, rgba(20, 25, 36, 0.92), rgba(10, 13, 19, 0.92));
+  border: 1px solid var(--gold-700);
+  border-radius: 999px;
+  box-shadow: var(--shadow-2), inset 0 1px 0 rgba(242, 196, 109, 0.12);
+}
+.hud-chip:hover { border-color: var(--gold-300); box-shadow: var(--shadow-2), var(--glow-gold); }
+.chip-avatar { background: var(--metal-gold); color: var(--ink-950); border: 1px solid var(--gold-100); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), var(--shadow-1); }
+.chip-name { font-size: var(--fs-sm); letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-200); }
+.chip-points { font-size: var(--fs-sm); color: var(--text-lo); }
+.hud-objective {
+  top: 54px;
+  padding: 6px 22px;
+  background: rgba(10, 13, 19, 0.82);
+  border: 1px solid var(--gold-700);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(4px);
+}
+.hud-obj-label { font-size: var(--fs-2xs); letter-spacing: 0.3em; color: var(--gold-400); }
+.hud-obj-text { font-size: var(--fs-md); color: var(--text-hi); }
+.compass {
+  background: linear-gradient(180deg, rgba(10, 13, 19, 0.7), rgba(10, 13, 19, 0.35));
+  border: 1px solid var(--gold-800);
+  border-radius: var(--radius-sm);
+  box-shadow: none;
+}
+.compass:hover { border-color: var(--gold-600); background: linear-gradient(180deg, rgba(20, 25, 36, 0.8), rgba(10, 13, 19, 0.5)); }
+.hud-pause-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-4);
+  height: 36px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-200);
+  background: linear-gradient(180deg, var(--ink-700), var(--ink-850));
+  border: 1px solid var(--gold-600);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(242, 196, 109, 0.14);
+}
+.hud-pause-btn:hover { color: var(--gold-100); border-color: var(--gold-300); background: linear-gradient(180deg, var(--ink-600), var(--ink-800)); box-shadow: var(--shadow-2), var(--glow-gold); }
+.hud-toast {
+  background: linear-gradient(180deg, rgba(28, 34, 48, 0.96), rgba(10, 13, 19, 0.96));
+  border: 1px solid var(--gold-500);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-3), var(--glow-gold);
+}
+.toast-label { color: var(--gold-400); letter-spacing: 0.3em; }
+.toast-title { font-size: var(--fs-lg); color: var(--gold-100); }
+.toast-desc { color: var(--text-mid); }
+.autosave-indicator { color: var(--gold-200); background: rgba(10, 13, 19, 0.86); border-color: var(--gold-700); border-radius: 999px; }
+.brasa-bar.ready { animation: ds-breathe 1.2s ease-in-out infinite; }
+
+/* --- Tela-título no design system: logotipo de ouro e brasa, itens com losango --- */
+.title-cinematic > .cc-embers { z-index: 1; }
+.title-cine-name {
+  background: linear-gradient(180deg, var(--gold-100) 0%, var(--gold-300) 46%, var(--ember-500) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: drop-shadow(0 0 26px rgba(255, 138, 44, 0.4)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.75));
+}
+.title-cine-sub { color: var(--text-mid); letter-spacing: 0.06em; }
+.title-cine-div { width: min(360px, 60vw); margin: var(--sp-4) auto 0; animation: fadeIn 2s ease 0.8s both; }
+.title-cine-menu { gap: clamp(6px, 1.2vh, 12px); }
+.title-cine-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-4);
+  padding: 6px var(--sp-5);
+  font-size: clamp(16px, 1.8vw, 21px);
+  letter-spacing: 0.28em;
+  color: var(--text-mid);
+}
+.title-cine-opt::before,
+.title-cine-opt::after {
+  content: "";
+  width: 8px;
+  height: 8px;
+  margin: 0;
+  transform: rotate(45deg) scale(0);
+  background: linear-gradient(0deg, var(--ember-500), var(--ember-200));
+  box-shadow: var(--glow-ember);
+  transition: transform var(--dur-base) var(--ease-spring);
+  font-size: 0;
+}
+.title-cine-opt:hover,
+.title-cine-opt:focus-visible {
+  color: var(--gold-100);
+  letter-spacing: 0.32em;
+  text-shadow: 0 0 18px rgba(255, 150, 70, 0.8);
+}
+.title-cine-opt:hover::before,
+.title-cine-opt:focus-visible::before,
+.title-cine-opt:hover::after,
+.title-cine-opt:focus-visible::after {
+  content: "";
+  transform: rotate(45deg) scale(1);
+  font-size: 0;
+  opacity: 1;
+}
+.title-cine-opt.primary { color: var(--gold-200); font-size: clamp(19px, 2.2vw, 26px); }
+.title-cine-opt.primary::before,
+.title-cine-opt.primary::after { transform: rotate(45deg) scale(0.7); }
+.title-cine-opt:disabled { color: var(--text-lo); opacity: 0.4; }
+.title-cine-opt:disabled::before, .title-cine-opt:disabled::after { display: none; }
+.title-cine-verse { color: var(--text-lo); letter-spacing: 0.06em; }
+
+/* Contadores do canto superior direito (moeda e poções), alinhados ao botão Menu. */
+.hud-fagulha {
+  position: fixed;
+  right: 132px;
+  top: 14px;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  height: 36px;
+  padding: 0 var(--sp-4);
+  border-radius: 999px;
+  background: rgba(10, 13, 19, 0.86);
+  border: 1px solid var(--gold-700);
+  box-shadow: var(--shadow-2);
+  color: var(--gold-200);
+  font: 700 var(--fs-md) var(--font-display);
+  letter-spacing: 0.06em;
+  pointer-events: none;
+}
+.hud-fagulha::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  transform: rotate(45deg);
+  background: linear-gradient(0deg, var(--ember-500), var(--ember-200));
+  box-shadow: var(--glow-ember);
+}
+.hud-potions {
+  position: fixed;
+  right: 16px;
+  top: 58px;
+  z-index: 35;
+  display: flex;
+  gap: var(--sp-4);
+  padding: 5px var(--sp-4);
+  border-radius: 999px;
+  background: rgba(10, 13, 19, 0.8);
+  border: 1px solid var(--gold-800);
+  font: 500 var(--fs-sm) var(--font-text);
+  color: var(--text-mid);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.hud-pot { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.hud-pot.off { opacity: 0.4; }
+.hud-potions .ds-kbd { min-width: 20px; height: 20px; font-size: 11px; }

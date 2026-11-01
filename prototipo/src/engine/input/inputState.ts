@@ -144,7 +144,16 @@ export class InputState implements CombatInputSource {
     return this.bound.has(code);
   }
 
+  /** True quando a tecla vai para um campo de texto (nome, busca): o jogo não pode consumi-la. */
+  private static typing(e: Event): boolean {
+    const t = e.target as HTMLElement | null;
+    if (!t || !t.tagName) return false;
+    return t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
+  }
+
   private onKeyDown = (e: KeyboardEvent): void => {
+    // Digitando num campo: A/S/D/W/J/K etc. são letras, não movimento nem ataque.
+    if (InputState.typing(e)) return;
     if (this.press(e.code)) e.preventDefault();
   };
 

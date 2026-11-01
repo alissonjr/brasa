@@ -246,13 +246,11 @@ async function main(): Promise<void> {
 
   // Contador de Fagulhas (moeda) no HUD.
   const fagulhaEl = document.createElement("div");
-  fagulhaEl.style.cssText =
-    "position:fixed;right:16px;top:14px;z-index:35;padding:6px 14px;border-radius:18px;" +
-    "background:rgba(12,17,24,0.78);color:#ffcf8a;font:600 16px Cinzel,serif;border:1px solid #6e5a3a;" +
-    "pointer-events:none;text-shadow:0 1px 2px #000;display:none;";
+  fagulhaEl.className = "hud-fagulha";
+  fagulhaEl.style.display = "none";
   document.body.appendChild(fagulhaEl);
   const updateFagulhaHud = (): void => {
-    fagulhaEl.textContent = `✦ ${fagulhas}`;
+    fagulhaEl.textContent = `${fagulhas}`;
     fagulhaEl.style.display = gameActive ? "" : "none";
   };
   // Cada morto desperto derrotado credita a Fagulha DELE (cinza quente; varia por tipo).
@@ -263,16 +261,13 @@ async function main(): Promise<void> {
 
   // Contador de poções no HUD (cargas de cada tipo; esmaece o que estiver em 0).
   const potionsEl = document.createElement("div");
-  potionsEl.style.cssText =
-    "position:fixed;right:16px;top:48px;z-index:35;padding:6px 14px;border-radius:14px;" +
-    "background:rgba(12,17,24,0.78);color:#cfe;font:600 14px Cinzel,serif;border:1px solid #4a5a6e;" +
-    "pointer-events:none;text-shadow:0 1px 2px #000;display:none;white-space:nowrap;";
+  potionsEl.className = "hud-potions";
+  potionsEl.style.display = "none";
   document.body.appendChild(potionsEl);
   const updatePotionHud = (): void => {
-    const dim = (n: number): string => (n > 0 ? "#cfe" : "#5a6a78");
-    potionsEl.innerHTML =
-      `<span style="color:${dim(inv.vida)}">[1] Recuperação x${inv.vida}</span>` +
-      `&nbsp;&nbsp;<span style="color:${dim(inv.furia)}">[2] Fúria x${inv.furia}</span>`;
+    const pot = (key: string, label: string, n: number): string =>
+      `<span class="hud-pot${n > 0 ? "" : " off"}"><span class="ds-kbd">${key}</span>${label} ×${n}</span>`;
+    potionsEl.innerHTML = pot("1", "Recuperação", inv.vida) + pot("2", "Fúria", inv.furia);
     potionsEl.style.display = gameActive ? "" : "none";
   };
 
@@ -280,22 +275,20 @@ async function main(): Promise<void> {
   // dano; cheia (100), [X] libera a chuva de fogo. Mora aqui (app) para não tocar o heroCombat.
   let brasaMeter = 0;
   const brasaWrap = document.createElement("div");
-  brasaWrap.style.cssText =
-    "position:fixed;left:16px;bottom:16px;z-index:35;width:200px;pointer-events:none;display:none;";
-  const brasaLabel = document.createElement("div");
-  brasaLabel.style.cssText = "color:#ffcf8a;font:600 12px Cinzel,serif;text-shadow:0 1px 2px #000;margin-bottom:3px;letter-spacing:1px;";
+  brasaWrap.className = "ds-bar ds-bar--ember brasa-bar";
+  brasaWrap.style.cssText = "position:fixed;left:18px;bottom:22px;z-index:35;width:260px;height:20px;pointer-events:none;display:none;";
+  const brasaLabel = document.createElement("span");
+  brasaLabel.className = "ds-bar__label";
   brasaLabel.textContent = "BRASA";
-  const brasaTrack = document.createElement("div");
-  brasaTrack.style.cssText = "height:10px;border-radius:6px;background:rgba(8,10,14,0.8);border:1px solid #6e5a3a;overflow:hidden;";
   const brasaFill = document.createElement("div");
-  brasaFill.style.cssText = "height:100%;width:0%;background:linear-gradient(90deg,#ff7a1c,#ffd089);transition:width .12s linear;";
-  brasaTrack.appendChild(brasaFill);
-  brasaWrap.append(brasaLabel, brasaTrack);
+  brasaFill.className = "ds-bar__fill";
+  brasaFill.style.setProperty("--v", "0%");
+  brasaWrap.append(brasaLabel, brasaFill);
   document.body.appendChild(brasaWrap);
   const updateBrasaHud = (): void => {
-    brasaFill.style.width = `${Math.round(brasaMeter)}%`;
-    brasaLabel.textContent = brasaMeter >= 100 ? "BRASA - [X] ERUPÇÃO!" : "BRASA";
-    brasaLabel.style.color = brasaMeter >= 100 ? "#ffe9c0" : "#ffcf8a";
+    brasaFill.style.setProperty("--v", `${Math.round(brasaMeter)}%`);
+    brasaLabel.textContent = brasaMeter >= 100 ? "BRASA  [X] ERUPÇÃO" : "BRASA";
+    brasaWrap.classList.toggle("ready", brasaMeter >= 100);
   };
   // Enche a barra causando dano (combat:hit) e apanhando (hero:hit).
   platform.events.on<{ damage: number }>("combat:hit", ({ damage }) => {
@@ -711,7 +704,7 @@ async function main(): Promise<void> {
 
   // Botão simples no estilo do tema (para os overlays raw-DOM de derrota).
   const btnEl = (label: string, onClick: () => void, primary = false): HTMLElement => {
-    const b = el("button", { class: "btn" + (primary ? " btn-primary" : "") }, el("span", { class: "btn-label", text: label }));
+    const b = el("button", { class: "ds-btn" + (primary ? " ds-btn--primary" : "") }, el("span", { class: "ds-btn__label", text: label }));
     b.addEventListener("click", onClick);
     return b;
   };

@@ -1,5 +1,8 @@
 import "./fonts";
+import "./ds/tokens.css";
 import "./theme.css";
+import "./ds/components.css";
+import { icon } from "./ds/icons";
 import { DEFAULT_BINDINGS, INPUT_ACTIONS, el, type InputAction, type KeyBindings, type Screen } from "@engine";
 import type { DialogueSpeed, Quality } from "@platform";
 import { T, setLanguage } from "./strings";
@@ -82,10 +85,10 @@ function btn(
 ): HTMLButtonElement {
   const glyph = opts?.glyph ?? autoGlyph(label);
   const iconOnly = !!opts?.iconOnly && !!glyph;
-  const cls = "btn" + (opts?.variant ? " btn-" + opts.variant : "") + (iconOnly ? " btn-icon" : "");
+  const cls = "ds-btn" + (opts?.variant ? " ds-btn--" + opts.variant : "") + (iconOnly ? " ds-btn--icon" : "");
   const b = el("button", { class: cls });
   if (glyph) {
-    const g = el("span", { class: "btn-glyph" });
+    const g = el("span", { class: "ds-btn__glyph" });
     g.innerHTML = glyph;
     b.append(g);
   }
@@ -93,7 +96,7 @@ function btn(
     b.title = label;
     b.setAttribute("aria-label", label);
   } else {
-    b.append(el("span", { class: "btn-label", text: label }));
+    b.append(el("span", { class: "ds-btn__label", text: label }));
   }
   if (opts?.disabled) b.disabled = true;
   b.addEventListener("pointerenter", uiHover);
@@ -156,6 +159,9 @@ export class AlertDialog implements Screen {
 
 /** Modelo próprio da Acendedora nas vitrines de menu (estático; a câmera é que orbita). */
 const ACENDEDORA_PREVIEW_MODEL = "/models/acendedora.glb";
+// Criação de personagem: o MESMO modelo e atlas do jogo, para o manto escolhido valer na prévia.
+const ACENDEDORA_GAME_MODEL = "/models/Rogue_Hooded.glb";
+const mantleAtlas = (id: string): string => `/models/rogue_${id}.png`;
 
 /**
  * Cor de destaque do diorama da tela-título: menu "evolutivo". A brasa é o ponto quente
@@ -169,6 +175,25 @@ function descentAccent(pct: number): string {
   const blaze = [0xff, 0xa8, 0x4e]; // brasa plena (laranja-ouro)
   const mix = ember.map((c, i) => Math.round(c + (blaze[i]! - c) * t));
   return "#" + mix.map((v) => v.toString(16).padStart(2, "0")).join("");
+}
+
+/** Brasas subindo (decoração das telas de entrada). Sem movimento reduzido, vira camada vazia. */
+function emberLayer(reduced: boolean, count = 16): HTMLElement {
+  const layer = el("div", { class: "cc-embers", "aria-hidden": "true" });
+  if (reduced) return layer;
+  for (let i = 0; i < count; i++) {
+    const left = 6 + ((i * 53) % 88);
+    const size = 2 + (i % 4);
+    const dur = 7 + ((i * 37) % 60) / 10;
+    const delay = -((i * 29) % 70) / 10;
+    layer.append(
+      el("span", {
+        class: "cc-ember",
+        style: `left:${left}%;width:${size}px;height:${size}px;animation-duration:${dur}s;animation-delay:${delay}s`,
+      }),
+    );
+  }
+  return layer;
 }
 
 /** Opção da tela-título: texto puro (sem caixa) que acende em brasa ao focar/hover. */
@@ -204,7 +229,8 @@ export class MainMenuScreen implements Screen {
       "div",
       { class: "title-cine-head" },
       el("h1", { class: "title-cine-name", text: T.title }),
-      el("p", { class: "title-cine-sub", text: T.subtitle })
+      el("p", { class: "title-cine-sub", text: T.subtitle }),
+      el("div", { class: "ds-divider title-cine-div" }, el("i"))
     );
 
     // CTA iluminado: Continuar quando há autosave; senão, Nova Descida.
@@ -229,7 +255,13 @@ export class MainMenuScreen implements Screen {
       el("p", { class: "title-cine-verse", text: T.menuVerso })
     );
 
-    this.element = el("div", { class: "menu-backdrop title-cinematic" }, this.scene.element, overlay);
+    this.element = el(
+      "div",
+      { class: "menu-backdrop title-cinematic" },
+      this.scene.element,
+      emberLayer(ctx.settings.get().reducedMotion, 22),
+      overlay
+    );
   }
 
   onShow(): void {
@@ -1073,6 +1105,9 @@ function mantoColor(id: string): string {
   return MANTOS.find((m) => m.id === id)?.color ?? MANTOS[0]!.color;
 }
 
+const CC_DOM_ICON: Record<string, string> = { luz: "spark", memoria: "eye", calor: "flame" };
+const CC_DIFF_FLAMES: Record<string, number> = { faisca: 1, brasa: 2, fornalha: 3 };
+
 export class CharacterCreateScreen implements Screen {
   readonly element: HTMLElement;
   private readonly draft: CharacterSave;
@@ -1081,111 +1116,193 @@ export class CharacterCreateScreen implements Screen {
   constructor(ctx: UiContext) {
     const base = ctx.character();
     this.draft = { ...base, name: ctx.profile.current().name || base.name };
+    const reduced = ctx.settings.get().reducedMotion;
 
-    // Vitrine 3D: a Acendedora girando; o manto escolhido tinge a luz do nicho.
+    // Herói grande e interativo: a Acendedora gira; o manto escolhido tinge a luz do nicho.
     this.stage = new ModelStage({
-      modelUrl: ACENDEDORA_PREVIEW_MODEL,
+      modelUrl: ACENDEDORA_GAME_MODEL,
       accent: mantoColor(this.draft.manto),
-      autoRotate: !ctx.settings.get().reducedMotion,
+      mantleTextureUrl: mantleAtlas(this.draft.manto),
+      autoRotate: !reduced,
     });
 
-    const nameInput = el("input", {
-      class: "text-input",
-      type: "text",
-      value: this.draft.name,
-      maxlength: "24",
-    }) as HTMLInputElement;
-    nameInput.addEventListener("input", () => (this.draft.name = nameInput.value));
+    const steps = [
+      { label: T.passoAparencia, sub: T.passoAparenciaSub },
+      { label: T.passoDom, sub: T.passoDomSub },
+      { label: T.passoDificuldade, sub: T.passoDificuldadeSub },
+    ];
+    let step = 0;
 
-    // Cor do manto: amostras selecionáveis.
-    const mantoGroup = el("div", { class: "swatch-group" });
-    const mantoButtons = MANTOS.map((m) => {
-      const b = el(
-        "button",
-        { class: "swatch", title: m.name },
-        el("span", { class: "swatch-dot", style: `background:${m.color}` }),
-        el("span", { text: m.name }),
+    const heroName = el("div", { class: "cc-hero-name", text: this.draft.name });
+    const stepper = el("div", { class: "ds-steps" });
+    const heading = el("h2", { class: "ds-h1 cc-heading" });
+    const sub = el("p", { class: "ds-lead cc-sub" });
+    const content = el("div", { class: "cc-content" });
+    const actions = el("div", { class: "cc-actions" });
+
+    // --- Passo 1: nome + manto ---
+    const buildAparencia = (): HTMLElement => {
+      const nameInput = el("input", {
+        class: "ds-input",
+        type: "text",
+        value: this.draft.name,
+        maxlength: "24",
+        placeholder: T.nomeAcendedoraDica,
+        "aria-label": T.nomeHeroi,
+      }) as HTMLInputElement;
+      nameInput.addEventListener("input", () => {
+        this.draft.name = nameInput.value;
+        heroName.textContent = nameInput.value.trim() || base.name;
+      });
+      nameInput.addEventListener("keydown", (e) => {
+        if ((e as KeyboardEvent).key === "Enter") goTo(1);
+      });
+      const swatches = el("div", { class: "cc-swatches" });
+      const buttons = MANTOS.map((m, i) => {
+        const b = el(
+          "button",
+          { class: "ds-swatch ds-rise", title: m.name, style: `--i:${i};--c:${m.color}` },
+          el("span", { class: "ds-swatch__dot" }),
+          el("span", { text: m.name }),
+        );
+        b.addEventListener("pointerenter", uiHover);
+        b.addEventListener("click", () => {
+          uiClick();
+          this.draft.manto = m.id;
+          this.stage.setAccent(m.color);
+          this.stage.setMantleTexture(mantleAtlas(m.id));
+          sync();
+        });
+        return { id: m.id, b };
+      });
+      const sync = (): void => {
+        for (const { id, b } of buttons) b.classList.toggle("selected", id === this.draft.manto);
+      };
+      swatches.append(...buttons.map((x) => x.b));
+      sync();
+      window.setTimeout(() => nameInput.focus({ preventScroll: true }), 60);
+      return el(
+        "div",
+        { class: "cc-step" },
+        el("div", { class: "ds-label cc-field", text: T.nomeHeroi }),
+        nameInput,
+        el("div", { class: "ds-label cc-field", text: T.corDoManto }),
+        swatches,
       );
-      b.addEventListener("click", () => {
-        this.draft.manto = m.id;
-        this.stage.setAccent(m.color); // banha a Acendedora na cor do manto, ao vivo
-        syncMantos();
-      });
-      return { id: m.id, b };
-    });
-    const syncMantos = (): void => {
-      for (const { id, b } of mantoButtons) b.classList.toggle("selected", id === this.draft.manto);
     };
-    mantoGroup.append(...mantoButtons.map((x) => x.b));
-    syncMantos();
 
-    // Dom inicial e Dificuldade: cartões com nome + descrição.
-    const domGroup = el("div", { class: "choice-group" });
-    const domButtons = DONS.map((d) => {
-      const b = el("button", { class: "choice" }, el("strong", { text: d.name }), el("span", { text: d.description }));
-      b.addEventListener("click", () => {
-        this.draft.dom = d.id;
-        syncDom();
+    // --- Passos 2 e 3: cartas altas ---
+    const buildCards = (
+      items: Array<{ id: string; name: string; description: string }>,
+      current: () => string,
+      choose: (id: string) => void,
+      icon: (id: string) => string,
+    ): HTMLElement => {
+      const wrap = el("div", { class: "cc-cards" });
+      const cards = items.map((it, i) => {
+        const iconEl = el("div", { class: "ds-card__icon" });
+        iconEl.innerHTML = icon(it.id);
+        const b = el(
+          "button",
+          { class: "ds-card ds-rise", style: `--i:${i}` },
+          iconEl,
+          el("strong", { class: "ds-card__title", text: it.name }),
+          el("span", { class: "ds-card__text", text: it.description }),
+        );
+        b.addEventListener("pointerenter", uiHover);
+        b.addEventListener("click", () => {
+          uiClick();
+          choose(it.id);
+          sync();
+        });
+        return { id: it.id, b };
       });
-      return { id: d.id, b };
-    });
-    const syncDom = (): void => {
-      for (const { id, b } of domButtons) b.classList.toggle("selected", id === this.draft.dom);
+      const sync = (): void => {
+        for (const { id, b } of cards) b.classList.toggle("selected", id === current());
+      };
+      wrap.append(...cards.map((x) => x.b));
+      sync();
+      return el("div", { class: "cc-step ds-slide" }, wrap);
     };
-    domGroup.append(...domButtons.map((x) => x.b));
-    syncDom();
 
-    const diffGroup = el("div", { class: "choice-group" });
-    const diffButtons = DIFFICULTIES.map((d) => {
-      const b = el("button", { class: "choice" }, el("strong", { text: d.name }), el("span", { text: d.description }));
-      b.addEventListener("click", () => {
-        this.draft.difficulty = d.id as Difficulty;
-        syncDiff();
+    const buildDom = (): HTMLElement =>
+      buildCards(
+        DONS,
+        () => this.draft.dom,
+        (id) => (this.draft.dom = id),
+        (id) => icon(CC_DOM_ICON[id] ?? "spark", 46),
+      );
+    const buildDificuldade = (): HTMLElement =>
+      buildCards(
+        DIFFICULTIES,
+        () => this.draft.difficulty,
+        (id) => (this.draft.difficulty = id as Difficulty),
+        (id) => icon("flame", 46).repeat(CC_DIFF_FLAMES[id] ?? 1),
+      );
+
+    const builders = [buildAparencia, buildDom, buildDificuldade];
+
+    const renderStepper = (): void => {
+      stepper.replaceChildren();
+      steps.forEach((s, i) => {
+        const cls = "ds-step" + (i === step ? " current" : i < step ? " done" : "");
+        const b = el(
+          "button",
+          { class: cls, disabled: i > step, "aria-label": s.label },
+          el("i"),
+          el("span", { text: s.label }),
+        );
+        b.addEventListener("click", () => i < step && goTo(i));
+        stepper.append(b);
+        if (i < steps.length - 1) stepper.append(el("span", { class: "ds-steps__line" + (i < step ? " done" : "") }));
       });
-      return { id: d.id, b };
-    });
-    const syncDiff = (): void => {
-      for (const { id, b } of diffButtons) b.classList.toggle("selected", id === this.draft.difficulty);
     };
-    diffGroup.append(...diffButtons.map((x) => x.b));
-    syncDiff();
 
-    const form = el(
+    const renderActions = (): void => {
+      actions.replaceChildren();
+      actions.append(btn(step === 0 ? T.cancelar : T.voltar, () => (step === 0 ? ctx.ui.back() : goTo(step - 1))));
+      if (step < steps.length - 1) {
+        actions.append(btn(T.proximo, () => goTo(step + 1), { variant: "primary" }));
+      } else {
+        actions.append(
+          btn(
+            T.comecar,
+            () => {
+              const name = this.draft.name.trim();
+              void ctx.startNewGame({ ...this.draft, name: name || base.name });
+            },
+            { variant: "primary" },
+          ),
+        );
+      }
+    };
+
+    const goTo = (n: number): void => {
+      step = Math.max(0, Math.min(steps.length - 1, n));
+      heading.textContent = steps[step]!.label;
+      sub.textContent = steps[step]!.sub;
+      content.replaceChildren(builders[step]!());
+      renderStepper();
+      renderActions();
+    };
+    goTo(0);
+
+    const embers = emberLayer(reduced);
+
+    this.element = el(
       "div",
-      { class: "create-form" },
-      el("div", { class: "field-label", text: T.nomeHeroi }),
-      nameInput,
-      el("div", { class: "field-label", text: T.corDoManto }),
-      mantoGroup,
-      el("div", { class: "field-label", text: T.domInicial }),
-      domGroup,
-      el("div", { class: "field-label", text: T.dificuldade }),
-      diffGroup,
-    );
-
-    const stageCol = el(
-      "div",
-      { class: "create-stage-col" },
-      this.stage.element,
-      el("span", { class: "model-stage-hint", text: T.arrasteParaGirar }),
-    );
-
-    this.element = backdrop(
-      [
-        el("h2", { class: "menu-title", text: T.novaJornada }),
-        el("p", { class: "menu-subtitle", text: T.novaJornadaSub }),
-        el("div", { class: "create-spread" }, stageCol, form),
-        el(
-          "div",
-          { class: "menu-actions" },
-          btn(T.cancelar, () => ctx.ui.back()),
-          btn(T.comecar, () => {
-            const name = this.draft.name.trim();
-            void ctx.startNewGame({ ...this.draft, name: name || base.name });
-          }),
-        ),
-      ],
-      "create-panel create-panel-spread",
+      { class: "cc-root" },
+      el("div", { class: "cc-hero" }, this.stage.element, embers, heroName, el("span", { class: "cc-hero-hint", text: T.arrasteParaGirar })),
+      el(
+        "div",
+        { class: "cc-side" },
+        el("div", { class: "ds-label cc-title", text: T.novaJornada }),
+        stepper,
+        heading,
+        sub,
+        content,
+        actions,
+      ),
     );
   }
 

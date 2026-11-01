@@ -1,4 +1,4 @@
-import { CharacterController, type CombatInputSource, type InputSource, type ThirdPersonCamera } from "@engine";
+import { CharacterController, createLightPool, type CombatInputSource, type InputSource, type ThirdPersonCamera } from "@engine";
 import { Color3, PointLight, Quaternion, Vector3 } from "@babylonjs/core";
 import type { Scene } from "@babylonjs/core";
 import { HeroModel, type HeroAction } from "./heroModel";
@@ -44,10 +44,13 @@ export class Acendedora {
     const spark = new PointLight("luz_fagulha", new Vector3(0, 1.2, 0), scene);
     spark.diffuse = Color3.FromHexString("#ffa63d");
     spark.specular = Color3.Black();
-    spark.intensity = 0.45;
-    spark.range = 4.5;
+    spark.intensity = 1.0;
+    spark.range = 9;
     spark.shadowEnabled = false;
     spark.parent = this.model.root;
+    // Halo quente no chão sob a Acendedora: a lanterna dela e o ponto de luz da cena fria.
+    const pool = createLightPool(scene, { radius: 3.4, color: "#ffa63d", alpha: 0.4, y: -0.84 });
+    pool.parent = this.model.root;
   }
 
   get position(): Vector3 {

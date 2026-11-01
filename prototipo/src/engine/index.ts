@@ -17,6 +17,8 @@ export type { SsaoOptions, SsaoHandle } from "./rendering/ssao";
 export { addFinishingPass } from "./rendering/finishingPass";
 export type { FinishingOptions, FinishingHandle } from "./rendering/finishingPass";
 export { addSceneOutline } from "./rendering/sceneOutline";
+export { createLightPool } from "./rendering/lightPool";
+export type { LightPoolOptions } from "./rendering/lightPool";
 export type { SceneOutlineOptions, SceneOutlineHandle } from "./rendering/sceneOutline";
 export { Tweens, Easings } from "./core/tween";
 export type { Easing } from "./core/tween";

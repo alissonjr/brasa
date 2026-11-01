@@ -10,37 +10,38 @@ import { el } from "@engine";
  */
 const STYLE_ID = "combat-hud-style";
 const CSS = `
-.combat-hud { position:absolute; left:18px; bottom:18px; width:240px; pointer-events:none;
-  font-family:"Cinzel",Georgia,serif; }
-.chud-bar { position:relative; height:16px; border:1px solid var(--borda-clara,#9c7339);
-  border-radius:4px; background:rgba(20,14,8,.72); box-shadow:inset 0 1px 0 rgba(246,227,176,.14),
-  inset 0 0 10px rgba(0,0,0,.5); overflow:hidden; }
+.combat-hud { position:absolute; left:18px; bottom:50px; width:260px; pointer-events:none;
+  font-family:var(--font-display,"Cinzel",Georgia,serif); }
+.chud-bar { position:relative; height:18px; border:1px solid var(--gold-700,#5c4115); border-radius:3px;
+  background:var(--ink-950,#06080c); box-shadow:inset 0 2px 4px rgba(0,0,0,.7), 0 2px 6px rgba(0,0,0,.45); overflow:hidden; }
 .chud-bar + .chud-bar { margin-top:6px; }
-/* ESTILO (Bloco 2): a barra "assenta" com easing (cubic-bezier) em vez de linear seco. */
-.chud-fill { position:absolute; inset:0; transform-origin:left center; transition:transform .18s cubic-bezier(.34,1.56,.64,1); }
-.chud-health { height:18px; }
-.chud-health .chud-fill { background:linear-gradient(180deg,#c0392b,#8e2a20); }
-.chud-stamina { height:9px; width:200px; opacity:1; transition:opacity .3s ease; }
-.chud-stamina .chud-fill { background:linear-gradient(180deg,var(--ouro,#e7bd71),var(--bronze,#b5793a)); }
+/* A barra "assenta" com easing em vez de linear seco. */
+.chud-fill { position:absolute; inset:2px; transform-origin:left center; transition:transform .18s cubic-bezier(.34,1.56,.64,1); }
+.chud-fill::after { content:""; position:absolute; left:0; right:0; top:0; height:40%;
+  background:linear-gradient(180deg,rgba(255,255,255,.28),transparent); }
+.chud-health { height:20px; }
+.chud-health .chud-fill { background:linear-gradient(180deg,var(--blood-400,#d9473a),var(--blood-600,#8e2a20)); }
+.chud-stamina { height:10px; width:200px; opacity:1; transition:opacity .3s ease; }
+.chud-stamina .chud-fill { inset:1px; background:linear-gradient(180deg,var(--gold-300,#f2c46d),var(--gold-500,#b5832d)); }
 .chud-stamina.full { opacity:0; }
-.chud-label { position:absolute; left:7px; top:50%; transform:translateY(-50%);
-  font-size:10px; letter-spacing:2px; color:#f6ecd6; text-shadow:0 1px 1px rgba(0,0,0,.6); }
-/* FAGULHA em CARGAS: fileira de pips (losangos). Cheio = aceso; vazio = consumido; o pip
-   em regeneracao preenche por baixo (clip). */
-.chud-spark-row { display:flex; align-items:center; gap:7px; margin-top:7px; height:16px; }
-.chud-spark-label { font-size:10px; letter-spacing:2px; color:#f6ecd6; text-shadow:0 1px 1px rgba(0,0,0,.6); margin-right:2px; }
-.chud-pip { position:relative; width:14px; height:14px; transform:rotate(45deg);
-  border:1px solid #9c7339; background:rgba(20,14,8,.72); border-radius:3px; overflow:hidden;
-  box-shadow:inset 0 0 6px rgba(0,0,0,.5); }
+.chud-label { position:absolute; left:9px; top:50%; transform:translateY(-50%); z-index:1;
+  font-size:10px; letter-spacing:.22em; color:var(--text-hi,#f3e8d0); text-shadow:0 1px 2px #000; }
+/* FAGULHA em CARGAS: fileira de losangos. Cheio = aceso; vazio = consumido; o pip em
+   regeneracao preenche por baixo (clip). */
+.chud-spark-row { display:flex; align-items:center; gap:9px; margin-top:8px; height:16px; }
+.chud-spark-label { font-size:10px; letter-spacing:.22em; color:var(--gold-400,#d9a441); text-shadow:0 1px 2px #000; margin-right:2px; }
+.chud-pip { position:relative; width:13px; height:13px; transform:rotate(45deg);
+  border:1px solid var(--gold-600,#8a621f); background:rgba(10,13,19,.8); border-radius:3px; overflow:hidden;
+  box-shadow:inset 0 0 6px rgba(0,0,0,.6); }
 .chud-pip-fill { position:absolute; inset:0; transform-origin:bottom center; transform:scaleY(0);
-  background:linear-gradient(0deg,#ffd089,#ff8a2c); transition:transform .15s linear; }
-.chud-pip.lit { border-color:#ffd089; box-shadow:inset 0 0 6px rgba(0,0,0,.4), 0 0 8px rgba(255,138,44,.55); }
+  background:linear-gradient(0deg,var(--ember-500,#ff6a13),var(--ember-200,#ffd9a8)); transition:transform .15s linear; }
+.chud-pip.lit { border-color:var(--ember-200,#ffd9a8); box-shadow:inset 0 0 6px rgba(0,0,0,.4), 0 0 10px rgba(255,138,44,.7); }
 /* RESSONÂNCIA: marcas que acendem com o streak de acertos sem apanhar (some quando inativa). */
 .chud-reso-row { display:flex; align-items:center; gap:5px; margin-top:7px; height:12px; opacity:0; transition:opacity .2s ease; }
 .chud-reso-row.on { opacity:1; }
-.chud-reso-label { font-size:9px; letter-spacing:2px; color:#ffe0a0; text-shadow:0 1px 1px rgba(0,0,0,.6); margin-right:2px; }
-.chud-reso-mark { width:9px; height:12px; transform:skewX(-20deg); background:rgba(40,28,12,.7); border:1px solid #8a6a38; border-radius:2px; }
-.chud-reso-mark.lit { background:linear-gradient(180deg,#fff0c0,#ffae3a); border-color:#ffd089; box-shadow:0 0 6px rgba(255,174,58,.6); }
+.chud-reso-label { font-size:9px; letter-spacing:.22em; color:var(--gold-200,#ffe0a0); text-shadow:0 1px 2px #000; margin-right:2px; }
+.chud-reso-mark { width:9px; height:12px; transform:skewX(-20deg); background:rgba(40,28,12,.7); border:1px solid var(--gold-600,#8a621f); border-radius:2px; }
+.chud-reso-mark.lit { background:linear-gradient(180deg,var(--gold-100,#fff1cf),var(--ember-400,#ff8a2c)); border-color:var(--gold-200,#ffe0a0); box-shadow:0 0 6px rgba(255,174,58,.6); }
 .damage-vignette { position:absolute; inset:0; pointer-events:none; opacity:0;
   background:radial-gradient(ellipse at center, transparent 55%, rgba(150,30,20,.55) 100%);
   transition:opacity .4s ease; }
@@ -53,11 +54,15 @@ const CSS = `
 .combat-feedback.fb-block { box-shadow:inset 0 0 90px 8px rgba(210,150,70,.45); }
 .combat-feedback.fb-perfect { box-shadow:inset 0 0 110px 14px rgba(150,225,255,.55); }
 .combat-feedback.show { opacity:1; transition:opacity .05s ease; }
+/* Dica de controles: teclas em keycap, some após alguns segundos. */
 .combat-hint { position:absolute; left:50%; bottom:22px; transform:translateX(-50%);
-  pointer-events:none; font-family:"Cinzel",Georgia,serif; font-size:12px; letter-spacing:1px;
-  color:#f0e2c4; text-shadow:0 1px 2px rgba(0,0,0,.7); background:rgba(20,14,8,.55);
-  border:1px solid rgba(216,169,59,.28); border-radius:20px; padding:6px 16px; white-space:nowrap;
-  opacity:.9; transition:opacity 1s ease; }
+  display:flex; align-items:center; gap:7px; pointer-events:none; white-space:nowrap;
+  font-family:var(--font-text,"EB Garamond",Georgia,serif); font-size:15px; color:var(--text-mid,#bdb299);
+  background:rgba(10,13,19,.86); border:1px solid var(--gold-700,#5c4115); border-radius:999px;
+  padding:6px 18px; box-shadow:0 8px 20px rgba(0,0,0,.5); backdrop-filter:blur(4px);
+  opacity:.95; transition:opacity 1s ease; }
+.combat-hint .chint-sep { width:1px; height:14px; background:var(--gold-700,#5c4115); margin:0 6px; }
+.combat-hint .ds-kbd { min-width:22px; height:22px; font-size:11px; }
 .combat-hint.faded { opacity:0; }
 `;
 
@@ -109,9 +114,19 @@ export class CombatHud {
     this.root = el("div", { class: "combat-hud" }, health, this.staminaBar, this.sparkRow, this.resoRow);
     this.vignette = el("div", { class: "damage-vignette" });
     this.feedback = el("div", { class: "combat-feedback" });
-    this.hint = el("div", {
-      class: "combat-hint",
-      text: "Atacar: clique / J    Pesado: dir. / K    Esquiva: C    Fogo: E    Bloqueio: Q    Alvo: T",
+    this.hint = el("div", { class: "combat-hint" });
+    const hintItems: Array<[string[], string]> = [
+      [["Clique", "J"], "Atacar"],
+      [["Dir.", "K"], "Pesado"],
+      [["C"], "Esquiva"],
+      [["E"], "Fogo"],
+      [["Q"], "Bloqueio"],
+      [["T"], "Alvo"],
+    ];
+    hintItems.forEach(([keys, label], i) => {
+      if (i > 0) this.hint.append(el("span", { class: "chint-sep" }));
+      for (const k of keys) this.hint.append(el("span", { class: "ds-kbd", text: k }));
+      this.hint.append(el("span", { text: label }));
     });
   }
 

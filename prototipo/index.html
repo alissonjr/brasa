@@ -65,6 +65,10 @@
       }
       /* O atributo `hidden` precisa vencer o `display: flex` acima (mais
          específico que a regra padrão [hidden] { display: none } do navegador). */
+      /* Ajuda antiga e contador de quadros: ficam fora do jogo (o contador volta com ?perf). */
+      #hud { display: none !important; }
+      #fps { display: none !important; }
+      body.perf #fps { display: block !important; left: auto; right: 12px; bottom: 12px; }
       [hidden] {
         display: none !important;
       }
@@ -80,6 +84,7 @@
       <div><b>Esc</b> ou botão <b>Menu</b> (canto superior direito): pausar</div>
     </div>
     <div id="fps" hidden>-- fps</div>
+    <script>if (/[?&]perf\b/.test(location.search)) document.body.classList.add("perf");</script>
     <script type="module" src="/src/app/main.ts"></script>
   </body>
 </html>

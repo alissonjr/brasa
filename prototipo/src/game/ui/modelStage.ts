@@ -7,6 +7,7 @@ import {
   HemisphericLight,
   ImportMeshAsync,
   Scene,
+  Texture,
   TransformNode,
   Vector3,
   type AbstractMesh,
@@ -41,6 +42,8 @@ export interface ModelStageOptions {
   interactive?: boolean;
   /** Cor de destaque do nicho (luz de recorte + brilho do chão). Default: brasa. */
   accent?: string;
+  /** Atlas de albedo a aplicar no modelo (variante de manto do KayKit). Opcional. */
+  mantleTextureUrl?: string;
   /**
    * "niche": moldura compacta para dentro de um painel (Crônica, criação).
    * "backdrop": preenche o espaço atrás de uma tela (diorama da tela-título).
@@ -64,12 +67,14 @@ export class ModelStage {
   private rim?: DirectionalLight;
   private resizeObs?: ResizeObserver;
   private disposed = false;
+  private modelReady = false;
 
   constructor(opts: ModelStageOptions) {
     this.opts = {
       autoRotate: true,
       interactive: true,
       accent: DEFAULT_ACCENT,
+      mantleTextureUrl: "",
       variant: "niche",
       ...opts,
     };
@@ -168,6 +173,27 @@ export class ModelStage {
     this.applyAccentToLight(hex);
   }
 
+  /** Troca o atlas de albedo do modelo (manto escolhido). Vale agora ou assim que o modelo carregar. */
+  setMantleTexture(url: string): void {
+    this.opts.mantleTextureUrl = url;
+    this.applyMantleTexture();
+  }
+
+  private applyMantleTexture(): void {
+    const scene = this.scene;
+    const url = this.opts.mantleTextureUrl;
+    if (!scene || !url || !this.modelReady) return;
+    // invertY=false: mesma convenção do atlas carregado pelo glTF (ver heroModel.applyMantle).
+    const tex = new Texture(assetUrl(url), scene, false, false);
+    const seen = new Set<unknown>();
+    for (const m of scene.meshes) {
+      const mat = m.material as ({ albedoTexture?: unknown } & object) | null;
+      if (!mat || seen.has(mat) || !("albedoTexture" in mat)) continue;
+      seen.add(mat);
+      (mat as { albedoTexture: unknown }).albedoTexture = tex;
+    }
+  }
+
   private applyAccentToLight(hex: string): void {
     if (!this.rim) return;
     // Clareia um pouco a cor para a luz "estourar" no recorte sem perder o matiz.
@@ -204,6 +230,8 @@ export class ModelStage {
     const top = meshes.find((m) => m.name === "__root__") ?? meshes[0];
     if (top) this.fit(top);
     this.playIdle(animationGroups);
+    this.modelReady = true;
+    this.applyMantleTexture();
     this.element.classList.add("model-stage-ready");
   }
 

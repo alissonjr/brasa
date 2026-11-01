@@ -1,0 +1,228 @@
+/* CAMADA JOGO (Brasa). DESIGN SYSTEM, parte 2: COMPONENTES.
+   Só usa tokens (tokens.css). Prefixo .ds-. Todo componente interativo tem os estados:
+   normal, hover, focus-visible (teclado), pressed, selected e disabled. */
+
+/* ---------- Tipografia ---------- */
+.ds-display { font-family: var(--font-display); font-weight: 700; letter-spacing: var(--ls-title); color: var(--text-hi); text-shadow: 0 2px 22px rgba(0, 0, 0, 0.6); }
+.ds-h1 { font-family: var(--font-display); font-weight: 700; font-size: var(--fs-3xl); letter-spacing: var(--ls-title); color: var(--text-hi); line-height: 1.1; }
+.ds-h2 { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-xl); letter-spacing: var(--ls-title); color: var(--text-hi); line-height: 1.2; }
+.ds-h3 { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-lg); letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-hi); }
+.ds-body { font-family: var(--font-text); font-size: var(--fs-md); line-height: 1.5; color: var(--text-mid); }
+.ds-lead { font-family: var(--font-text); font-style: italic; font-size: var(--fs-lg); color: var(--text-mid); }
+.ds-small { font-family: var(--font-text); font-size: var(--fs-sm); color: var(--text-lo); }
+.ds-label { font-family: var(--font-display); font-weight: 600; font-size: var(--fs-2xs); letter-spacing: 0.3em; text-transform: uppercase; color: var(--gold-500); }
+.ds-gold { color: var(--gold-300); }
+.ds-ember { color: var(--ember-400); }
+
+/* ---------- Ícone ---------- */
+.ds-icon { display: inline-block; flex: none; vertical-align: middle; }
+
+/* ---------- Divisor ornamentado ---------- */
+.ds-divider { display: flex; align-items: center; gap: var(--sp-3); color: var(--gold-600); }
+.ds-divider::before, .ds-divider::after { content: ""; flex: 1; height: var(--line); background: linear-gradient(90deg, transparent, var(--gold-600)); }
+.ds-divider::after { transform: scaleX(-1); }
+.ds-divider > i { width: 7px; height: 7px; transform: rotate(45deg); border: var(--line) solid var(--gold-400); background: var(--gold-700); }
+
+/* ---------- Moldura (painel) ---------- */
+.ds-frame {
+  --c-tl: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2722%27%20height%3D%2722%27%20viewBox%3D%270%200%2022%2022%27%20fill%3D%27none%27%20stroke%3D%27%23d9a441%27%20stroke-width%3D%271.4%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cg%20transform%3D%27%27%3E%3Cpath%20d%3D%27M1%2017V5a4%204%200%200%201%204-4h12%27%2F%3E%3Cpath%20d%3D%27M5%209V6.5A1.5%201.5%200%200%201%206.5%205H9%27%20stroke-width%3D%271%27%20opacity%3D%27.65%27%2F%3E%3Cpath%20d%3D%27M4.2%202.4l1.6%201.6-1.6%201.6-1.6-1.6z%27%20fill%3D%27%23f2c46d%27%20stroke%3D%27none%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  --c-tr: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2722%27%20height%3D%2722%27%20viewBox%3D%270%200%2022%2022%27%20fill%3D%27none%27%20stroke%3D%27%23d9a441%27%20stroke-width%3D%271.4%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cg%20transform%3D%27matrix%28-1%200%200%201%2022%200%29%27%3E%3Cpath%20d%3D%27M1%2017V5a4%204%200%200%201%204-4h12%27%2F%3E%3Cpath%20d%3D%27M5%209V6.5A1.5%201.5%200%200%201%206.5%205H9%27%20stroke-width%3D%271%27%20opacity%3D%27.65%27%2F%3E%3Cpath%20d%3D%27M4.2%202.4l1.6%201.6-1.6%201.6-1.6-1.6z%27%20fill%3D%27%23f2c46d%27%20stroke%3D%27none%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  --c-bl: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2722%27%20height%3D%2722%27%20viewBox%3D%270%200%2022%2022%27%20fill%3D%27none%27%20stroke%3D%27%23d9a441%27%20stroke-width%3D%271.4%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cg%20transform%3D%27matrix%281%200%200%20-1%200%2022%29%27%3E%3Cpath%20d%3D%27M1%2017V5a4%204%200%200%201%204-4h12%27%2F%3E%3Cpath%20d%3D%27M5%209V6.5A1.5%201.5%200%200%201%206.5%205H9%27%20stroke-width%3D%271%27%20opacity%3D%27.65%27%2F%3E%3Cpath%20d%3D%27M4.2%202.4l1.6%201.6-1.6%201.6-1.6-1.6z%27%20fill%3D%27%23f2c46d%27%20stroke%3D%27none%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  --c-br: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20width%3D%2722%27%20height%3D%2722%27%20viewBox%3D%270%200%2022%2022%27%20fill%3D%27none%27%20stroke%3D%27%23d9a441%27%20stroke-width%3D%271.4%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cg%20transform%3D%27matrix%28-1%200%200%20-1%2022%2022%29%27%3E%3Cpath%20d%3D%27M1%2017V5a4%204%200%200%201%204-4h12%27%2F%3E%3Cpath%20d%3D%27M5%209V6.5A1.5%201.5%200%200%201%206.5%205H9%27%20stroke-width%3D%271%27%20opacity%3D%27.65%27%2F%3E%3Cpath%20d%3D%27M4.2%202.4l1.6%201.6-1.6%201.6-1.6-1.6z%27%20fill%3D%27%23f2c46d%27%20stroke%3D%27none%27%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  position: relative;
+  padding: var(--sp-6);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(242, 196, 109, 0.07), transparent 60%),
+    var(--surface-panel);
+  border: var(--line) solid var(--ink-500);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-3), inset 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 0 0 4px var(--ink-850), inset 0 0 0 5px var(--gold-800);
+}
+.ds-frame::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  pointer-events: none;
+  background:
+    var(--c-tl) left top / 22px 22px no-repeat,
+    var(--c-tr) right top / 22px 22px no-repeat,
+    var(--c-bl) left bottom / 22px 22px no-repeat,
+    var(--c-br) right bottom / 22px 22px no-repeat;
+}
+.ds-frame::after {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, transparent 12%, var(--gold-600) 50%, transparent 88%) top center / 100% 1px no-repeat,
+    linear-gradient(90deg, transparent 12%, var(--gold-600) 50%, transparent 88%) bottom center / 100% 1px no-repeat;
+  opacity: 0.55;
+}
+.ds-frame--quiet { box-shadow: var(--shadow-2), inset 0 0 0 1px rgba(0, 0, 0, 0.55); }
+.ds-frame--quiet::before, .ds-frame--quiet::after { display: none; }
+
+/* ---------- Botão ---------- */
+.ds-btn {
+  --btn-h: 44px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: var(--btn-h);
+  padding: 0 var(--sp-5);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  border: var(--line) solid var(--gold-600);
+  color: var(--gold-200);
+  background: linear-gradient(180deg, var(--ink-700), var(--ink-850));
+  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(242, 196, 109, 0.14);
+  transition: transform var(--dur-fast) var(--ease-out), border-color var(--dur-base) ease, box-shadow var(--dur-base) ease, color var(--dur-base) ease, background var(--dur-base) ease;
+}
+.ds-btn:hover { color: var(--gold-100); border-color: var(--gold-300); box-shadow: var(--shadow-2), var(--glow-gold), inset 0 1px 0 rgba(242, 196, 109, 0.22); transform: translateY(-1px); }
+.ds-btn:active { transform: translateY(1px); box-shadow: var(--shadow-1); filter: brightness(0.92); }
+.ds-btn:focus-visible { outline: 2px solid var(--ember-300); outline-offset: 3px; }
+.ds-btn:disabled, .ds-btn[aria-disabled="true"] { opacity: 0.4; cursor: not-allowed; transform: none; filter: grayscale(0.6); box-shadow: none; }
+.ds-btn--primary {
+  color: var(--ink-950);
+  border-color: var(--gold-200);
+  background: linear-gradient(180deg, var(--gold-200) 0%, var(--gold-400) 52%, var(--gold-500) 100%);
+  text-shadow: 0 1px 0 rgba(255, 241, 207, 0.5);
+  box-shadow: var(--shadow-1), 0 0 0 1px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.55), inset 0 -2px 0 rgba(92, 65, 21, 0.45);
+}
+.ds-btn--primary:hover { color: var(--ink-950); border-color: var(--gold-100); box-shadow: var(--shadow-2), var(--glow-ember), inset 0 1px 0 rgba(255, 255, 255, 0.7), inset 0 -2px 0 rgba(92, 65, 21, 0.45); }
+.ds-btn--ghost { background: transparent; border-color: transparent; box-shadow: none; color: var(--text-mid); }
+.ds-btn--ghost:hover { color: var(--gold-200); border-color: transparent; box-shadow: none; background: rgba(242, 196, 109, 0.06); }
+.ds-btn--danger { color: #ffd9d4; border-color: var(--blood-600); background: linear-gradient(180deg, #3a1613, #1f0d0b); }
+.ds-btn--danger:hover { border-color: var(--blood-400); box-shadow: var(--shadow-2), 0 0 18px rgba(217, 71, 58, 0.4); color: #fff; }
+.ds-btn--icon { padding: 0; width: var(--btn-h); }
+.ds-btn--sm { --btn-h: 34px; padding: 0 var(--sp-4); font-size: var(--fs-xs); }
+.ds-btn--lg { --btn-h: 54px; padding: 0 var(--sp-6); font-size: var(--fs-md); }
+
+.ds-btn__glyph { display: inline-flex; width: 18px; height: 18px; }
+.ds-btn__glyph svg { width: 100%; height: 100%; }
+.ds-btn__label { line-height: 1; }
+
+/* ---------- Carta (escolha) ---------- */
+.ds-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-5) var(--sp-4) var(--sp-4);
+  text-align: center;
+  cursor: pointer;
+  font-family: var(--font-text);
+  color: var(--text-mid);
+  background: var(--surface-card);
+  border: var(--line) solid var(--ink-500);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2);
+  overflow: hidden;
+  transition: transform var(--dur-base) var(--ease-out), border-color var(--dur-base) ease, box-shadow var(--dur-base) ease, background var(--dur-base) ease;
+}
+.ds-card::before { content: ""; position: absolute; left: 16%; right: 16%; top: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--gold-400), transparent); opacity: 0.6; }
+.ds-card:hover { transform: translateY(-6px); border-color: var(--gold-500); box-shadow: var(--shadow-3); }
+.ds-card:focus-visible { outline: 2px solid var(--ember-300); outline-offset: 3px; }
+.ds-card:active { transform: translateY(-2px); }
+.ds-card.selected, .ds-card[aria-pressed="true"] { border-color: var(--ember-400); background: var(--surface-card-hot); box-shadow: 0 0 0 1px var(--ember-400), var(--glow-ember-lg), inset 0 0 40px rgba(255, 138, 44, 0.1); }
+.ds-card:disabled { opacity: 0.4; cursor: not-allowed; transform: none; filter: grayscale(0.7); }
+.ds-card__icon { display: flex; align-items: center; justify-content: center; height: 48px; color: var(--gold-600); transition: color var(--dur-base) ease, filter var(--dur-base) ease, transform var(--dur-base) var(--ease-out); }
+.ds-card__icon .ds-icon { width: 46px; height: 46px; }
+.ds-card:hover .ds-card__icon { color: var(--gold-400); }
+.ds-card.selected .ds-card__icon, .ds-card[aria-pressed="true"] .ds-card__icon { color: var(--ember-300); filter: drop-shadow(0 0 10px rgba(255, 138, 44, 0.7)); transform: scale(1.08); }
+.ds-card__title { font-family: var(--font-display); font-weight: 700; font-size: var(--fs-md); letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-hi); }
+.ds-card__text { font-size: var(--fs-md); line-height: 1.4; }
+.ds-card.selected .ds-card__text { color: var(--text-hi); }
+
+/* ---------- Seletor de cor (swatch) ---------- */
+.ds-swatch { display: inline-flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-1); background: none; border: 0; cursor: pointer; font-family: var(--font-text); font-size: var(--fs-sm); color: var(--text-lo); }
+.ds-swatch__dot { width: 54px; height: 54px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--c) 55%, #fff), var(--c) 48%, color-mix(in srgb, var(--c) 60%, #000)); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.6), 0 0 0 3px var(--ink-500), var(--shadow-2); transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) ease; }
+.ds-swatch:hover .ds-swatch__dot { transform: scale(1.1); }
+.ds-swatch:focus-visible { outline: 2px solid var(--ember-300); outline-offset: 2px; border-radius: var(--radius-md); }
+.ds-swatch.selected { color: var(--text-hi); }
+.ds-swatch.selected .ds-swatch__dot { transform: scale(1.12); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.6), 0 0 0 3px var(--gold-200), 0 0 26px var(--c); }
+
+/* ---------- Campo de texto ---------- */
+.ds-input { width: 100%; padding: var(--sp-2) 2px var(--sp-2); font-family: var(--font-text); font-size: var(--fs-xl); color: var(--text-hi); background: transparent; border: 0; border-bottom: var(--line) solid var(--ink-500); outline: none; transition: border-color var(--dur-base) ease, box-shadow var(--dur-base) ease; }
+.ds-input::placeholder { color: var(--text-lo); font-style: italic; }
+.ds-input:hover { border-bottom-color: var(--gold-600); }
+.ds-input:focus { border-bottom-color: var(--ember-400); box-shadow: 0 1px 0 var(--ember-400); }
+.ds-input:disabled { opacity: 0.4; }
+
+/* ---------- Passos (losangos) ---------- */
+.ds-steps { display: flex; align-items: center; gap: var(--sp-3); }
+.ds-step { display: inline-flex; align-items: center; gap: var(--sp-2); padding: var(--sp-1) 2px; background: none; border: 0; cursor: default; font-family: var(--font-display); font-size: var(--fs-2xs); letter-spacing: 0.2em; text-transform: uppercase; color: var(--text-lo); white-space: nowrap; }
+.ds-step i { width: 11px; height: 11px; transform: rotate(45deg); border: var(--line) solid var(--ink-500); border-radius: 2px; transition: background var(--dur-base) ease, box-shadow var(--dur-base) ease, border-color var(--dur-base) ease; }
+.ds-step.done { color: var(--gold-400); cursor: pointer; }
+.ds-step.done i { border-color: var(--gold-400); background: rgba(217, 164, 65, 0.45); }
+.ds-step.current { color: var(--text-hi); }
+.ds-step.current i { border-color: var(--ember-200); background: linear-gradient(0deg, var(--ember-400), var(--ember-200)); box-shadow: 0 0 12px rgba(255, 138, 44, 0.8); }
+.ds-steps__line { flex: 1 1 18px; min-width: 14px; height: var(--line); background: var(--ink-600); }
+.ds-steps__line.done { background: var(--metal-gold-soft); }
+
+/* ---------- Barras ---------- */
+.ds-bar { position: relative; height: 18px; padding: 2px; background: var(--ink-950); border: var(--line) solid var(--gold-700); border-radius: var(--radius-sm); box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7), var(--shadow-1); }
+.ds-bar__fill { position: relative; height: 100%; width: var(--v, 100%); border-radius: 1px; transition: width 320ms var(--ease-spring); background: linear-gradient(180deg, var(--blood-400), var(--blood-600)); }
+.ds-bar__fill::after { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 40%; background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), transparent); border-radius: 1px; }
+.ds-bar--stamina { height: 10px; padding: 1px; }
+.ds-bar--stamina .ds-bar__fill { background: linear-gradient(180deg, var(--gold-300), var(--gold-500)); }
+.ds-bar--ember .ds-bar__fill { background: linear-gradient(180deg, var(--ember-300), var(--ember-600)); box-shadow: 0 0 12px rgba(255, 138, 44, 0.5); }
+.ds-bar__label { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); font-family: var(--font-display); font-size: 10px; letter-spacing: 0.22em; color: var(--text-hi); text-shadow: 0 1px 2px #000; z-index: 1; }
+/* Cargas de fagulha (losangos) */
+.ds-pips { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.ds-pip { width: 14px; height: 14px; transform: rotate(45deg); border: var(--line) solid var(--gold-600); border-radius: 3px; background: rgba(10, 13, 19, 0.8); box-shadow: inset 0 0 6px rgba(0, 0, 0, 0.6); transition: background var(--dur-base) ease, box-shadow var(--dur-base) ease; }
+.ds-pip.lit { border-color: var(--ember-200); background: linear-gradient(0deg, var(--ember-500), var(--ember-200)); box-shadow: 0 0 10px rgba(255, 138, 44, 0.7); }
+
+/* ---------- Chip / tag ---------- */
+.ds-chip { display: inline-flex; align-items: center; gap: var(--sp-1); height: 24px; padding: 0 var(--sp-3); font-family: var(--font-display); font-size: var(--fs-2xs); letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold-300); background: rgba(92, 65, 21, 0.35); border: var(--line) solid var(--gold-700); border-radius: 999px; }
+.ds-chip--ember { color: var(--ember-300); border-color: rgba(255, 138, 44, 0.5); background: rgba(217, 78, 10, 0.18); }
+.ds-chip--frost { color: var(--frost-300); border-color: rgba(143, 214, 230, 0.4); background: rgba(74, 163, 186, 0.14); }
+.ds-chip--blood { color: #ffb8b0; border-color: rgba(217, 71, 58, 0.5); background: rgba(142, 42, 32, 0.28); }
+.ds-chip--life { color: var(--life-400); border-color: rgba(127, 207, 143, 0.4); background: rgba(127, 207, 143, 0.1); }
+
+/* ---------- Tecla ---------- */
+.ds-kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 26px; height: 26px; padding: 0 var(--sp-2); font-family: var(--font-display); font-weight: 700; font-size: var(--fs-xs); color: var(--gold-200); background: linear-gradient(180deg, var(--ink-600), var(--ink-800)); border: var(--line) solid var(--gold-700); border-bottom-width: 3px; border-radius: var(--radius-sm); }
+
+/* ---------- Interruptor ---------- */
+.ds-toggle { position: relative; display: inline-block; width: 46px; height: 24px; cursor: pointer; }
+.ds-toggle input { position: absolute; inset: 0; opacity: 0; cursor: pointer; margin: 0; }
+.ds-toggle span { position: absolute; inset: 0; border-radius: 999px; background: var(--ink-950); border: var(--line) solid var(--ink-500); box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.7); transition: border-color var(--dur-base) ease, background var(--dur-base) ease; }
+.ds-toggle span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--metal-gold-soft); box-shadow: var(--shadow-1); transition: transform var(--dur-base) var(--ease-spring), background var(--dur-base) ease; }
+.ds-toggle input:checked + span { border-color: var(--ember-400); background: rgba(217, 78, 10, 0.25); }
+.ds-toggle input:checked + span::after { transform: translateX(22px); background: linear-gradient(180deg, var(--ember-200), var(--ember-500)); box-shadow: var(--glow-ember); }
+.ds-toggle input:focus-visible + span { outline: 2px solid var(--ember-300); outline-offset: 3px; }
+
+/* ---------- Controle deslizante ---------- */
+.ds-range { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--ember-500) var(--p, 50%), var(--ink-950) var(--p, 50%)); border: var(--line) solid var(--ink-500); outline: none; }
+.ds-range::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; transform: rotate(45deg); border-radius: 3px; background: var(--metal-gold); border: var(--line) solid var(--gold-100); box-shadow: var(--shadow-1); cursor: pointer; }
+.ds-range:hover::-webkit-slider-thumb { box-shadow: var(--glow-ember); }
+.ds-range:focus-visible { outline: 2px solid var(--ember-300); outline-offset: 5px; }
+
+/* ---------- Item de menu (lista vertical) ---------- */
+.ds-menu { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-1); min-width: 280px; }
+.ds-menu__item { position: relative; display: flex; align-items: center; gap: var(--sp-3); height: 48px; padding: 0 var(--sp-5); font-family: var(--font-display); font-weight: 600; font-size: var(--fs-md); letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-mid); background: transparent; border: 0; cursor: pointer; text-align: left; transition: color var(--dur-base) ease, background var(--dur-base) ease, padding var(--dur-base) var(--ease-out); }
+.ds-menu__item::before { content: ""; position: absolute; left: 0; top: 50%; width: 8px; height: 8px; transform: translateY(-50%) rotate(45deg) scale(0); background: linear-gradient(0deg, var(--ember-500), var(--ember-200)); box-shadow: var(--glow-ember); transition: transform var(--dur-base) var(--ease-spring); }
+.ds-menu__item:hover, .ds-menu__item:focus-visible, .ds-menu__item.selected { color: var(--gold-100); padding-left: var(--sp-6); background: linear-gradient(90deg, rgba(242, 196, 109, 0.12), transparent 85%); outline: none; }
+.ds-menu__item:hover::before, .ds-menu__item:focus-visible::before, .ds-menu__item.selected::before { transform: translateY(-50%) rotate(45deg) scale(1); }
+.ds-menu__item:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ---------- Dica (tooltip / aviso) ---------- */
+.ds-toast { display: inline-flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); font-family: var(--font-text); font-size: var(--fs-md); color: var(--text-hi); background: rgba(10, 13, 19, 0.88); border: var(--line) solid var(--gold-700); border-radius: 999px; box-shadow: var(--shadow-2); backdrop-filter: blur(4px); }
+
+/* ---------- Movimento ---------- */
+@keyframes ds-rise { from { opacity: 0; transform: translateY(18px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes ds-slide { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+@keyframes ds-ember { 0% { transform: translate(0, 0); opacity: 0; } 12% { opacity: 0.95; } 70% { opacity: 0.5; } 100% { transform: translate(26px, -88vh); opacity: 0; } }
+@keyframes ds-breathe { 0%, 100% { box-shadow: var(--glow-ember); } 50% { box-shadow: var(--glow-ember-lg); } }
+.ds-rise { animation: ds-rise var(--dur-slow) var(--ease-out) both; animation-delay: calc(var(--i, 0) * 80ms); }
+.ds-slide { animation: ds-slide var(--dur-slow) var(--ease-out) both; }
+@media (prefers-reduced-motion: reduce) { .ds-rise, .ds-slide { animation: none; } .ds-btn, .ds-card, .ds-menu__item { transition: none; } }

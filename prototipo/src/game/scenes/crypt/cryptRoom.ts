@@ -1,6 +1,7 @@
 import {
   Animation,
   Color3,
+  ColorCurves,
   DefaultRenderingPipeline,
   DirectionalLight,
   GlowLayer,
@@ -18,7 +19,7 @@ import {
   Vector3,
 } from "@babylonjs/core";
 import type { AbstractMesh, AssetContainer, Camera, IDisposable, Material, Observer, Scene } from "@babylonjs/core";
-import { loadContainer, toonifyHierarchy } from "@engine";
+import { createLightPool, loadContainer, toonifyHierarchy } from "@engine";
 import { pickLayout } from "./cryptLayouts";
 import type { EnemyBounds } from "../../actors/enemies/skeleton";
 
@@ -39,6 +40,10 @@ import type { EnemyBounds } from "../../actors/enemies/skeleton";
 
 const K = "/assets/dungeon_kit/"; // KayKit Dungeon Remastered (mesmo atlas)
 const KH = "/assets/halloween_kit/"; // KayKit Halloween Bits (atlas proprio, mesmo estilo)
+// PROTOTIPO camera alta (diorama): sem teto, sem as duas paredes do lado da camera, sem candelabros
+// pendentes, pilares baixos. Desliga com ?cam=terceira (volta a sala fechada de antes).
+const ALTA = typeof location === "undefined" || !/[?&]cam=terceira\b/.test(location.search);
+const CAM_DIR = { x: -0.588, z: -0.809 }; // horizontal alvo->camera (alpha = -PI/2 - PI/5)
 const WALL_H = 4;
 const ROOM_H = WALL_H * 2; // 8: sala alta (catedral-cripta) com teto e candelabros
 
@@ -183,15 +188,17 @@ export function setupCryptScene(scene: Scene, camera: Camera): CryptCtx {
   glow.intensity = 0.85;
 
   const ambient = new HemisphericLight("luz_fria", new Vector3(0, 1, 0), scene);
-  ambient.intensity = 0.62;
-  ambient.diffuse = Color3.FromHexString("#8aa6c6");
-  ambient.groundColor = Color3.FromHexString("#141b26");
+  // Camera alta: ambiente mais baixo e azulado (a sala nasce fria e escura) para que o fogo
+  // (tochas, lanterna, braseiro) seja a unica fonte quente e o contraste faca a cena.
+  ambient.intensity = ALTA ? 0.4 : 0.62;
+  ambient.diffuse = Color3.FromHexString(ALTA ? "#6f86ad" : "#8aa6c6");
+  ambient.groundColor = Color3.FromHexString(ALTA ? "#0c1119" : "#141b26");
   ambient.specular = Color3.Black();
 
-  const key = new DirectionalLight("luz_sombra", new Vector3(-0.25, -1, -0.18), scene);
+  const key = new DirectionalLight("luz_sombra", ALTA ? new Vector3(-0.5, -0.85, -0.4) : new Vector3(-0.25, -1, -0.18), scene);
   key.position = new Vector3(4, 16, -2);
-  key.intensity = 0.62; // ambient+key somam ~1: a pedra mantém cor, não entra no bloom
-  key.diffuse = Color3.FromHexString("#aebfd2");
+  key.intensity = ALTA ? 0.5 : 0.62; // ambient+key somam ~1: a pedra mantém cor, não entra no bloom
+  key.diffuse = Color3.FromHexString(ALTA ? "#8fa3c4" : "#aebfd2");
   key.specular = Color3.Black();
   const shadow = new ShadowGenerator(2048, key);
   // PCF (não ESM): o Exponential Shadow Map vazava/estourava branco de forma intermitente
@@ -213,9 +220,22 @@ export function setupCryptScene(scene: Scene, camera: Camera): CryptCtx {
   pipe.imageProcessingEnabled = true;
   pipe.imageProcessing.toneMappingEnabled = false;
   pipe.imageProcessing.exposure = 1.05;
-  pipe.imageProcessing.contrast = 1.12;
+  pipe.imageProcessing.contrast = ALTA ? 1.2 : 1.12;
   pipe.imageProcessing.vignetteEnabled = true;
-  pipe.imageProcessing.vignetteWeight = 1.1;
+  pipe.imageProcessing.vignetteWeight = ALTA ? 2.1 : 1.1;
+  if (ALTA) {
+    // Etalonagem: sombras azuis, luzes alaranjadas (a "gangorra" frio contra brasa).
+    const cc = new ColorCurves();
+    cc.shadowsHue = 214;
+    cc.shadowsDensity = 22;
+    cc.shadowsSaturation = 6;
+    cc.highlightsHue = 34;
+    cc.highlightsDensity = 42;
+    cc.highlightsSaturation = 28;
+    cc.globalSaturation = 8;
+    pipe.imageProcessing.colorCurves = cc;
+    pipe.imageProcessing.colorCurvesEnabled = true;
+  }
   pipe.imageProcessing.vignetteColor = new Color3(0.03, 0.04, 0.07).toColor4(1);
   pipe.grainEnabled = true;
   pipe.grain.intensity = 4;
@@ -664,17 +684,22 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   }
 
   // --- Paredes (thin instances) + variacao quebrada (da planta) ---
+  const onNearSide = (x: number, z: number): boolean =>
+    ALTA && (Math.abs(z + HALFZ) < 0.01 || Math.abs(x + HALFX) < 0.01);
+  const wallsV = L.walls.filter((w) => !onNearSide(w.x, w.z));
+  const brokenV = L.broken.filter((w) => !onNearSide(w.x, w.z));
   const wallBase = kitBase(P.wall!, "base");
   const brokenBase = kitBase(P.wall_broken!, "base");
-  if (wallBase) kitInstances(wallBase, L.walls);
-  if (brokenBase && L.broken.length) kitInstances(brokenBase, L.broken);
-  // 2a fileira de parede (sala alta): leva a parede de 4m para 8m (ROOM_H).
-  if (wallBase) kitInstances(wallBase, L.walls, WALL_H);
-  if (brokenBase && L.broken.length) kitInstances(brokenBase, L.broken, WALL_H);
+  if (wallBase) kitInstances(wallBase, wallsV);
+  if (brokenBase && brokenV.length) kitInstances(brokenBase, brokenV);
+  // 2a fileira de parede (sala alta): leva a parede de 4m para 8m (ROOM_H). Na camera alta
+  // a parede de fundo fica baixa (1 fileira) para nao esconder o chao.
+  if (!ALTA && wallBase) kitInstances(wallBase, wallsV, WALL_H);
+  if (!ALTA && brokenBase && brokenV.length) kitInstances(brokenBase, brokenV, WALL_H);
   if (wallBase) { ctx.shadow.addShadowCaster(wallBase); casters.push(wallBase); }
 
   // --- TETO: lajes de piso INVERTIDAS no topo (pedra de verdade, não vazio preto) ---
-  const ceilBase = kitBase(P.floor!, "floor");
+  const ceilBase = ALTA ? null : kitBase(P.floor!, "floor");
   if (ceilBase) {
     kitInstances(ceilBase, [...tilesA, ...tilesB], ROOM_H, Math.PI);
     ceilBase.receiveShadows = false;
@@ -686,21 +711,24 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   ceilCol.isPickable = false;
   ceilCol.checkCollisions = true;
   track(ceilCol);
+  if (ALTA) ceilCol.checkCollisions = false;
 
   for (const c of L.wallColliders) wallCollider(c.cx, c.cz, c.w, c.d);
   // Cantoneiras: duas fileiras (acompanham a parede dupla até ROOM_H).
   for (const c of L.corners) {
+    if (ALTA && (c.x < 0 || c.z < 0)) continue;
     placeProp(P.wall_corner!, { x: c.x, z: c.z });
-    placeProp(P.wall_corner!, { x: c.x, z: c.z, y: WALL_H, cast: false });
+    if (!ALTA) placeProp(P.wall_corner!, { x: c.x, z: c.z, y: WALL_H, cast: false });
   }
   placeProp(P.door!, { x: 2, z: -HALFZ + 0.4 });
 
   // --- Pilares: coluna INTEIRA até o teto (2 cortes empilhados nos inteiros) ---
   for (const p of L.pillars) {
+    if (ALTA && p.x * CAM_DIR.x + p.z * CAM_DIR.z > 4) continue; // pilar do lado da camera some
     batch(p.broken ? "pillar_broken" : "pillar", { x: p.x, z: p.z, rotY: p.rotY, collider: true }, true);
     // Pilar inteiro vai do chão ao teto: segundo corte em cima (sem colisor extra; o de
     // baixo já barra). Os quebrados ficam baixos de propósito (ruína).
-    if (!p.broken) batch("pillar", { x: p.x, z: p.z, rotY: p.rotY, y: WALL_H }, true);
+    if (!p.broken && !ALTA) batch("pillar", { x: p.x, z: p.z, rotY: p.rotY, y: WALL_H }, true);
   }
 
   // --- Altar ao fundo (norte): estrado + degrau + braseiro (a Brasa) ---
@@ -797,17 +825,28 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   //     perto da pista (lado da entrada) ganham LUZ QUENTE REAL de curto alcance (candelabro
   //     que ilumina a parede/chão, não só emissivo). Limitado a 2 p/ caber no teto de 6 luzes
   //     da cena (ambiente + chave + fagulha + braseiro). As demais ficam emissivas (glow). ---
-  const litTorches = [...L.torches].sort((a, b) => a.z - b.z).slice(0, 2); // mais ao sul (entrada)
-  for (const t of L.torches) {
+  const torchesV = L.torches.filter((t) => !(ALTA && (t.z < -HALFZ + 1 || t.x < -HALFX + 1)));
+  const litTorches = [...torchesV].sort((a, b) => a.z - b.z).slice(0, 2); // mais ao sul (entrada)
+  for (const t of torchesV) {
     const ix = Math.abs(t.x) >= HALFX - 0.6 ? -Math.sign(t.x) * 0.25 : 0;
     const iz = Math.abs(t.z) >= HALFZ - 0.6 ? -Math.sign(t.z) * 0.25 : 0;
     const realLight = litTorches.includes(t);
     placeProp(P.torch_wall!, { x: t.x, z: t.z, y: 2.4, rotY: t.rotY, cast: false });
-    const fl = makeFlame(new Vector3(t.x + ix, 2.75, t.z + iz), 0.7, realLight ? 0.6 : 0, realLight);
+    const fl = makeFlame(new Vector3(t.x + ix, 2.75, t.z + iz), 0.7, realLight ? (ALTA ? 1.5 : 0.6) : 0, realLight);
+    if (ALTA) {
+      // Poça quente no chão, no lado de dentro da parede (as tochas apagadas ganham halo fraco).
+      const inX = Math.abs(t.x) >= HALFX - 0.6 ? -Math.sign(t.x) * 2.2 : 0;
+      const inZ = Math.abs(t.z) >= HALFZ - 0.6 ? -Math.sign(t.z) * 2.2 : 0;
+      const pool = createLightPool(scene, { radius: realLight ? 4.6 : 3.2, color: "#ff9a40", alpha: realLight ? 0.42 : 0.24 });
+      pool.position.x = t.x + inX;
+      pool.position.z = t.z + inZ;
+      track(pool);
+    }
     if (realLight && fl.light) {
-      fl.light.range = 9; // curto: ilumina o entorno do candelabro sem lavar a sala
+      fl.light.range = ALTA ? 14 : 9; // curto: ilumina o entorno do candelabro sem lavar a sala
       fl.light.diffuse = Color3.FromHexString("#f0b878"); // candeia quente suave (sem estourar vermelho)
     }
+    if (ALTA) continue;
     placeProp(P.torch_wall!, { x: t.x, z: t.z, y: 6.0, rotY: t.rotY, cast: false });
     makeFlame(new Vector3(t.x + ix, 6.35, t.z + iz), 0.6, 0, false);
   }
@@ -846,9 +885,11 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     makeFlame(new Vector3(cxp, ringY + 0.2, czp), 0.8, 0, false); // brilho central (emissivo; sem point-light p/ não estourar a sala)
   };
   // Eixo central, espaçados; densidade cresce com a profundidade da sala.
-  hangChandelier(0, -(HALFZ - 6));
-  hangChandelier(0, Math.min(2, AZ - 4));
-  if (HALFZ >= 16) hangChandelier(0, -(HALFZ - 13));
+  if (!ALTA) {
+    hangChandelier(0, -(HALFZ - 6));
+    hangChandelier(0, Math.min(2, AZ - 4));
+    if (HALFZ >= 16) hangChandelier(0, -(HALFZ - 13));
+  }
 
   // --- DRESSING por TIPO DE SALA (def.kind) ---
   // Clusters tematicos; cada tipo de sala (RoomDef.kind) liga um subconjunto. Pecas
