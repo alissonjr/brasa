@@ -94,10 +94,12 @@
   flex-direction: column;
   gap: var(--sp-3);
   min-height: 0;
-  /* Folga para o anel de foco não ser cortado pelo overflow. */
-  padding: var(--sp-2);
-  margin: calc(-1 * var(--sp-2));
+  /* Folga para o anel de foco não ser cortado pelo overflow; a mesma faixa esmaece o que rola. */
+  padding: var(--sp-3);
+  margin: calc(-1 * var(--sp-3));
   overflow-y: auto;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 var(--sp-3), #000 calc(100% - var(--sp-3)), transparent 100%);
+  mask-image: linear-gradient(180deg, transparent 0, #000 var(--sp-3), #000 calc(100% - var(--sp-3)), transparent 100%);
   scrollbar-width: thin;
   scrollbar-color: var(--gold-600) transparent;
 }
@@ -164,9 +166,11 @@
 }
 .slot-row {
   justify-content: space-between;
+  flex-wrap: wrap;
 }
 .slot-info {
   display: flex;
+  flex: 1 1 180px;
   flex-direction: column;
   gap: var(--sp-1);
   min-width: 0;
@@ -802,7 +806,7 @@
   height: 18px;
   pointer-events: none;
   border-radius: 50%;
-  background: radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--stage-accent, #ff9646) 42%, transparent), transparent 72%);
+  background: radial-gradient(ellipse at 50% 50%, color-mix(in srgb, var(--stage-accent, var(--ember-300)) 42%, transparent), transparent 72%);
   filter: blur(2px);
   transition: background 0.25s ease;
 }
