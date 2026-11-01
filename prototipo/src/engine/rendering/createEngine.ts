@@ -4,19 +4,21 @@ import type { AbstractEngine } from "@babylonjs/core";
 /**
  * CAMADA ENGINE (genérica/reutilizável). Cria a engine de render.
  *
- * Por padrão tenta WebGPU (alvo da stack, ver docs/tecnica-engines.md) com um
- * TIMEOUT: o initAsync do WebGPU pode buscar o transpiler twgsl/glslang num CDN
- * e, se isso pendurar (rede/firewall), a tela ficaria travada para sempre. Se o
- * WebGPU não inicializar a tempo (ou falhar), caímos para WebGL2 sozinhos.
+ * PADRÃO: WebGL2. O look estilizado do jogo (CellMaterial, contorno, brilho, SSAO e os
+ * passes GLSL de acabamento) foi construído e verificado em WebGL2; em WebGPU essas peças
+ * não compilam e a cena inteira fica PRETA (confirmado no Chrome com WebGPU). Por isso
+ * o WebGPU é opt-in até esses materiais ganharem versão WGSL.
  *
- * Forçar um renderer pela URL:
- *   ?renderer=webgl   -> só WebGL2
- *   ?renderer=webgpu  -> só WebGPU (sem fallback)
+ * Escolher o renderer pela URL:
+ *   (sem parâmetro)    -> WebGL2
+ *   ?renderer=webgl    -> WebGL2
+ *   ?renderer=webgpu   -> WebGPU, com fallback para WebGL2 se não iniciar (o initAsync
+ *                         pode buscar o transpiler twgsl/glslang num CDN, então tem timeout)
  */
 export async function createEngine(canvas: HTMLCanvasElement): Promise<AbstractEngine> {
   const renderer = new URLSearchParams(location.search).get("renderer");
-  const allowWebGPU = renderer !== "webgl";
-  const allowWebGL = renderer !== "webgpu";
+  const allowWebGPU = renderer === "webgpu";
+  const allowWebGL = true;
 
   if (allowWebGPU && (await WebGPUEngine.IsSupportedAsync)) {
     try {

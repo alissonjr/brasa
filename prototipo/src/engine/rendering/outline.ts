@@ -23,9 +23,15 @@ export interface OutlineOptions {
 
 const DEFAULT_COLOR = Color3.FromHexString("#0b0e14"); // quase preto, leve azul (tom do breu)
 
-/** Liga o contorno numa malha. No-op se a malha não tem geometria. */
+/** Liga o contorno numa malha. No-op se a malha não tem geometria ou pede `metadata.noOutline`. */
 export function addOutline(mesh: AbstractMesh, opts: OutlineOptions = {}): void {
   if (mesh.getTotalVertices() <= 0) return;
+  if ((mesh.metadata as { noOutline?: boolean } | null)?.noOutline) return;
+  // O OutlineRenderer reaproveita as unidades de textura da malha. Com os ossos guardados
+  // numa TEXTURA (padrão em malhas skinned), o contorno sobrescreve a unidade e a malha
+  // inteira passa a amostrar a textura de ossos como se fosse o albedo (cores neon,
+  // listras). Ossos em uniformes (limite do KayKit: ~40 ossos) resolvem sem custo visual.
+  if (mesh.skeleton) mesh.skeleton.useTextureToStoreBoneMatrices = false;
   mesh.renderOutline = true;
   mesh.outlineColor = (opts.color ?? DEFAULT_COLOR).clone();
   mesh.outlineWidth = opts.width ?? 0.03;

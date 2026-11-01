@@ -52,5 +52,6 @@ export function createLightPool(scene: Scene, o: LightPoolOptions): Mesh {
   disc.material = mat;
   disc.isPickable = false;
   disc.receiveShadows = false;
+  disc.metadata = { noOutline: true }; // o halo não leva contorno de tinta
   return disc;
 }
