@@ -53,411 +53,185 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* --- Backdrop modal --- */
+/* --- Fundo modal --- */
 .menu-backdrop {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background:
-    radial-gradient(ellipse at 50% 38%, rgba(30, 42, 58, 0.35), rgba(4, 6, 10, 0.88) 78%);
+  /* Fora do .ui-root (derrota e braseiro são anexados ao body): garante fonte e cor. */
+  font-family: var(--font-text);
+  color: var(--text-hi);
+  /* Texto de apoio legível: nas telas de menu o "suave" é o texto de leitura (text-mid). */
+  --texto-suave: var(--text-mid);
+  background: radial-gradient(
+    ellipse at 50% 38%,
+    color-mix(in srgb, var(--ink-800) 40%, transparent),
+    color-mix(in srgb, var(--ink-950) 90%, transparent) 78%
+  );
   backdrop-filter: blur(3px);
   animation: fadeIn 0.22s ease both;
 }
 
-/* --- Painel (tabuleta) --- */
+/* --- Painel: a moldura vem de .ds-frame (ds/components.css); aqui só o layout. ---
+   O painel não rola: o corpo (.menu-body) rola entre o cabeçalho e o rodapé fixos,
+   então Voltar/Fechar nunca somem e as cantoneiras ficam no lugar. */
 .menu-panel {
-  position: relative;
+  box-sizing: border-box;
   min-width: 360px;
-  max-width: min(92vw, 540px);
-  max-height: 86vh;
-  overflow-y: auto;
+  max-width: min(92vw, 620px);
+  max-height: 92vh;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 32px 36px 34px;
-  /* Granulado fino de pedra/pergaminho (SVG inline) sobre o gradiente de bronze,
-     misturado em soft-light para tirar o aspecto de CSS chapado. */
-  background:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E") repeat,
-    linear-gradient(157deg, #243040 0%, var(--painel-2) 58%, var(--painel-3) 100%);
-  background-blend-mode: soft-light, normal;
-  border: 1px solid var(--borda-clara);
-  border-radius: 4px;
-  box-shadow:
-    0 22px 60px rgba(0, 0, 0, 0.6),
-    0 2px 0 rgba(0, 0, 0, 0.5),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(246, 227, 176, 0.12),
-    inset 0 0 40px rgba(0, 0, 0, 0.35);
-  animation: panelIn 0.26s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  gap: var(--sp-3);
+  padding: var(--sp-6) var(--sp-6) var(--sp-5);
+  overflow: hidden;
+  animation: panelIn 0.26s var(--ease-out) both;
 }
-/* Cantoneiras de bronze (moldura antiga) */
-.menu-panel::before,
-.menu-panel::after {
-  content: "";
-  position: absolute;
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--bronze);
-  opacity: 0.7;
-  pointer-events: none;
+.menu-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  min-height: 0;
+  /* Folga para o anel de foco não ser cortado pelo overflow. */
+  padding: var(--sp-2);
+  margin: calc(-1 * var(--sp-2));
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-600) transparent;
 }
-.menu-panel::before {
-  top: 8px;
-  left: 8px;
-  border-right: none;
-  border-bottom: none;
+.menu-foot {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-2);
+  margin: calc(-1 * var(--sp-2));
 }
-.menu-panel::after {
-  bottom: 8px;
-  right: 8px;
-  border-left: none;
-  border-top: none;
-}
+.menu-foot > .ds-btn { flex: 1; }
 
 /* --- Títulos --- */
 .menu-title {
   margin: 0;
-  font-family: "Cinzel", Georgia, serif;
+  font-family: var(--font-display);
   font-weight: 700;
-  font-size: 32px;
-  letter-spacing: 2px;
+  font-size: var(--fs-2xl);
+  letter-spacing: var(--ls-title);
   text-align: center;
-  /* Brasa gravada na letra (mesmo gradiente do título cinematográfico). */
-  background: linear-gradient(180deg, #ffe9c4 0%, #ffb259 52%, #c9722a 100%);
+  flex: none;
+  /* Ouro gravado na letra (a brasa fica para fogo e foco). */
+  background: linear-gradient(180deg, var(--gold-100) 0%, var(--gold-300) 50%, var(--gold-500) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  filter: drop-shadow(0 0 14px rgba(255, 140, 60, 0.28)) drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 0 14px rgba(255, 138, 44, 0.22)) drop-shadow(0 1px 0 rgba(0, 0, 0, 0.5));
 }
 .menu-title::after {
   content: "";
   display: block;
   width: 70%;
-  height: 2px;
-  margin: 12px auto 2px;
-  background: linear-gradient(90deg, transparent, var(--bronze) 25%, var(--ouro) 50%, var(--bronze) 75%, transparent);
-  border-radius: 2px;
+  height: var(--line);
+  margin: var(--sp-3) auto 2px;
+  background: linear-gradient(90deg, transparent, var(--gold-600) 25%, var(--gold-300) 50%, var(--gold-600) 75%, transparent);
 }
 .menu-subtitle {
-  margin: -6px 0 8px;
-  font-size: 17px;
+  margin: calc(-1 * var(--sp-2)) 0 var(--sp-1);
+  flex: none;
+  font-size: var(--fs-md);
   font-style: italic;
   text-align: center;
-  color: var(--texto-suave);
+  color: var(--text-mid);
 }
 
-/* --- Botões (bronze gravado) --- */
-.btn {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-  appearance: none;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: 0.6px;
-  text-align: center;
-  padding: 12px 18px;
-  /* Pedra-cripta FRIA por padrão; só acende em brasa no foco/hover (a gangorra). */
-  color: var(--osso);
-  background: linear-gradient(180deg, #243a52 0%, #1a2c40 52%, #132131 100%);
-  border: 1px solid var(--borda-clara);
-  border-radius: 4px;
-  box-shadow:
-    inset 0 1px 0 rgba(180, 205, 230, 0.14),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.28),
-    inset 0 -2px 6px rgba(0, 0, 0, 0.4),
-    0 1px 2px rgba(0, 0, 0, 0.45);
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.55);
-  transition: background 0.14s ease, border-color 0.14s ease, transform 0.06s ease, color 0.14s ease, box-shadow 0.14s ease;
-}
-/* Conteúdo (glifo + rótulo) acima da varredura de luz. */
-.btn > * {
-  position: relative;
-  z-index: 1;
-}
-/* Varredura de luz diagonal (reflexo no metal polido) ao passar o mouse/focar. */
-.btn::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -135%;
-  width: 55%;
-  height: 100%;
-  background: linear-gradient(100deg, transparent, rgba(255, 180, 110, 0.32) 50%, transparent);
-  transform: skewX(-18deg);
-  transition: left 0.5s ease;
-  pointer-events: none;
-  z-index: 0;
-}
-.btn:hover::before,
-.btn:focus-visible::before {
-  left: 135%;
-}
-.btn:disabled::before {
-  display: none;
-}
-/* Glifo gravado à esquerda do rótulo (acende em ouro no hover/foco). */
-.btn-glyph {
-  display: inline-flex;
-  width: 17px;
-  height: 17px;
-  color: var(--aco-frio); /* glifo frio apagado; acende em brasa no foco */
-  opacity: 0.9;
-  transition: color 0.14s ease, opacity 0.14s ease, transform 0.14s ease;
-}
-.btn-glyph svg {
-  width: 100%;
-  height: 100%;
-}
-.btn:hover .btn-glyph,
-.btn:focus-visible .btn-glyph {
-  color: var(--ouro-claro);
-  opacity: 1;
-  transform: scale(1.08);
-}
-/* Acende em brasa no foco/hover: a pedra fria pega a luz do fogo (a gangorra). */
-.btn:hover,
-.btn:focus-visible {
-  background: linear-gradient(180deg, #3a3526 0%, #2c2a23 52%, #221f1a 100%);
-  border-color: var(--ambar);
-  color: var(--ouro-fagulha);
-  /* Gangorra cromática (estudo de menu): o item em foco é o ÚNICO ponto quente da tela,
-     com o mesmo halo de brasa do título cinematográfico. Identidade coesa entre as telas. */
-  box-shadow:
-    inset 0 1px 0 rgba(255, 210, 150, 0.28),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.28),
-    inset 0 -2px 6px rgba(0, 0, 0, 0.4),
-    0 0 26px rgba(255, 140, 60, 0.5),
-    0 0 7px rgba(255, 190, 120, 0.6),
-    0 1px 2px rgba(0, 0, 0, 0.45);
-}
-.btn:focus-visible {
-  outline: 2px solid var(--ouro);
-  outline-offset: 2px;
-}
-.btn:active {
-  transform: translateY(1px);
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
-}
-.btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  filter: grayscale(0.5);
-}
-.btn-danger {
-  background: linear-gradient(180deg, #6e3128 0%, #57261f 100%);
-  border-color: #8a4036;
-}
-.btn-danger:hover {
-  background: linear-gradient(180deg, #863a2f 0%, #6a2d24 100%);
-  border-color: var(--perigo-borda);
-  color: #f4cfc6;
-}
-
-/* Ação primária (CTA iluminado em ouro): destaca-se da navegação secundária. */
-.btn-primary {
-  color: #2a1c0c;
-  background: linear-gradient(180deg, var(--ouro-claro) 0%, var(--bronze-claro) 55%, #a9701f 100%);
-  border-color: var(--ouro);
-  text-shadow: 0 1px 0 rgba(255, 244, 214, 0.45);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 248, 224, 0.55),
-    inset 0 -2px 6px rgba(120, 70, 14, 0.45),
-    0 0 0 1px rgba(120, 78, 24, 0.35),
-    0 2px 10px rgba(0, 0, 0, 0.4),
-    0 0 16px rgba(231, 189, 113, 0.26);
-  animation: ctaGlow 3.2s ease-in-out infinite;
-}
-.btn-primary .btn-glyph {
-  color: #5a3a12;
-  opacity: 1;
-}
-.btn-primary:hover {
-  background: linear-gradient(180deg, #fff0c8 0%, var(--ouro) 55%, #b87c24 100%);
-  border-color: var(--ouro-claro);
-  color: #241708;
-}
-.btn-primary:hover .btn-glyph {
-  color: #4a2f0e;
-  transform: scale(1.08);
-}
-@keyframes ctaGlow {
-  0%, 100% {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 248, 224, 0.55), inset 0 -2px 6px rgba(120, 70, 14, 0.45),
-      0 0 0 1px rgba(120, 78, 24, 0.35), 0 2px 10px rgba(0, 0, 0, 0.4), 0 0 14px rgba(231, 189, 113, 0.22);
-  }
-  50% {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 248, 224, 0.55), inset 0 -2px 6px rgba(120, 70, 14, 0.45),
-      0 0 0 1px rgba(120, 78, 24, 0.35), 0 2px 10px rgba(0, 0, 0, 0.4), 0 0 26px rgba(231, 189, 113, 0.44);
-  }
-}
-
-/* Indicador de seleção: chevron de ouro que desliza no item focado/hover
-   das pilhas verticais de navegação (filhos diretos do painel). */
-.menu-panel > .btn::after {
-  content: "";
-  position: absolute;
-  left: 9px;
-  top: 50%;
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid var(--ouro);
-  border-top: 2px solid var(--ouro);
-  transform: translateY(-50%) rotate(45deg);
-  opacity: 0;
-  transition: opacity 0.16s ease, left 0.16s ease;
-  z-index: 1;
-  pointer-events: none;
-}
-.menu-panel > .btn:hover::after,
-.menu-panel > .btn:focus-visible::after {
-  opacity: 0.95;
-  left: 14px;
-}
-.menu-panel > .btn-primary::after {
-  border-color: #5a3a12;
-}
-
-/* Botão só-ícone (compacto): rótulo vai em title/aria-label.
-   Seletores com .btn.btn-icon para vencer .slot-actions .btn (que vem depois). */
-.btn.btn-icon {
-  gap: 0;
-  padding: 8px;
-  aspect-ratio: 1 / 1;
-  flex: 0 0 auto;
-}
-.btn.btn-icon .btn-glyph {
-  width: 18px;
-  height: 18px;
-}
-.slot-actions .btn.btn-icon {
-  padding: 7px;
-}
-.slot-actions .btn.btn-icon .btn-glyph {
-  width: 16px;
-  height: 16px;
-}
-
+/* Ações lado a lado (Cancelar/Confirmar, Restaurar/Voltar): dividem a largura. */
 .menu-actions {
   display: flex;
-  gap: 10px;
-  margin-top: 6px;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+  margin-top: var(--sp-1);
 }
-.menu-actions .btn {
-  flex: 1;
+.menu-actions > .ds-btn {
+  flex: 1 1 auto;
+  padding-left: var(--sp-3);
+  padding-right: var(--sp-3);
 }
 
-/* --- Lista de slots --- */
+/* --- Lista de slots (a linha vem de .ds-row) --- */
 .slot-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  margin: 4px 0;
+  gap: var(--sp-3);
 }
 .slot-row {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 14px;
-  background: linear-gradient(180deg, rgba(246, 227, 176, 0.06), rgba(0, 0, 0, 0.12));
-  border: 1px solid var(--borda);
-  border-radius: 4px;
-  transition: border-color 0.14s ease, background 0.14s ease;
-}
-.slot-row:hover {
-  border-color: var(--ambar);
 }
 .slot-info {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--sp-1);
   min-width: 0;
 }
 .slot-info strong {
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 15px;
-  color: var(--osso);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-hi);
 }
 .slot-info span {
-  font-size: 14px;
-  color: var(--texto-suave);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
 }
 .slot-actions {
   display: flex;
-  gap: 6px;
+  gap: var(--sp-2);
   flex-shrink: 0;
 }
-.slot-actions .btn {
-  font-size: 13px;
-  padding: 8px 11px;
+.slot-actions .ds-btn {
+  --btn-h: 36px;
 }
 .empty {
-  color: var(--texto-suave);
+  color: var(--text-mid);
   font-style: italic;
   text-align: center;
-  padding: 16px 0;
-  font-size: 16px;
+  padding: var(--sp-4) 0;
+  font-size: var(--fs-md);
 }
 
 /* --- Opções --- */
 .opt-section {
-  margin-top: 10px;
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 12px;
-  letter-spacing: 2px;
+  margin-top: var(--sp-2);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  letter-spacing: var(--ls-caps);
   text-transform: uppercase;
-  color: var(--rotulo);
+  color: var(--gold-400);
+}
+.opt-section:first-child {
+  margin-top: 0;
 }
 .opt-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  font-size: 17px;
+  gap: var(--sp-4);
+  min-height: 36px;
+  font-size: var(--fs-md);
+  color: var(--text-hi);
 }
-.slider {
-  flex: 1;
-  max-width: 60%;
-  height: 6px;
-  accent-color: var(--ambar);
-  cursor: pointer;
-}
-.select {
-  font-family: "EB Garamond", Georgia, serif;
-  font-size: 16px;
-  color: var(--osso);
-  background: #16273a;
-  border: 1px solid var(--borda-clara);
-  border-radius: 4px;
-  padding: 7px 10px;
-  cursor: pointer;
+.opt-row--range .ds-range {
+  flex: 0 0 55%;
+  width: 55%;
 }
 .hidden-file {
   display: none;
 }
 .opt-note {
-  margin: -2px 0 2px;
-  font-size: 13px;
+  margin: calc(-1 * var(--sp-1)) 0 var(--sp-1);
+  font-size: var(--fs-sm);
   font-style: italic;
-  color: var(--texto-suave);
-}
-.checkbox {
-  width: 20px;
-  height: 20px;
-  accent-color: var(--ambar);
-  cursor: pointer;
+  color: var(--text-mid);
 }
 
 /* --- Acessibilidade: reduzir movimento --- */
@@ -469,28 +243,31 @@
   transition-duration: 0.001ms !important;
 }
 
-/* --- Acessibilidade: alto contraste --- */
+/* --- Acessibilidade: alto contraste (só tokens: texto pleno, bordas e fundos de ouro sobre preto) --- */
 .ui-root.high-contrast {
-  --texto: #ffffff;
-  --texto-suave: #f0e6d2;
-  --ouro: #ffd479;
-  --ouro-claro: #ffe9b8;
-  --borda: #b9923f;
+  --texto: var(--gold-100);
+  --texto-suave: var(--gold-100);
+  --ouro: var(--gold-200);
+  --ouro-claro: var(--gold-100);
+  --borda: var(--gold-500);
 }
-.ui-root.high-contrast .menu-panel,
 .ui-root.high-contrast .menu-backdrop {
-  background: #14100a;
+  --texto-suave: var(--gold-100);
+  background: var(--ink-950);
 }
 .ui-root.high-contrast .menu-panel {
-  border-color: var(--ouro);
+  background: var(--ink-950);
+  border-color: var(--gold-300);
 }
-.ui-root.high-contrast .btn {
-  border-color: var(--ouro);
+.ui-root.high-contrast .ds-btn {
+  border-color: var(--gold-300);
 }
 .ui-root.high-contrast .menu-subtitle,
 .ui-root.high-contrast .stat-row .k,
-.ui-root.high-contrast .opt-note {
-  color: #e8dcc0;
+.ui-root.high-contrast .opt-note,
+.ui-root.high-contrast .ds-row,
+.ui-root.high-contrast .slot-info span {
+  color: var(--gold-100);
 }
 
 /* --- Botão Menu no HUD do jogo --- */
@@ -661,55 +438,40 @@
 
 /* --- Perfil --- */
 .field-label {
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 12px;
-  letter-spacing: 2px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  letter-spacing: var(--ls-caps);
   text-transform: uppercase;
-  color: var(--rotulo);
-  margin-top: 4px;
+  color: var(--gold-400);
 }
 .name-row {
   display: flex;
-  gap: 8px;
+  align-items: flex-end;
+  gap: var(--sp-3);
 }
-.text-input {
+.name-row .ds-input {
   flex: 1;
-  font-family: "EB Garamond", Georgia, serif;
-  font-size: 16px;
-  color: var(--osso);
-  background: #16273a;
-  border: 1px solid var(--borda-clara);
-  border-radius: 4px;
-  padding: 9px 12px;
-}
-.text-input:focus {
-  outline: 2px solid var(--ouro);
-  outline-offset: 1px;
+  min-width: 0;
 }
 .profile-stats {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 8px 0 2px;
+  gap: var(--sp-2);
 }
 .stat-row {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 9px 13px;
-  background: linear-gradient(180deg, rgba(246, 227, 176, 0.05), rgba(0, 0, 0, 0.12));
-  border: 1px solid var(--borda);
-  border-radius: 4px;
+  padding: var(--sp-2) var(--sp-4);
 }
 .stat-row .k {
-  color: var(--texto-suave);
-  font-size: 15px;
+  color: var(--text-mid);
+  font-size: var(--fs-sm);
 }
 .stat-row .v {
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 15px;
-  color: var(--osso);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.06em;
+  color: var(--text-hi);
 }
 
 /* --- Diálogo de confirmação / alerta --- */
@@ -717,12 +479,17 @@
   min-width: 320px;
   max-width: min(90vw, 460px);
 }
+/* Diálogos e vitória são estreitos: título um degrau menor para não quebrar em duas linhas. */
+.dialog-panel .menu-title,
+.victory-panel .menu-title {
+  font-size: var(--fs-xl);
+}
 .dialog-msg {
-  margin: 2px 0 6px;
-  font-size: 16px;
+  margin: 0;
+  font-size: var(--fs-md);
   line-height: 1.5;
   text-align: center;
-  color: var(--texto);
+  color: var(--text-hi);
 }
 
 /* --- Toasts (HUD) --- */
@@ -774,40 +541,29 @@
   color: var(--texto-suave);
 }
 
-/* --- Lista de conquistas --- */
+/* --- Lista de conquistas (a linha vem de .ds-row) --- */
 .ach-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 4px 0;
-}
-.ach-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 14px;
-  background: linear-gradient(180deg, rgba(246, 227, 176, 0.04), rgba(0, 0, 0, 0.14));
-  border: 1px solid var(--borda);
-  border-radius: 4px;
-  opacity: 0.62;
-}
-.ach-row.unlocked {
-  opacity: 1;
-  border-color: var(--bronze);
+  gap: var(--sp-2);
 }
 .ach-medal {
   width: 22px;
   height: 22px;
   flex-shrink: 0;
   border-radius: 50%;
-  background: #2a2014;
-  border: 2px solid #5a4530;
+  background: var(--ink-950);
+  border: 2px solid var(--ink-500);
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
 }
+.ach-row.unlocked {
+  border-color: var(--gold-500);
+  color: var(--text-hi);
+}
 .ach-row.unlocked .ach-medal {
-  background: radial-gradient(circle at 35% 30%, var(--ouro-claro), var(--bronze-claro) 70%, #9b6a28);
-  border-color: var(--ouro);
-  box-shadow: 0 0 8px rgba(231, 189, 113, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.5);
+  background: radial-gradient(circle at 35% 30%, var(--gold-100), var(--gold-400) 70%, var(--gold-600));
+  border-color: var(--gold-300);
+  box-shadow: var(--glow-gold), inset 0 1px 1px rgba(255, 255, 255, 0.5);
 }
 .ach-text {
   display: flex;
@@ -815,16 +571,17 @@
   gap: 2px;
 }
 .ach-text strong {
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 15px;
-  color: var(--osso);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.06em;
+  color: var(--text-hi);
 }
-.ach-row:not(.unlocked) .ach-text strong {
-  color: var(--texto-suave);
+.ach-row.locked .ach-text strong {
+  color: var(--text-mid);
 }
 .ach-text span {
-  font-size: 14px;
-  color: var(--texto-suave);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
 }
 
 /* --- Mapa-múndi --- */
@@ -833,24 +590,27 @@
 }
 .map-canvas {
   display: block;
-  width: 100%;
+  width: auto;
   height: auto;
-  border: 1px solid var(--borda);
-  border-radius: 4px;
+  max-width: 100%;
+  max-height: 44vh;
+  margin: 0 auto;
+  border: var(--line) solid var(--ink-500);
+  border-radius: var(--radius-sm);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
 }
 .map-legend {
   display: flex;
-  gap: 18px;
+  gap: var(--sp-4);
   justify-content: center;
   flex-wrap: wrap;
-  margin-top: 4px;
-  font-size: 14px;
-  color: var(--texto-suave);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
 }
 .map-legend > span {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-2);
 }
 .legend-dot {
   width: 12px;
@@ -863,31 +623,25 @@
 .ctrl-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 4px 0;
+  gap: var(--sp-2);
 }
 .ctrl-row {
-  display: flex;
-  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 8px 14px;
-  background: linear-gradient(180deg, rgba(246, 227, 176, 0.05), rgba(0, 0, 0, 0.12));
-  border: 1px solid var(--borda);
-  border-radius: 4px;
+  padding: var(--sp-2) var(--sp-4);
 }
 .ctrl-action {
-  font-size: 16px;
-  color: var(--texto);
+  font-size: var(--fs-md);
+  color: var(--text-hi);
 }
-.btn.ctrl-key {
-  min-width: 96px;
-  padding: 7px 12px;
-  font-size: 13px;
+.ds-btn.ctrl-key {
+  min-width: 112px;
 }
-.btn.ctrl-key.capturing {
-  border-color: var(--ouro);
-  color: var(--ouro-claro);
+/* Aguardando a tecla: a brasa acende o botão e ele pulsa. */
+.ds-btn.ctrl-key.capturing {
+  color: var(--ember-200);
+  border-color: var(--ember-400);
+  background: var(--surface-card-hot);
+  box-shadow: var(--glow-ember);
   animation: pulse 1.1s ease-in-out infinite;
 }
 
@@ -898,59 +652,38 @@
 .codex-body {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: 4px 0;
+  gap: var(--sp-2);
 }
-.codex-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 11px 14px;
-  background: linear-gradient(180deg, rgba(246, 227, 176, 0.04), rgba(0, 0, 0, 0.14));
-  border: 1px solid var(--borda);
-  border-radius: 4px;
-}
-.codex-row.locked {
-  opacity: 0.55;
-}
-.codex-row.clickable {
-  cursor: pointer;
-  transition: border-color 0.14s ease, background 0.14s ease;
-}
-.codex-row.clickable:hover,
-.codex-row.clickable:focus-visible {
-  border-color: var(--ambar);
-  outline: none;
-}
-.codex-row.clickable:focus-visible {
-  outline: 2px solid var(--ouro);
-  outline-offset: 2px;
+.codex-row.locked .codex-seal {
+  background: var(--ink-950);
+  border-color: var(--ink-500);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 .codex-seal {
   width: 20px;
   height: 20px;
   flex-shrink: 0;
-  border-radius: 4px;
-  background: radial-gradient(circle at 35% 30%, var(--ouro-claro), var(--bronze-claro) 70%, #9b6a28);
-  border: 1px solid var(--ouro);
+  border-radius: var(--radius-sm);
+  background: radial-gradient(circle at 35% 30%, var(--gold-100), var(--gold-400) 70%, var(--gold-600));
+  border: var(--line) solid var(--gold-300);
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4);
 }
-.codex-row.locked .codex-seal {
-  background: #2a2014;
-  border-color: #5a4530;
-  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
-}
-/* Selo distinto por categoria (variedade visual por verbete): personagem = gema de
-   ouro redonda; lugar = pedra fria quadrada; relato = lacre de pergaminho (gota). */
+/* Selo distinto por categoria: personagem = gema de ouro; lugar = pedra de gelo quadrada;
+   relato = lacre de osso (gota). */
 .codex-seal-lugares {
   border-radius: 2px;
-  background: radial-gradient(circle at 35% 30%, #b6dcef, #4d7d9c 68%, #2a4f68);
-  border-color: #7fb4cf;
+  background: radial-gradient(circle at 35% 30%, var(--frost-300), var(--frost-500) 68%, var(--ink-600));
+  border-color: var(--frost-300);
 }
 .codex-seal-relatos {
   border-radius: 50% 50% 50% 2px;
-  background: radial-gradient(circle at 35% 30%, #efdfb6, #b89a63 68%, #7c6334);
-  border-color: #cdb277;
+  background: radial-gradient(circle at 35% 30%, var(--text-hi), var(--text-mid) 68%, var(--text-lo));
+  border-color: var(--text-mid);
+}
+.codex-row.locked .codex-seal-lugares,
+.codex-row.locked .codex-seal-relatos {
+  background: var(--ink-950);
+  border-color: var(--ink-500);
 }
 .codex-text {
   display: flex;
@@ -959,27 +692,26 @@
   min-width: 0;
 }
 .codex-text strong {
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 15px;
-  color: var(--osso);
+  font-family: var(--font-display);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.06em;
+  color: var(--text-hi);
 }
 .codex-row.locked .codex-text strong {
-  color: var(--texto-suave);
+  color: var(--text-mid);
 }
 .codex-text span {
-  font-size: 14px;
-  color: var(--texto-suave);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
 }
 .codex-article {
-  margin: 4px 0;
-  max-height: 52vh;
-  overflow-y: auto;
+  margin: 0;
 }
 .codex-para {
-  margin: 0 0 12px;
-  font-size: 16px;
+  margin: 0 0 var(--sp-3);
+  font-size: var(--fs-md);
   line-height: 1.6;
-  color: var(--texto);
+  color: var(--text-hi);
 }
 
 /* --- Verbete imersivo: vitrine 3D + texto em duas colunas --- */
@@ -989,15 +721,11 @@
 .codex-spread {
   display: grid;
   grid-template-columns: minmax(220px, 300px) 1fr;
-  gap: 24px;
+  gap: var(--sp-5);
   align-items: start;
-  margin: 4px 0;
 }
 .codex-spread-text {
   min-width: 0;
-}
-.codex-spread .codex-article {
-  max-height: 56vh;
 }
 .codex-stage-col {
   display: flex;
@@ -1024,10 +752,10 @@
   aspect-ratio: 3 / 4;
   border-radius: 6px;
   overflow: hidden;
-  border: 1px solid var(--borda-clara);
+  border: var(--line) solid var(--ink-500);
   background:
-    radial-gradient(ellipse at 50% 32%, color-mix(in srgb, var(--stage-accent, #ff9646) 16%, transparent), rgba(9, 12, 18, 0) 62%),
-    linear-gradient(180deg, #0c111a 0%, #070a10 100%);
+    radial-gradient(ellipse at 50% 32%, color-mix(in srgb, var(--stage-accent, var(--ember-300)) 16%, transparent), transparent 62%),
+    linear-gradient(180deg, var(--ink-850) 0%, var(--ink-950) 100%);
   box-shadow:
     inset 0 0 0 1px rgba(0, 0, 0, 0.6),
     inset 0 1px 0 rgba(246, 227, 176, 0.1),
@@ -1108,76 +836,72 @@
   right: 22%;
 }
 
-/* --- Diário (objetivos) --- */
+/* --- Diário (objetivos; a linha vem de .ds-row) --- */
 .quest-panel {
   max-width: min(94vw, 600px);
 }
 .quest-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin: 4px 0;
+  gap: var(--sp-2);
 }
 .quest-chapter {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 10px;
-  padding: 4px 2px;
-  border-bottom: 1px solid var(--borda);
+  margin-top: var(--sp-3);
+  padding: var(--sp-1) 2px;
+  border-bottom: var(--line) solid var(--ink-600);
 }
 .quest-chapter:first-child {
   margin-top: 0;
 }
 .quest-ch-name {
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 13px;
-  letter-spacing: 1px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-xs);
+  letter-spacing: var(--ls-caps);
   text-transform: uppercase;
-  color: var(--bronze-claro);
+  color: var(--gold-400);
 }
 .quest-chapter.active .quest-ch-name {
-  color: var(--ouro-claro);
+  color: var(--gold-200);
 }
 .quest-ch-count {
-  font-size: 13px;
-  color: var(--texto-suave);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  color: var(--text-mid);
 }
 .quest-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid transparent;
-  border-radius: 4px;
-}
-.quest-row.current {
-  background: linear-gradient(180deg, rgba(231, 189, 113, 0.1), rgba(0, 0, 0, 0.12));
-  border-color: var(--bronze);
-}
-.quest-row.done {
-  opacity: 0.7;
+  padding: var(--sp-2) var(--sp-3);
 }
 .quest-mark {
   width: 18px;
   flex-shrink: 0;
   text-align: center;
-  color: var(--ouro);
+  color: var(--gold-300);
   font-weight: 700;
 }
 .quest-text {
   flex: 1;
-  font-size: 15px;
-  color: var(--texto);
+  font-size: var(--fs-md);
+  color: var(--text-hi);
+}
+.quest-row.done {
+  background: transparent;
 }
 .quest-row.done .quest-text {
   text-decoration: line-through;
-  color: var(--texto-suave);
+  text-decoration-color: var(--gold-600);
+  color: var(--text-mid);
 }
 .quest-pts {
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 13px;
-  color: var(--texto-suave);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  color: var(--gold-400);
+}
+.quest-row.done .quest-pts {
+  color: var(--text-mid);
 }
 
 /* --- Nova Jornada (criação de personagem) --- */
@@ -1648,23 +1372,14 @@
   to { opacity: 1; transform: none; }
 }
 
-/* --- Tela de vitória (leaderboard) --- */
-.victory-panel { min-width: 360px; max-width: min(92vw, 480px); }
-.score-list { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
-.score-row {
-  display: flex; align-items: center; gap: 12px; padding: 9px 13px;
-  background: linear-gradient(180deg, rgba(246, 227, 176, 0.04), rgba(0, 0, 0, 0.14));
-  border: 1px solid var(--borda); border-radius: 4px;
-}
-.score-row.current {
-  border-color: var(--ouro);
-  background: linear-gradient(180deg, rgba(255, 166, 61, 0.16), rgba(0, 0, 0, 0.18));
-  box-shadow: 0 0 10px rgba(255, 166, 61, 0.25);
-}
-.score-rank { width: 22px; color: var(--texto-suave); font-family: "Cinzel", Georgia, serif; }
-.score-time { flex: 1; font-family: "Cinzel", Georgia, serif; font-size: 16px; color: var(--osso); }
-.score-row.current .score-time { color: var(--ouro-claro); }
-.score-tag { font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--ambar); }
+/* --- Tela de vitória (leaderboard; a linha vem de .ds-row) --- */
+.victory-panel { min-width: 420px; max-width: min(92vw, 520px); }
+.score-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.score-row { padding: var(--sp-2) var(--sp-4); }
+.score-rank { width: 22px; color: var(--text-mid); font-family: var(--font-display); }
+.score-time { flex: 1; font-family: var(--font-display); font-size: var(--fs-md); color: var(--text-hi); }
+.score-row.current .score-time { color: var(--ember-200); }
+.score-tag { font-family: var(--font-display); font-size: var(--fs-2xs); letter-spacing: 0.18em; text-transform: uppercase; color: var(--ember-300); }
 
 /* --- Criação de personagem (3 passos): layout. As peças vêm do design system (ds/). --- */
 .cc-root {
