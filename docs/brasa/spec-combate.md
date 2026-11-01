@@ -249,8 +249,9 @@ para câmera/partículas (`combatDirector.ts`:62-77, [CÓDIGO]). Pega o MAIOR pe
 pesado não é encurtado por um leve, `hitStop.ts`:12-14, [CÓDIGO]).
 
 `[NORMATIVO]` Barra de vida do inimigo: billboard flutuante que aparece ao tomar dano
-e some após ~3,5 s (`HealthBar3D`, `healthBar3d.ts`, [CÓDIGO]). Não polui a tela; sem
-números de dano flutuantes. Re-tema: cores da barra já casam (verde -> âmbar -> rubro,
+e some após ~3,5 s (`HealthBar3D`, `healthBar3d.ts`, [CÓDIGO]). Não polui a tela. O dano
+também aparece como número flutuante discreto (`damageNumbers.ts`; decisão de 2026-11-01,
+ver spec-ui-hud-ux), porque na câmera alta a barra sozinha é pequena demais. Re-tema: cores da barra já casam (verde -> âmbar -> rubro,
 `#7db83a`/`#e7bd71`/`#c0392b`), manter.
 
 `[DESIGN]` Som em camadas (a escrever no áudio de Brasa, hoje `combatSound.ts` tem
@@ -492,7 +493,7 @@ Moveset da Acendedora (§3)
 Hitboxes e feedback (§4)
 - [ ] Detecção por esferas (`overlapSpheres`) com hitbox frontal generosa desacoplada do swing [CÓDIGO][NORMATIVO]
 - [ ] Golpe bloqueado pela guarda dá feedback metálico curto distinto do acerto pleno [CÓDIGO][NORMATIVO]
-- [ ] Barra de vida do inimigo é billboard que aparece ao tomar dano e some (sem números flutuantes) [CÓDIGO][NORMATIVO]
+- [ ] Barra de vida do inimigo é billboard que aparece ao tomar dano e some; o dano também sobe como número flutuante discreto [CÓDIGO][NORMATIVO]
 - [ ] Som em camadas re-tematizado para a cripta (osso, não bronze) [DESIGN][A DEFINIR]
 
 Recursos (§5)

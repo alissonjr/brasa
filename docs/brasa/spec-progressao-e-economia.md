@@ -63,7 +63,7 @@ Cinco princípios que toda decisão de progressão respeita [DESIGN]:
    fundas/escuras dão mais Fagulha e melhores baús, mas custam luz e vida. A economia premia
    quem arrisca com leitura, sem obrigar (princípio anti-grind).
 5. Legível e sóbrio. HUD e telas simples (luz, vida, Fagulha; uma tela de escolha de melhoria
-   ao acender). Sem barra de XP, sem números flutuantes coloridos. Combina com low-poly e com
+   ao acender). Sem barra de XP; números de dano só os discretos de `damageNumbers.ts`. Combina com low-poly e com
    o melancólico-esperançoso.
 
 Anti-objetivos explícitos [DESIGN]: nada de grind obrigatório; nada de scaling que torne o

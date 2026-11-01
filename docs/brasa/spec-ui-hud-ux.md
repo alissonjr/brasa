@@ -87,7 +87,7 @@ profundidade.
 | Indicador de sala/profundidade | Não-diegética discreta | persistente, recolhível | selo vertical no topo: "Câmara N / M" + traço de descida que desce a cada braseiro aceso; ver 2.3 |
 | Prompt de interação (braseiro) | Espacial/ancorado | só quando a sala está limpa e a Acendedora no raio do braseiro | selo de bronze sobre o braseiro com glifo do botão + verbo "Acender"; halo laranja pulsante; ver seção 3 estado E |
 | Alvo de combate (lock-on) | Espacial | só com lock-on ativo num morto | retículo/coroa ciano sob o inimigo focado + barra de vida 3D do alvo (de `healthBar3d`); seta para o próximo alvo; ver 2.4 |
-| Feedback de dano | Meta | no impacto | vinheta vermelho-tiço/cinza `#6E1B16` nas bordas + leve shake; sem números de dano flutuantes (de `combatHud.flashDamage`) |
+| Feedback de dano | Meta | no impacto | vinheta vermelho-tiço/cinza `#6E1B16` nas bordas + leve shake; número de dano flutuante discreto (de `combatHud.flashDamage` e `damageNumbers.ts`) |
 | Dica de controles | Não-diegética transitória | início da sessão; some após ~12 s ou no 1o ataque | linha discreta inferior-central (de `combatHud.hint`, `dismissHint()`) |
 | Toast de evento | Não-diegética transitória | upgrade ganho, marco da descida | cartão que entra e sai por cima do HUD (de `hud.notify`), re-textado |
 
@@ -99,7 +99,7 @@ profundidade.
 - `cinematica`: descida entre salas, abrir da Brasa, derrota/fim. HUD oculto.
 
 `[DESIGN]` `[NORMATIVO]` **Esconder/evitar:** minimapa, bússola completa, objetivo de
-campanha de Josué, medidor de XP sempre visível, números de dano flutuantes. A orientação
+campanha de Josué, medidor de XP sempre visível. A orientação
 vem do level design (a porta selada, o braseiro como único ponto quente, a escada para
 baixo), não de um mapa.
 
@@ -193,7 +193,11 @@ distinta. Fichas no formato de elemento do padrão de detalhe.
   no início. Vinheta no dano.
 - Visual `[NORMATIVO]`: olhos/runas dos mortos em ciano-espectral `#5FB7C9`; retículo do
   alvo ciano; vinheta vermelho-tiço no impacto; shake leve.
-- `[NORMATIVO]`: sem números de dano flutuantes; feedback é cor + shake + som.
+- `[NORMATIVO]`: números de dano flutuantes SÃO permitidos, desde que discretos e coloridos só
+  pelos tokens do design system (ouro no acerto, brasa no crítico, vermelho no dano ao herói,
+  verde na cura) e que respeitem movimento reduzido. Feedback é cor + shake + som + número.
+  Decisão do dono do jogo em 2026-11-01: na câmera alta os inimigos ficam pequenos e o número
+  devolve a leitura do golpe. Continuam proibidos: medidor de XP e números que poluam a tela.
 
 ### Estado C: Vida crítica (transversal a combate)
 - Resumo `[DESIGN]`: vida baixa; o frio está vencendo.
@@ -550,7 +554,7 @@ HUD de jogo (seção 2)
 - [ ] Indicador de sala/profundidade no topo (selo vertical "Câmara N de M"), recolhível, com elos acesos por braseiro conquistado. [DESIGN][NORMATIVO]
 - [ ] Prompt de interação do braseiro aparece só com a sala limpa e dentro do raio, ancorado ao braseiro, com glifo do botão + verbo "Acender" e halo laranja. [DESIGN][NORMATIVO]
 - [ ] Alvo de combate (lock-on) mostra retículo ciano e barra de vida 3D do morto focado, com clamp na borda e troca de alvo. [DESIGN][NORMATIVO]
-- [ ] Feedback de dano por vinheta vermelho-tiço + leve shake no impacto, sem números de dano flutuantes. [DESIGN][NORMATIVO]
+- [ ] Feedback de dano por vinheta vermelho-tiço + leve shake no impacto, mais número de dano flutuante discreto. [DESIGN][NORMATIVO]
 - [ ] Sem minimapa, sem bússola, sem objetivo de campanha de Josué, sem medidor de XP sempre visível. [DESIGN][NORMATIVO]
 
 Estados de UI (seção 3)

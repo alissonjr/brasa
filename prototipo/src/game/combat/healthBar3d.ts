@@ -4,8 +4,8 @@ import type { Scene, TransformNode } from "@babylonjs/core";
 /**
  * CAMADA JOGO. Barra de vida flutuante de inimigo (billboard que encara a câmera). Aparece
  * quando o alvo leva dano e some após alguns segundos (não polui a tela; a doc de UI evita
- * HUD sempre-visível e números de dano flutuantes, mas uma barra de vida de inimigo é leitura
- * legítima do progresso do combate). Acompanha o alvo por posição (não parentada, para o
+ * HUD sempre-visível, e os números de dano flutuantes discretos complementam esta barra; uma
+ * barra de vida de inimigo é leitura legítima do progresso do combate). Acompanha o alvo por posição (não parentada, para o
  * billboard não brigar com a rotação do inimigo).
  */
 const W = 128;
