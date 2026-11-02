@@ -1070,6 +1070,27 @@ html.reduce-motion .title-cine-opt.primary { animation: none; }
 }
 .hud-pot { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .hud-pot.off { opacity: 0.4; }
+/* Gole (redesenho 4.1): o frasco do slot inclina ao beber, esvazia ao gastar a carga, treme se cancelado;
+   a Fúria pulsa em brasa enquanto dura. A forma (redondo, alto) lê o tipo além da cor. */
+.hud-fl {
+  --fl: #8fe06a;
+  display: inline-block; width: 9px; height: 13px; flex: none;
+  border: 1px solid var(--gold-500, #c9a24a); border-radius: 3px 3px 5px 5px;
+  background: linear-gradient(to top, var(--fl) 68%, transparent 68%);
+  transform-origin: 50% 80%; transition: transform 0.18s ease-out;
+}
+.hud-fl--vida { border-radius: 50% 50% 45% 45%; }
+.hud-fl--furia { --fl: #ff7a2a; width: 7px; height: 15px; }
+.hud-pot.drinking .hud-fl { transform: rotate(-110deg); }
+.hud-pot.drank { animation: hudPotDrank 0.65s ease-out; }
+.hud-pot.drank .hud-fl { animation: hudFlEmpty 0.65s ease-out both; }
+.hud-pot.denied { animation: hudPotDeny 0.4s ease-out; }
+.hud-pot.on { color: var(--ember-200, #ffd9a0); animation: hudPotEmber 0.9s ease-in-out infinite alternate; }
+@keyframes hudFlEmpty { 0% { transform: rotate(-110deg); } 55% { transform: rotate(-110deg); background-size: 100% 0; } 100% { transform: rotate(0); background-size: 100% 0; } }
+@keyframes hudPotDrank { 0% { text-shadow: 0 0 10px var(--life-400, #7fcf8f); } 100% { text-shadow: none; } }
+@keyframes hudPotDeny { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+@keyframes hudPotEmber { from { text-shadow: 0 0 2px var(--ember-500, #e8742a); } to { text-shadow: 0 0 10px var(--ember-500, #e8742a); } }
+html.reduce-motion .hud-pot.on { animation: none; }
 .hud-potions .ds-kbd { min-width: 20px; height: 20px; font-size: 11px; }
 
 

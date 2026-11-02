@@ -106,6 +106,16 @@ export const POTIONS = {
   furia: { dmgBonus: 0.6, durationSec: 8, cost: 6, cap: 2 }, // Elixir de Fúria
 } as const;
 
+/** Tipos de poção que o gole sabe levar à boca (o Unguento aplica no peito; só existe com a Ferida). */
+export type PotionKind = "vida" | "furia" | "unguento";
+
+/**
+ * O GOLE (docs/brasa/redesenho-da-descida.md 4.1). Beber é um gesto de `durationSec` com janela
+ * vulnerável: sem leve, pesado, bloqueio nem fogo; anda a `moveMul` da velocidade; a carga é gasta e
+ * o efeito aplica em `commitSec`. Só a esquiva cancela; antes de `commitSec` não gasta a carga.
+ */
+export const DRINK = { durationSec: 0.6, commitSec: 0.3, moveMul: 0.6 } as const;
+
 /**
  * QUEIMADURA (status do fogo). Aplicada pelo Golpe de Fogo (ember). Dano por segundo ao
  * alvo, faz o queimado receber mais dano e mais knockback. Empilha. Dádivas estendem
