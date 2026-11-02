@@ -216,6 +216,11 @@ export class HeroCombat {
     return ((this.state === "attacking" && this.attack.isActive) || this.skippedActive_) && !this.hitConsumed;
   }
 
+  /** Em golpe corpo a corpo, na janela ativa (o giro da lâmina). */
+  get swingActive(): boolean {
+    return this.state === "attacking" && this.attack.isActive;
+  }
+
   /** Dados para o ator sincronizar o clipe com a mecânica (null fora de golpe/esquiva/fogo). */
   get clipSync(): ClipSync | null {
     if (this.state === "dodging") {

@@ -1,4 +1,4 @@
-import { Color3, ImportMeshAsync, MeshBuilder, StandardMaterial, Texture, TransformNode } from "@babylonjs/core";
+import { Color3, Engine, ImportMeshAsync, MeshBuilder, StandardMaterial, Texture, TrailMesh, TransformNode } from "@babylonjs/core";
 import type { AnimationGroup, BaseTexture, Material, Mesh, Scene, StandardMaterial as StdMat } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF"; // registra o loader glTF
 import { assetUrl, createLightPool, outlineHierarchy, type CharacterVisual } from "@engine";
@@ -78,6 +78,8 @@ export class HeroModel implements CharacterVisual {
   private sync: ClipSync | null = null;
   private wIn = 1; // rampa de entrada da ação corrente (0..1)
   private wFade = 1; // fade de saída planejado da ação corrente (1..0)
+  private trail?: TrailMesh; // rastro da lâmina (só ligado no giro do golpe)
+  private trailOn = false;
   private prevGroup?: AnimationGroup; // ação anterior em mistura de saída
   private prevW = 0;
   // Pesos suavizados da locomoção (idle/walk/run/sprint somam ~1).
@@ -153,6 +155,24 @@ export class HeroModel implements CharacterVisual {
       sword.rotation.set(Math.PI / 2, 0, 0);
       sword.scaling.setAll(1);
       for (const m of sword.getChildMeshes(false)) (m as Mesh).metadata = { ...(m.metadata ?? {}), noOutline: true };
+      // Rastro leve da lâmina: fita quente atrás da ponta, ligada só no giro do golpe (setTrail).
+      const tip = new TransformNode("sword_tip", this.scene);
+      tip.parent = sword;
+      tip.position.set(0, 0.5, 0);
+      const trail = new TrailMesh("sword_trail", tip, this.scene, 0.1, 9, false);
+      const tm = new StandardMaterial("sword_trail_mat", this.scene);
+      tm.disableLighting = true;
+      tm.diffuseColor = Color3.Black();
+      tm.specularColor = Color3.Black();
+      tm.emissiveColor = Color3.FromHexString("#ffb86a");
+      tm.alpha = 0.5;
+      tm.backFaceCulling = false;
+      tm.alphaMode = Engine.ALPHA_ADD;
+      trail.material = tm;
+      trail.isPickable = false;
+      trail.metadata = { noOutline: true };
+      trail.setEnabled(false);
+      this.trail = trail;
     }
     const handL = nos.get("hand_l");
     if (handL) {
@@ -224,13 +244,15 @@ export class HeroModel implements CharacterVisual {
    * Define a ação dominante (sobre a locomoção). Chamada a cada frame pelo ator. Ação nova (ou
    * `sync.seq` novo, ex.: 2o elo de uma cadeia leve) reinicia o clipe e mistura a entrada; ao
    * voltar a "idle", a ação sai por mistura. Com `sync`, o clipe é posicionado pela mecânica
-   * (ver PLANO) em vez de rodar num relógio próprio; `frozen` (hit stop) congela o clipe.
+   * (ver PLANO) em vez de rodar num relógio próprio; `timeScale` (0 = hit stop, <1 = cauda do hit stop) desacelera o clipe junto.
    */
-  setAction(kind: HeroAction, sync: ClipSync | null = null, frozen = false): void {
+  setAction(kind: HeroAction, sync: ClipSync | null = null, timeScale = 1): void {
     if (!this.loaded) return;
     const seq = sync ? sync.seq : -1;
     if (kind !== this.actionKind || seq !== this.actionSeq) this.beginAction(kind, sync);
     this.sync = sync;
+    this.setTrail(!!sync && (sync.kind === "light" || sync.kind === "finisher" || sync.kind === "heavy") &&
+      (sync.phase === "active" || (sync.phase === "startup" && sync.progress > 0.6) || (sync.phase === "recovery" && sync.progress < 0.3)));
     const g = this.actionGroup;
     if (!g) return;
     if (sync) {
@@ -238,14 +260,28 @@ export class HeroModel implements CharacterVisual {
       const seg = plano[sync.phase];
       if (!seg) return;
       const target = seg[0] + (seg[1] - seg[0]) * clamp(sync.progress, 0, 1);
-      this.driveClip(g, target, frozen ? 0 : (seg[1] - seg[0]) / Math.max(sync.sec, 1e-3));
+      this.driveClip(g, target, (timeScale * (seg[1] - seg[0])) / Math.max(sync.sec, 1e-3));
       // Mistura de saída planejada: no fim da recuperação (ou da esquiva) o clipe cede à locomoção.
       const p = sync.phase === "recovery" || sync.phase === "dodge" ? sync.progress : 0;
       this.wFade = p > plano.fade ? Math.max(0, 1 - (p - plano.fade) / (1 - plano.fade)) : 1;
     } else if (kind === "block") {
-      this.driveClip(g, Math.min(g.from + (g.to - g.from) * BLOCK_HOLD, g.from + this.actionT * 60 * BLOCK_RATE), frozen ? 0 : 60 * BLOCK_RATE);
+      this.driveClip(g, Math.min(g.from + (g.to - g.from) * BLOCK_HOLD, g.from + this.actionT * 60 * BLOCK_RATE), timeScale * 60 * BLOCK_RATE);
     } else if (kind === "hit") {
-      this.driveClip(g, Math.min(g.to - 0.5, g.from + this.actionT * 60), frozen ? 0 : 60);
+      this.driveClip(g, Math.min(g.to - 0.5, g.from + this.actionT * 60), timeScale * 60);
+    }
+  }
+
+  private setTrail(on: boolean): void {
+    const t = this.trail;
+    if (!t || on === this.trailOn) return;
+    this.trailOn = on;
+    if (on) {
+      t.reset();
+      t.start();
+      t.setEnabled(true);
+    } else {
+      t.stop();
+      t.setEnabled(false);
     }
   }
 

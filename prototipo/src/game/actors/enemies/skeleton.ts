@@ -7,6 +7,7 @@ import type { CombatTarget } from "../../combat/combatTarget";
 import { type AttackTuning } from "../../combat/tuning";
 import { HealthBar3D } from "../../combat/healthBar3d";
 import { tellSound, type TellProfile } from "../../combat/combatSound";
+import { GroundTelegraph } from "../../combat/groundTelegraph";
 
 /**
  * CAMADA JOGO (Brasa). Inimigo desperto (bestiario docs/brasa/biblia-bestiario.md). Dois
@@ -200,6 +201,7 @@ export class Skeleton implements CombatTarget {
   private readonly knock = new Vector3();
   private readonly center_ = new Vector3();
   private hitHeroThisSwing = false;
+  private telegraph: GroundTelegraph | null = null; // leque no chão do golpe corpo a corpo (lazy)
   private poise = 0; // postura atual; ao zerar, CAMBALEIA (interrompe a antecipacao)
   private staggerTimer = 0; // > 0: parado e exposto (cambaleio)
   private attackUnblockable_ = false; // o golpe em curso ignora bloqueio (telegrafado em vermelho)
@@ -317,6 +319,8 @@ export class Skeleton implements CombatTarget {
     this.glowMeshes = [];
     this.hpBar?.dispose();
     this.hpBar = null;
+    this.telegraph?.dispose();
+    this.telegraph = null;
     // Nao derruba material/textura do container em cache (compartilhados entre inimigos do tipo):
     // so os materiais PROPRIOS desta instancia e o esqueleto do Babylon (vazava um por morto).
     this.rootNode?.dispose(false, false);
@@ -524,6 +528,7 @@ export class Skeleton implements CombatTarget {
       this.deadElapsed = 0;
       this.staggerTimer = 0;
       this.sm.to("dead");
+      this.telegraph?.hide();
       this.setAnim(this.anims.death, false);
     } else if (!blocked && !this.staggered && this.sm.is("approach")) {
       this.setAnim(this.anims.hit, false);
@@ -536,6 +541,7 @@ export class Skeleton implements CombatTarget {
     this.staggerTimer = seconds;
     this.poise = this.stats.poise;
     this.attack.cancel();
+    this.telegraph?.hide();
     this.attackUnblockable_ = false;
     this.hitHeroThisSwing = true; // garante que o golpe interrompido nao conecta
     this.shot = null;
@@ -596,6 +602,10 @@ export class Skeleton implements CombatTarget {
         }
       }
       this.attack.advance(combatDt);
+      if (beh !== "ranged") {
+        this.telegraph ??= new GroundTelegraph(this.scene, this.stats.attackRange);
+        this.telegraph.update(this.attack.current, this.attack.phaseProgress, root.position.x, root.position.y, root.position.z, this.attackDir.x, this.attackDir.z, this.attackUnblockable_);
+      }
       if (this.attack.isActive && !this.hitHeroThisSwing) {
         if (beh === "ranged") {
           // Dispara UM projetil, mirando o heroi no instante do disparo (o feixe e resolvido
@@ -615,6 +625,7 @@ export class Skeleton implements CombatTarget {
         }
       }
       if (wasBusy && !this.attack.isBusy) {
+        this.telegraph?.hide();
         if (this.attackUnblockable_) this.restoreEmissive(); // apaga a telegrafia vermelha
         this.attackUnblockable_ = false;
         this.sm.to("cooldown");

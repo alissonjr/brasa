@@ -35,6 +35,7 @@ export class Acendedora {
   readonly model: HeroModel;
   private readonly controller: CharacterController;
   private readonly combat_: HeroCombat;
+  private readonly scene: Scene;
   private readonly aimQuat = new Quaternion();
   private readonly aimTarget = new Vector3(); // alvo de mira (lock-on / soft-target)
   private hasAim = false;
@@ -50,6 +51,7 @@ export class Acendedora {
   private readonly lungeQuat = new Quaternion();
 
   constructor(scene: Scene, spawn: Vector3, gravity: Vector3) {
+    this.scene = scene;
     this.model = new HeroModel(scene, { modelUrl: ACENDEDORA_MODEL, name: "acendedora" });
     this.controller = new CharacterController(scene, spawn, gravity, this.model);
     this.combat_ = new HeroCombat(scene, this.model.root);
@@ -174,7 +176,10 @@ export class Acendedora {
               ? "hit"
               : "idle";
     const withSync = action === "light" || action === "heavy" || action === "ember" || action === "dodge";
-    this.model.setAction(action, withSync ? this.combat_.clipSync : null, deltaSeconds <= 0);
+    // Escala de tempo do combate neste quadro (0 = hit stop, <1 = cauda do hit stop): o clipe acompanha.
+    const real = this.scene.getEngine().getDeltaTime() / 1000;
+    const timeScale = deltaSeconds <= 0 ? 0 : real > 0 ? Math.min(1, deltaSeconds / real) : 1;
+    this.model.setAction(action, withSync ? this.combat_.clipSync : null, timeScale);
     // Durante a ANTECIPAÇÃO do golpe, encara para onde a câmera olha (a mira). Parado, o
     // controller só gira o modelo na direção do movimento, então a hitbox (à frente do
     // modelo) apontaria para a última direção andada e o golpe de frente erraria. Re-mira a
