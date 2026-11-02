@@ -36,10 +36,6 @@ export const CAMPAIGN: Chapter[] = [
 
 export const DEFAULT_CHAPTER = CAMPAIGN[0]!.id;
 
-export function findChapter(state: ProgressionState): Chapter {
-  return CAMPAIGN.find((c) => c.id === state.chapterId) ?? CAMPAIGN[0]!;
-}
-
 /** Progresso da campanha inteira (objetivos concluídos / total), 0..100. */
 export function progressPercent(state: ProgressionState): number {
   const total = CAMPAIGN.reduce((n, c) => n + c.objectives.length, 0);

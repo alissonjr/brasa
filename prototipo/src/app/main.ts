@@ -948,7 +948,6 @@ async function main(): Promise<void> {
     save: platform.save,
     settings: platform.settings,
     profile: platform.profile,
-    score: platform.score,
     achievements: platform.achievements,
     progression: platform.progression,
     codex,

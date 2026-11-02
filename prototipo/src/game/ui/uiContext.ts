@@ -5,7 +5,6 @@ import type {
   ProgressionService,
   Quality,
   SaveStore,
-  ScoreService,
   SettingsService,
 } from "@platform";
 import type { CharacterSave } from "../content/character";
@@ -21,7 +20,6 @@ export interface UiContext {
   save: SaveStore;
   settings: SettingsService;
   profile: ProfileService;
-  score: ScoreService;
   achievements: AchievementService;
   progression: ProgressionService;
   /** Marcas vistas da Crônica (o que já foi lido/alcançado) e o que acabou de ser liberado. */
