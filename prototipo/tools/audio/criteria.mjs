@@ -11,7 +11,7 @@ export const CRITERIA = {
   /** camadas contínuas (ambiência/música): pares em batimento 20-300 Hz */
   paresMax: 0,
   /** ambiência: loudness integrada (LUFS aprox.) por andar */
-  ambLufsI: [-42, -28],
+  ambLufsI: [-34, -28],
   /** música (cada estado): loudness integrada */
   musLufsI: [-28, -20],
   /** efeitos: momentânea máxima (400 ms) */

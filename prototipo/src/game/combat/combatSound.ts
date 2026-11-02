@@ -61,7 +61,8 @@ export function tellSound(profile: TellProfile): void {
       noise(a, out, t, { dur: 0.05, gain: 0.07, filters: [{ type: "bandpass", f: 5200, q: 0.7 }] });
       break;
     case "heavy": // THOOM grave que sobe a tensão
-      tone(a, out, t, { f: 78 * jit(0.05), f1: 118, dur: 0.34, gain: 0.13 });
+      tone(a, out, t, { f: 78 * jit(0.05), f1: 118, dur: 0.34, gain: 0.1 });
+      tone(a, out, t, { f: 180, f1: 240, dur: 0.3, gain: 0.05, attack: 0.05 });
       noise(a, out, t, { dur: 0.12, gain: 0.07, filters: [{ type: "bandpass", f: 420, q: 0.7 }] });
       break;
     case "cast": // assobio frio ascendente (mira)

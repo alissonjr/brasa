@@ -47,20 +47,21 @@ export function playFootstep(surface: Surface, intensity = 1, foot = 0): void {
   const I = Math.max(0.2, Math.min(1.6, intensity));
   const side = foot % 2 === 0 ? 1 : 0.94;
   if (surface === "laje") {
-    tone(a, out, t, { f: 98 * side * jit(0.1), f1: 52, dur: 0.1, gain: 0.07 * I * jit(0.2) });
-    noise(a, out, t, { dur: 0.035, gain: 0.03 * I * jit(0.25), filters: [{ type: "bandpass", f: 1900 * jit(0.18), q: 1.1 }] });
-    noise(a, out, t + 0.012, { dur: 0.08, gain: 0.012 * I, kind: "pink", filters: [{ type: "lowpass", f: 700 }] }); // eco curto da pedra
+    tone(a, out, t, { f: 168 * side * jit(0.1), f1: 86, dur: 0.07, gain: 0.05 * I * jit(0.2) }); // corpo do passo
+    tone(a, out, t, { f: 82 * side, f1: 52, dur: 0.1, gain: 0.025 * I }); // peso
+    noise(a, out, t, { dur: 0.04, gain: 0.05 * I * jit(0.25), filters: [{ type: "bandpass", f: 1500 * jit(0.18), q: 1 }] }); // estalo da sola
+    noise(a, out, t + 0.01, { dur: 0.09, gain: 0.03 * I, kind: "pink", filters: [{ type: "bandpass", f: 650 * jit(0.2), q: 0.9 }] }); // eco curto da pedra
   } else if (surface === "agua") {
-    noise(a, out, t, { dur: 0.17, gain: 0.07 * I * jit(0.2), kind: "pink", attack: 0.02, filters: [{ type: "bandpass", f: 520 * jit(0.2), f1: 1150 * jit(0.2), q: 0.9 }] });
+    noise(a, out, t, { dur: 0.17, gain: 0.095 * I * jit(0.2), kind: "pink", attack: 0.02, filters: [{ type: "bandpass", f: 520 * jit(0.2), f1: 1150 * jit(0.2), q: 0.9 }] });
     noise(a, out, t + 0.02, { dur: 0.1, gain: 0.025 * I, attack: 0.012, filters: [{ type: "highpass", f: 2400 }] });
-    tone(a, out, t, { f: 72 * side, f1: 50, dur: 0.1, gain: 0.04 * I });
+    tone(a, out, t, { f: 120 * side, f1: 64, dur: 0.08, gain: 0.03 * I });
     if (rand() < 0.7) {
       const f = rr(650, 1100);
       tone(a, out, t + rr(0.05, 0.15), { f, f1: f * 1.7, dur: 0.06, gain: 0.014 * I }); // plip da gota
     }
   } else {
-    noise(a, out, t, { dur: 0.14, gain: 0.07 * I * jit(0.2), kind: "pink", attack: 0.025, filters: [{ type: "lowpass", f: 1500 * jit(0.15) }] });
-    tone(a, out, t, { f: 82 * side, f1: 54, dur: 0.09, gain: 0.032 * I });
+    noise(a, out, t, { dur: 0.15, gain: 0.1 * I * jit(0.2), kind: "pink", attack: 0.025, filters: [{ type: "highpass", f: 260 }, { type: "lowpass", f: 2200 * jit(0.15) }] });
+    tone(a, out, t, { f: 120 * side, f1: 66, dur: 0.08, gain: 0.03 * I });
     for (let k = 0; k < 3; k++) {
       noise(a, out, t + rr(0.01, 0.1), { dur: 0.012, gain: rr(0.008, 0.02) * I, filters: [{ type: "highpass", f: 3200 }] }); // grãos
     }
@@ -123,7 +124,7 @@ export function playJump(): void {
   if (!v) return;
   const { a, out, t } = v;
   noise(a, out, t, { dur: 0.17, gain: 0.04 * jit(0.2), kind: "pink", attack: 0.03, filters: [{ type: "bandpass", f: 480, f1: 1100, q: 0.8 }] }); // esforço do "hup"
-  tone(a, out, t, { f: 118 * jit(0.08), f1: 82, dur: 0.1, gain: 0.05 }); // impulso do pé
+  tone(a, out, t, { f: 170 * jit(0.08), f1: 100, dur: 0.08, gain: 0.04 }); // impulso do pé
   noise(a, out, t, { dur: 0.05, gain: 0.014, filters: [{ type: "highpass", f: 2800 }] }); // couro/tecido
 }
 
@@ -133,8 +134,9 @@ export function playLand(intensity = 0.5): void {
   if (!v) return;
   const { a, out, t } = v;
   const I = Math.max(0, Math.min(1, intensity));
-  tone(a, out, t, { f: (130 - 25 * I) * jit(0.08), f1: 44, dur: 0.12 + 0.12 * I, gain: (0.07 + 0.16 * I) * jit(0.12) });
-  noise(a, out, t, { dur: 0.16 + 0.22 * I, gain: (0.03 + 0.07 * I) * jit(0.2), kind: "brown", attack: 0.008, filters: [{ type: "lowpass", f: 900 + 400 * I }] }); // poeira
+  tone(a, out, t, { f: (150 - 25 * I) * jit(0.08), f1: 50, dur: 0.12 + 0.12 * I, gain: (0.05 + 0.1 * I) * jit(0.12) });
+  tone(a, out, t, { f: (260 - 40 * I) * jit(0.08), f1: 120, dur: 0.07, gain: 0.05 + 0.05 * I }); // corpo do impacto
+  noise(a, out, t, { dur: 0.16 + 0.22 * I, gain: (0.04 + 0.08 * I) * jit(0.2), kind: "pink", attack: 0.008, filters: [{ type: "highpass", f: 250 }, { type: "lowpass", f: 1400 + 600 * I }] }); // poeira
   noise(a, out, t, { dur: 0.04, gain: (0.015 + 0.02 * I), filters: [{ type: "bandpass", f: 2100 * jit(0.2), q: 1.2 }] });
   if (I > 0.55) tone(a, out, t + 0.01, { f: 1380 * jit(0.1), dur: 0.05, gain: 0.012 * I, type: "triangle" }); // fivela/equipamento
   if (I > 0.7) duckPulse(0.25);
@@ -154,7 +156,7 @@ export function playSwing(heavy = false): void {
     attack: d * 0.4,
     filters: [{ type: "bandpass", f: (heavy ? 340 : 760) * jit(0.12), f1: (heavy ? 1250 : 2500) * jit(0.12), q: 0.9 }],
   });
-  if (heavy) tone(a, out, t, { f: 96, f1: 62, dur: 0.2, gain: 0.05, attack: 0.05 }); // massa do braço
+  if (heavy) tone(a, out, t, { f: 150, f1: 100, dur: 0.2, gain: 0.02, attack: 0.05 }); // massa do braço
 }
 
 /** Golpe que ACERTA. osso: estalo seco; carne: abafado e úmido; armadura: metal que ressoa. */
@@ -164,16 +166,17 @@ export function playHit(heavy = false, material: HitMaterial = "osso"): void {
   const { a, out, t } = v;
   const H = heavy ? 1 : 0;
   if (material === "osso") {
-    tone(a, out, t, { f: (heavy ? 150 : 210) * jit(0.08), f1: heavy ? 58 : 92, dur: heavy ? 0.2 : 0.11, gain: heavy ? 0.2 : 0.13 });
-    noise(a, out, t, { dur: heavy ? 0.07 : 0.05, gain: (heavy ? 0.17 : 0.12) * jit(0.15), filters: [{ type: "bandpass", f: 2600 * jit(0.15), q: 1.4 }] });
+    tone(a, out, t, { f: (heavy ? 200 : 280) * jit(0.08), f1: heavy ? 70 : 120, dur: heavy ? 0.2 : 0.11, gain: heavy ? 0.16 : 0.1 }); // peso
+    tone(a, out, t, { f: (heavy ? 420 : 560) * jit(0.08), f1: 240, dur: 0.07, gain: heavy ? 0.1 : 0.08 }); // batida oca do osso
+    noise(a, out, t, { dur: heavy ? 0.07 : 0.05, gain: (heavy ? 0.19 : 0.15) * jit(0.15), filters: [{ type: "bandpass", f: 2600 * jit(0.15), q: 1.4 }] });
     tone(a, out, t, { f: 1480 * jit(0.1), dur: 0.1, gain: 0.018 + 0.01 * H, type: "triangle" }); // estalo do osso
     tone(a, out, t + 0.004, { f: 2190 * jit(0.1), dur: 0.07, gain: 0.012 });
   } else if (material === "carne") {
-    tone(a, out, t, { f: (heavy ? 120 : 165) * jit(0.08), f1: heavy ? 50 : 70, dur: heavy ? 0.22 : 0.13, gain: heavy ? 0.21 : 0.14 });
-    noise(a, out, t, { dur: heavy ? 0.12 : 0.08, gain: (heavy ? 0.14 : 0.1) * jit(0.15), kind: "pink", attack: 0.006, filters: [{ type: "bandpass", f: 640 * jit(0.2), f1: 360, q: 0.8 }] });
+    tone(a, out, t, { f: (heavy ? 170 : 220) * jit(0.08), f1: heavy ? 64 : 90, dur: heavy ? 0.22 : 0.13, gain: heavy ? 0.15 : 0.1 });
+    noise(a, out, t, { dur: heavy ? 0.12 : 0.08, gain: (heavy ? 0.2 : 0.15) * jit(0.15), kind: "pink", attack: 0.006, filters: [{ type: "bandpass", f: 820 * jit(0.2), f1: 420, q: 0.8 }] });
     noise(a, out, t + 0.01, { dur: 0.05, gain: 0.025, filters: [{ type: "highpass", f: 2600 }] });
   } else {
-    tone(a, out, t, { f: (heavy ? 140 : 190) * jit(0.08), f1: heavy ? 70 : 100, dur: heavy ? 0.16 : 0.1, gain: heavy ? 0.16 : 0.11 });
+    tone(a, out, t, { f: (heavy ? 180 : 230) * jit(0.08), f1: heavy ? 90 : 120, dur: heavy ? 0.16 : 0.1, gain: heavy ? 0.12 : 0.08 });
     noise(a, out, t, { dur: 0.05, gain: (heavy ? 0.15 : 0.11) * jit(0.15), filters: [{ type: "highpass", f: 3200 }] });
     const base = (heavy ? 540 : 660) * jit(0.08);
     const ring = heavy ? 0.55 : 0.3;
@@ -214,7 +217,7 @@ export function playHeroHurt(): void {
   const v = begin();
   if (!v) return;
   const { a, out, t } = v;
-  tone(a, out, t, { f: 120 * jit(0.06), f1: 48, dur: 0.22, gain: 0.2 });
+  tone(a, out, t, { f: 170 * jit(0.06), f1: 60, dur: 0.22, gain: 0.15 });
   noise(a, out, t, { dur: 0.09, gain: 0.12, filters: [{ type: "bandpass", f: 900 * jit(0.15), q: 0.8 }] });
   noise(a, out, t + 0.05, { dur: 0.22, gain: 0.03, kind: "pink", attack: 0.06, filters: [{ type: "bandpass", f: 700, f1: 420, q: 1 }] }); // o ar escapando
   duckPulse(0.3);
@@ -273,7 +276,8 @@ export function playDoor(kind: "pedra" | "alcapao" = "pedra"): number {
     return 0.7;
   }
   noise(a, out, t, { dur: 1.7, gain: 0.13, kind: "brown", attack: 0.5, filters: [{ type: "lowpass", f: 170, f1: 280 }] }); // arrasto grave
-  noise(a, out, t + 0.1, { dur: 1.5, gain: 0.045, kind: "pink", attack: 0.6, filters: [{ type: "bandpass", f: 330, f1: 520, q: 3 }] }); // atrito
+  noise(a, out, t + 0.1, { dur: 1.5, gain: 0.09, kind: "pink", attack: 0.6, filters: [{ type: "bandpass", f: 330, f1: 620, q: 3 }] }); // atrito
+  noise(a, out, t + 0.2, { dur: 1.3, gain: 0.03, kind: "pink", attack: 0.6, filters: [{ type: "bandpass", f: 1100, f1: 1800, q: 2 }] }); // grão da pedra
   tone(a, out, t, { f: 46, f1: 36, dur: 1.7, gain: 0.09, attack: 0.4 });
   const e = t + 1.62;
   tone(a, out, e, { f: 72, f1: 38, dur: 0.4, gain: 0.2 }); // pedra assenta
@@ -303,9 +307,9 @@ export function playStairs(steps = 6): void {
   for (let k = 0; k < steps; k++) {
     const at = t + k * 0.27 + rr(-0.015, 0.015);
     const fade = 1 - (k / steps) * 0.45;
-    tone(a, out, at, { f: 90 * jit(0.1), f1: 50, dur: 0.12, gain: 0.07 * fade });
+    tone(a, out, at, { f: 150 * jit(0.1), f1: 80, dur: 0.09, gain: 0.06 * fade });
     noise(a, out, at, { dur: 0.04, gain: 0.025 * fade, filters: [{ type: "bandpass", f: 1500 * jit(0.2), q: 1 }] });
-    noise(a, out, at + 0.02, { dur: 0.2, gain: 0.012 * fade, kind: "pink", filters: [{ type: "lowpass", f: 600 }] });
+    noise(a, out, at + 0.02, { dur: 0.2, gain: 0.02 * fade, kind: "pink", filters: [{ type: "bandpass", f: 520, q: 0.8 }] });
   }
 }
 
@@ -315,13 +319,13 @@ export function playEnemyDeath(): void {
   const v = begin();
   if (!v) return;
   const { a, out, t } = v;
-  tone(a, out, t, { f: 140 * jit(0.08), f1: 58, dur: 0.18, gain: 0.15 });
+  tone(a, out, t, { f: 210 * jit(0.08), f1: 80, dur: 0.18, gain: 0.1 });
   noise(a, out, t, { dur: 0.5, gain: 0.03, kind: "pink", attack: 0.03, filters: [{ type: "bandpass", f: 1200, q: 0.8 }] });
   const n = 11;
   for (let k = 0; k < n; k++) {
     const u = k / (n - 1);
     const at = t + 0.03 + 0.55 * (1 - Math.pow(1 - u, 1.7)) + rr(-0.012, 0.012); // intervalos crescem: desacelera
-    const gain = rr(0.035, 0.085) * (1 - 0.7 * u);
+    const gain = rr(0.05, 0.11) * (1 - 0.7 * u);
     noise(a, out, at, { dur: rr(0.02, 0.05), gain, filters: [{ type: "bandpass", f: rr(1300, 3800), q: 3 }] });
     if (k % 2 === 0) tone(a, out, at, { f: rr(520, 900), f1: 330, dur: 0.05, gain: gain * 0.35, type: "triangle" });
   }

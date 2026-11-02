@@ -52,7 +52,7 @@ export class AmbienceScene {
     const t = a.currentTime;
     this.fader = a.createGain();
     this.fader.gain.setValueAtTime(0.0001, t);
-    this.fader.gain.linearRampToValueAtTime(1, t + fadeIn);
+    this.fader.gain.linearRampToValueAtTime(profile.trim, t + fadeIn);
     this.exit = a.createGain();
     this.fader.connect(this.exit).connect(out);
 

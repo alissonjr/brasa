@@ -58,6 +58,14 @@ import {
   updateAmbience,
   playWhisper,
   playStir,
+  bindGameAudio,
+  updateFootsteps,
+  playPotion,
+  playPickup,
+  playDoor,
+  playBrazierLit,
+  playStairs,
+  playGuardianVoice,
   CombatDirector,
   CombatHud,
   DamageNumbers,
@@ -144,6 +152,7 @@ async function main(): Promise<void> {
   configureMusic(musicVolume);
   configureStingers(musicVolume);
   configureAmbience(musicVolume); // ambiência adaptativa (textura musical -> volume de música)
+  bindGameAudio(platform.events); // efeitos por evento (morte de inimigo); passos e portas abaixo
   mountMuteButton(platform.settings);
   const persistente = await requestPersistentStorage();
   console.log(`[plataforma] storage persistente: ${persistente}`);
@@ -261,6 +270,9 @@ async function main(): Promise<void> {
   let roomCleared = false;
   let floorDepth = 0; // ESTILO (Bloco 4): profundidade do andar atual (0..1) p/ a ambiência
   let ambAcc = 0; // acumulador de throttle do setAmbience
+  let stepPx: number | null = null; // posição anterior do herói (passos)
+  let stepPy = 0;
+  let stepPz = 0;
   let passageOpen = false;
   // NARRATIVA (W8): a Acendedora desce o poço para reacender a GRANDE BRASA no fundo. Cada
   // câmara guarda uma ESTILHA de Brasa (no relicário/altar) que os mortos velam; recuperá-la
@@ -508,7 +520,7 @@ async function main(): Promise<void> {
       currentBoss.bindArena(room.arena); // a arena reage à gangorra de luz da Brasa
       platform.events.emit("crypt:floor", { index: i, kind: def.kind });
       console.log(`[descida] andar ${i + 1}/${DESCENT.length} (${def.kind}): GUARDIÃO`);
-      if (announce) playStinger("guardiao"); // avistar o Guardião (stinger grave e ominoso)
+      if (announce) { playStinger("guardiao"); window.setTimeout(() => playGuardianVoice("rugido"), 600); } // avistar o Guardião (stinger grave + rugido)
       // Confronto encenado: a Primeira Acendedora fala antes de atacar (canon, narrativa §0).
       if (announce) window.setTimeout(() => { if (combat.bossActive) gameHud.say("voz", T.falaGuardiao1, 5000); }, 1400);
     } else {
@@ -646,6 +658,7 @@ async function main(): Promise<void> {
     gameActive = false; // pausa a simulação durante a transição/escolha
     promptEl.style.opacity = "0";
     document.exitPointerLock(); // libera o mouse para clicar na escolha de dádiva
+    playStairs(); // a descida pelo alçapão (passos de pedra descendo)
     await fadeTo(1);
     if (floorIndex + 1 >= DESCENT.length) {
       descentDone = true; // fim do slice: a Brasa foi reavivada
@@ -655,6 +668,7 @@ async function main(): Promise<void> {
       route.choose(floorIndex, "alcapao");
       hero.combat.healByMax(hero.combat.brazierHealFrac); // acender o braseiro cura (respiro; Braseiro Quente sobe)
       combatHud.flashHeal();
+      playBrazierLit();
       healChime();
       await chooseBoon(); // gasta Fagulha numa dádiva (tela preta atrás)
       announceNext = true;
@@ -790,8 +804,8 @@ async function main(): Promise<void> {
               x: d.x - 0.3, y: 1.9, z: d.z,
             })),
           ]);
-          window.setTimeout(() => playStinger("saidaAlcapao"), 380);
-          for (const d of doors) window.setTimeout(() => playStinger(d.kind === "bancada" ? "saidaBancada" : "saidaEstante"), 820);
+          window.setTimeout(() => { playStinger("saidaAlcapao"); playDoor("alcapao"); }, 380);
+          for (const d of doors) window.setTimeout(() => { playStinger(d.kind === "bancada" ? "saidaBancada" : "saidaEstante"); playDoor("pedra"); }, 820);
         }
         gameHud.toast(F(doors.length > 0 ? "estilhaRecuperadaPortas" : "estilhaRecuperada", { n: fragments }));
       }
@@ -899,6 +913,7 @@ async function main(): Promise<void> {
         inv.vida -= 1;
         hero.combat.heal(hero.combat.maxHealth * POTIONS.vida.healFrac);
         combatHud.flashHeal();
+        playPotion();
         healChime();
         updatePotionHud();
       }
@@ -906,6 +921,7 @@ async function main(): Promise<void> {
     if (input.consumePressed("potion2") && inv.furia > 0 && hero.combat.canDrink) {
       inv.furia -= 1;
       hero.combat.applyDamageBuff(POTIONS.furia.dmgBonus, POTIONS.furia.durationSec);
+      playPotion();
       updatePotionHud();
     }
     // Execução (F): mata o inimigo em vacilo (vida baixa) ao alcance, com cura + Fagulha + VFX.
@@ -917,7 +933,7 @@ async function main(): Promise<void> {
       updateBrasaHud();
     }
     // Pegar arma (G): equipa a arma dropada (clava do gigante / cajado do mago) ao alcance.
-    if (input.consumePressed("pickup")) combat.pickupNearby();
+    if (input.consumePressed("pickup") && combat.pickupNearby()) playPickup("item");
     // Lock-on (T): trava/destrava o alvo à frente da câmera (mira gruda; retículo no HUD).
     if (input.consumePressed("lockOn")) combat.toggleLock();
   };
@@ -934,6 +950,17 @@ async function main(): Promise<void> {
   scene.onBeforeRenderObservable.add(() => {
     const dt = engine.getDeltaTime() / 1000;
     camera.update(hero.position, dt);
+    // ÁUDIO: passos pela distância percorrida (velocidade plana do herói; pula teletransporte).
+    {
+      const hp = hero.position;
+      if (gameActive && !descending && dt > 0 && stepPx !== null) {
+        const sp = Math.hypot(hp.x - stepPx, hp.z - stepPz) / dt;
+        if (sp < 14) updateFootsteps(dt, sp, Math.abs(hp.y - stepPy) / dt < 1.5, floorIndex);
+      }
+      stepPx = hp.x;
+      stepPy = hp.y;
+      stepPz = hp.z;
+    }
     // ESTILO (Bloco 4, §4.4a): ambiência adaptativa. updateAmbience todo frame (batida da
     // Brasa); setAmbience throttled (4x/s) para não agendar rampas demais.
     if (gameActive) {

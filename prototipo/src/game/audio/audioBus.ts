@@ -23,15 +23,15 @@ export type AudioGroup = "music" | "ambience" | "stinger" | "sfx" | "ui";
 
 /** Ganho de calibragem por grupo (loudness relativo; ver docs/brasa/biblia-audio.md §Mixagem). */
 export const GROUP_TRIM: Record<AudioGroup, number> = {
-  music: 1,
-  ambience: 1,
+  music: 0.8,
+  ambience: 1.4,
   stinger: 1,
-  sfx: 1,
-  ui: 0.8,
+  sfx: 1.4,
+  ui: 1,
 };
 
-/** Teto do limitador final: -3,2 dBFS (picos do jogo inteiro ficam abaixo de -3 dBFS). */
-export const CEILING = 0.69;
+/** Teto do limitador final: -3,1 dBFS (picos do jogo inteiro ficam abaixo de -3 dBFS). */
+export const CEILING = 0.7;
 
 interface GroupNodes {
   input: GainNode; // volume das opções * trim
@@ -154,7 +154,7 @@ export function buildBus(ctx: BaseAudioContext): Bus {
   limiter.release.value = 0.09;
   const shaper = ctx.createWaveShaper();
   shaper.curve = ceilingCurve();
-  shaper.oversample = "4x";
+  shaper.oversample = "none"; // com oversample o filtro de reamostragem passa o teto em ~1 dB
   const master = ctx.createGain();
   premix.connect(comp).connect(limiter).connect(shaper).connect(master).connect(ctx.destination);
 

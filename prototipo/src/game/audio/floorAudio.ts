@@ -26,6 +26,8 @@ export interface AmbienceProfile {
   ember: { rate: number; level: number };
   /** Rangido de ferro (eventos por minuto; nível). */
   creak: { rate: number; level: number };
+  /** Calibragem de loudness do andar (multiplica a cena inteira): iguala os 7 andares em ~-31 LUFS. */
+  trim: number;
 }
 
 export interface MusicProfile {
@@ -46,19 +48,19 @@ export interface MusicProfile {
 
 export const AMBIENCE_PROFILES: AmbienceProfile[] = [
   // 0 arenito frio: vento de poeira entre raízes, uma gota rara.
-  { name: "arenito", wind: { lo: 200, hi: 420, q: 0.6, level: 0.042 }, breath: { level: 0.03, period: [10, 14] }, drip: { rate: 3, level: 0.03 }, ember: { rate: 0, level: 0 }, creak: { rate: 0, level: 0 } },
+  { name: "arenito", wind: { lo: 200, hi: 420, q: 0.6, level: 0.042 }, breath: { level: 0.03, period: [10, 14] }, drip: { rate: 3, level: 0.03 }, ember: { rate: 0, level: 0 }, creak: { rate: 0, level: 0 }, trim: 1.29 },
   // 1 basalto: ar parado e pesado, cinzas, uma brasa que estala de longe (acampamento apagado).
-  { name: "basalto", wind: { lo: 130, hi: 290, q: 0.6, level: 0.04 }, breath: { level: 0.04, period: [11, 15] }, drip: { rate: 5, level: 0.03 }, ember: { rate: 2, level: 0.02 }, creak: { rate: 0, level: 0 } },
+  { name: "basalto", wind: { lo: 130, hi: 290, q: 0.6, level: 0.04 }, breath: { level: 0.04, period: [11, 15] }, drip: { rate: 5, level: 0.03 }, ember: { rate: 2, level: 0.02 }, creak: { rate: 0, level: 0 }, trim: 1.25 },
   // 2 calcário com gelo (cisterna): gotejamento constante e ar frio e arejado.
-  { name: "calcario", wind: { lo: 260, hi: 520, q: 0.7, level: 0.03 }, breath: { level: 0.025, period: [10, 13] }, drip: { rate: 15, level: 0.05 }, ember: { rate: 0, level: 0 }, creak: { rate: 0, level: 0 } },
+  { name: "calcario", wind: { lo: 260, hi: 520, q: 0.7, level: 0.03 }, breath: { level: 0.025, period: [10, 13] }, drip: { rate: 15, level: 0.05 }, ember: { rate: 0, level: 0 }, creak: { rate: 0, level: 0 }, trim: 1.66 },
   // 3 ferro: grades que rangem, primeiras brasas.
-  { name: "ferro", wind: { lo: 150, hi: 330, q: 0.7, level: 0.036 }, breath: { level: 0.035, period: [10, 14] }, drip: { rate: 2, level: 0.025 }, ember: { rate: 5, level: 0.025 }, creak: { rate: 3, level: 0.04 } },
+  { name: "ferro", wind: { lo: 150, hi: 330, q: 0.7, level: 0.036 }, breath: { level: 0.035, period: [10, 14] }, drip: { rate: 2, level: 0.025 }, ember: { rate: 5, level: 0.025 }, creak: { rate: 3, level: 0.04 }, trim: 1.4 },
   // 4 osso e cal (luto): respiração do poço em primeiro plano, vento fino como sussurro.
-  { name: "osso", wind: { lo: 320, hi: 620, q: 0.8, level: 0.03 }, breath: { level: 0.055, period: [9, 12] }, drip: { rate: 3, level: 0.025 }, ember: { rate: 0, level: 0 }, creak: { rate: 0.5, level: 0.025 } },
+  { name: "osso", wind: { lo: 320, hi: 620, q: 0.8, level: 0.03 }, breath: { level: 0.042, period: [9, 12] }, drip: { rate: 3, level: 0.025 }, ember: { rate: 0, level: 0 }, creak: { rate: 0.5, level: 0.025 }, trim: 1.15 },
   // 5 vulcânico: rumor grave, brasas estalando, ferro que dilata.
-  { name: "vulcanico", wind: { lo: 110, hi: 250, q: 0.6, level: 0.05 }, breath: { level: 0.045, period: [9, 12] }, drip: { rate: 0, level: 0 }, ember: { rate: 18, level: 0.035 }, creak: { rate: 1.5, level: 0.03 } },
+  { name: "vulcanico", wind: { lo: 110, hi: 250, q: 0.6, level: 0.05 }, breath: { level: 0.045, period: [9, 12] }, drip: { rate: 0, level: 0 }, ember: { rate: 18, level: 0.035 }, creak: { rate: 1.5, level: 0.03 }, trim: 1.04 },
   // 6 obsidiana: o poço respira fundo; brasas lentas, quase nada além disso.
-  { name: "obsidiana", wind: { lo: 90, hi: 200, q: 0.6, level: 0.038 }, breath: { level: 0.065, period: [8, 11] }, drip: { rate: 0, level: 0 }, ember: { rate: 10, level: 0.03 }, creak: { rate: 0, level: 0 } },
+  { name: "obsidiana", wind: { lo: 90, hi: 200, q: 0.6, level: 0.038 }, breath: { level: 0.046, period: [8, 11] }, drip: { rate: 0, level: 0 }, ember: { rate: 10, level: 0.03 }, creak: { rate: 0, level: 0 }, trim: 1.05 },
 ];
 
 export const MUSIC_PROFILES: MusicProfile[] = [
@@ -80,7 +82,7 @@ export const MUSIC_PROFILES: MusicProfile[] = [
 
 /** Perfil da tela-título: ré eólio quente, esparso. */
 export const TITLE_MUSIC: MusicProfile = { root: 50, scale: [0, 2, 3, 5, 7, 8, 10], prog: [0, 5, 0, 6], motifLo: 64, motifHi: 79, phraseGap: [9, 14], bright: 2300 };
-export const TITLE_AMBIENCE: AmbienceProfile = { name: "titulo", wind: { lo: 150, hi: 320, q: 0.6, level: 0.03 }, breath: { level: 0.035, period: [10, 14] }, drip: { rate: 0, level: 0 }, ember: { rate: 14, level: 0.03 }, creak: { rate: 0, level: 0 } };
+export const TITLE_AMBIENCE: AmbienceProfile = { name: "titulo", wind: { lo: 150, hi: 320, q: 0.6, level: 0.03 }, breath: { level: 0.035, period: [10, 14] }, drip: { rate: 0, level: 0 }, ember: { rate: 14, level: 0.03 }, creak: { rate: 0, level: 0 }, trim: 1.3 };
 
 export const FLOOR_COUNT = AMBIENCE_PROFILES.length;
 
