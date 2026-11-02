@@ -2,7 +2,6 @@ import { MeshBuilder, StandardMaterial, Color3, Animation } from "@babylonjs/cor
 import type { GlowLayer, Mesh, TransformNode, Scene } from "@babylonjs/core";
 import { createLightPool } from "@engine";
 import type { DoorSpot } from "./cryptLayouts";
-import type { NodeKind } from "../../run/rota";
 
 /**
  * CAMADA JOGO (Brasa). Porta lateral de um andar: o efeito de luz que acompanha o portao de
@@ -11,7 +10,10 @@ import type { NodeKind } from "../../run/rota";
  * no chao, na cor da antecamara. Nascem apagados e acendem junto do alcapao (R1).
  * Cor tambem nunca e o unico canal: o icone, o nome e a forma (arco x anel) distinguem as saidas.
  */
-export const DOOR_COLOR: Record<NodeKind, string> = {
+/** Tom da luz de uma porta. Peça reaproveitável: a fase R1 a usa como brilho da porta de pedra da antessala. */
+export type DoorTone = "estante" | "bancada" | "esquecida";
+
+export const DOOR_COLOR: Record<DoorTone, string> = {
   estante: "#f2c46d", // --gold-300
   bancada: "#7fcf8f", // --life-400
   esquecida: "#8fd6e6", // --frost-300
@@ -25,7 +27,7 @@ export interface SideDoorFx {
   dispose(): void;
 }
 
-export function buildSideDoor(scene: Scene, glow: GlowLayer, parent: TransformNode, spot: DoorSpot, kind: NodeKind): SideDoorFx {
+export function buildSideDoor(scene: Scene, glow: GlowLayer, parent: TransformNode, spot: DoorSpot, kind: DoorTone): SideDoorFx {
   const col = DOOR_COLOR[kind];
   const veilMat = new StandardMaterial("porta_veu_mat", scene);
   veilMat.diffuseColor = Color3.Black();
