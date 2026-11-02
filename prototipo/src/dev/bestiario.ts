@@ -12,13 +12,13 @@ import { HeroModel, type HeroAction } from "../game/actors/heroModel";
  * coerencia de estilo (escala, paleta, contorno) sem precisar jogar ate cada inimigo.
  * Abre em /bestiario.html. Parametros: ?pose=0..N (rotacao), ?cam=perto|alta.
  */
-interface Cast { nome: string; model: string; height: number; face: number; humanoide?: boolean; heroi?: boolean; }
+interface Cast { nome: string; model: string; height: number; face: number; humanoide?: boolean; heroi?: boolean; morto?: string; }
 const TODOS: Cast[] = [
-  { nome: "Acendedora", model: "/models/personagens/heroina.glb", height: 1.8, face: 0, humanoide: true, heroi: true },
-  { nome: "Minion", model: "/models/Skeleton_Minion.glb", height: 1.55, face: 0 },
-  { nome: "Guerreiro", model: "/models/Skeleton_Warrior.glb", height: 1.85, face: 0 },
-  { nome: "Ladino", model: "/models/Skeleton_Rogue.glb", height: 1.78, face: 0 },
-  { nome: "Pesado", model: "/models/Skeleton_Warrior.glb", height: 2.45, face: 0 },
+  { nome: "Acendedora", model: "/models/personagens/heroina.glb", height: 1.8, face: Math.PI, humanoide: true, heroi: true },
+  { nome: "Minion", model: "/models/personagens/morto_aldeao.glb", height: 1.8, face: Math.PI, humanoide: true, morto: "idle" },
+  { nome: "Guerreiro", model: "/models/personagens/morto_guerreiro.glb", height: 1.85, face: Math.PI, humanoide: true, morto: "idle" },
+  { nome: "Ladino", model: "/models/personagens/morto_ladino.glb", height: 1.78, face: Math.PI, humanoide: true, morto: "idle" },
+  { nome: "Pesado", model: "/models/personagens/morto_guerreiro.glb", height: 2.45, face: Math.PI, humanoide: true, morto: "idle" },
   { nome: "Antigo", model: "/models/quaternius_monsters/orc_skull.glb", height: 2.0, face: Math.PI },
   { nome: "Demonio", model: "/models/quaternius_monsters/demon.glb", height: 1.95, face: Math.PI },
   { nome: "Brutamonte", model: "/models/quaternius_monsters/yeti.glb", height: 2.5, face: Math.PI },
@@ -33,6 +33,8 @@ const ELENCO = q.get("pick") ? q.get("pick")!.split(",").map((i) => TODOS[Number
 const canvas = document.getElementById("c") as HTMLCanvasElement;
 const engine = new Engine(canvas, true, { stencil: true, preserveDrawingBuffer: true });
 const scene = new Scene(engine);
+// ?maxvu=200 simula um GPU com poucas uniformes de vertice (testa o recuo do contorno, outline.ts)
+if (q.get("maxvu")) engine.getCaps().maxVertexUniformVectors = Number(q.get("maxvu"));
 scene.clearColor = new Color4(0.02, 0.03, 0.05, 1);
 
 const total = (ELENCO.length - 1) * GAP;
@@ -63,7 +65,7 @@ floor.material = fm;
       // O herói de verdade (HeroModel): mostra a lâmina, a brasa e as ações do jogo. ?acao=light|heavy|dodge|block|hit|ember e ?frac=0..1
       const hm = new HeroModel(scene, { name: "heroi_dev" });
       hm.root.position.set(-total / 2 + i * GAP, 0.9, 0);
-      hm.root.rotation.y = Number(q.get("rot") ?? 0);
+      hm.root.rotation.y = Number(q.get("rot") ?? Math.PI);
       (window as unknown as { __hm: HeroModel }).__hm = hm;
       const dev = hm as unknown as { loaded: boolean; actionGroup?: { goToFrame(f: number): void; pause(): void; from: number; to: number } };
       while (!dev.loaded) await new Promise((r) => setTimeout(r, 100));
@@ -80,14 +82,18 @@ floor.material = fm;
     const r = await ImportMeshAsync(c.model, scene, { pluginExtension: ".glb" });
     const top = r.meshes[0]!;
     const holder = new TransformNode("h" + i, scene);
-    top.parent = holder;
+    // fit separado: o __root__ do loader guarda a conversao de mao-dupla; nao pode ser zerado
+    const fit = new TransformNode("fit" + i, scene);
+    fit.parent = holder;
+    top.parent = fit;
     top.computeWorldMatrix(true);
     let b = top.getHierarchyBoundingVectors(true);
     const s = c.height / Math.max(0.001, b.max.y - b.min.y);
-    top.scaling.setAll(s);
+    fit.scaling.setAll(s);
+    fit.computeWorldMatrix(true);
     top.computeWorldMatrix(true);
     b = top.getHierarchyBoundingVectors(true);
-    top.position.set(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
+    fit.position.set(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
     holder.position.set(-total / 2 + i * GAP, 0, 0);
     holder.rotation.y = c.face + (Number(q.get("pose") ?? 0) * Math.PI) / 4;
     semContornoNosOlhos(holder);
@@ -95,7 +101,7 @@ floor.material = fm;
     for (const g of r.animationGroups) g.stop();
     if (c.humanoide) {
       const lib = await loadAnimLibrary(scene);
-      const nome = q.get("clip") ?? "Idle_Loop";
+      const nome = q.get("clip") ?? (c.morto ? "Zombie_Idle_Loop" : "Idle_Loop");
       const g = retargetClips(lib, top as TransformNode, "b" + i, { x: nome }).x;
       if (g) {
         g.start(true);

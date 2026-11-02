@@ -1,6 +1,8 @@
 import { Color3, TransformNode, Vector3 } from "@babylonjs/core";
-import type { AbstractMesh, AnimationGroup, AssetContainer, Scene, StandardMaterial } from "@babylonjs/core";
-import { AttackState, StateMachine, Ticker, Health, loadContainer, outlineHierarchy, type Hurtbox } from "@engine";
+import type { AbstractMesh, AnimationGroup, AssetContainer, Material, Scene, Skeleton as Skeleton_ } from "@babylonjs/core";
+import { AttackState, StateMachine, Ticker, Health, loadContainer, outlineHierarchy, getContactShadows, type ContactShadowHandle, type Hurtbox } from "@engine";
+import { gradeMonsterMaterials } from "../actorGrade";
+import { loadAnimLibrary, retargetClips, semContornoNosOlhos } from "../quaterniusRig";
 import type { CombatTarget } from "../../combat/combatTarget";
 import { type AttackTuning } from "../../combat/tuning";
 import { HealthBar3D } from "../../combat/healthBar3d";
@@ -59,23 +61,36 @@ interface SkelStats {
   tellProfile?: TellProfile; // assinatura SONORA do tell (default basic)
   poise: number; // postura: o golpe do heroi drena; ao zerar, CAMBALEIA (interrompe a antecipacao)
   canUnblockable?: boolean; // pode telegrafar um golpe INQUEBRAVEL (ignora bloqueio; forca esquiva)
+  monsterExposure?: number; // monstro nao humanoide: multiplicador da exposicao da tinta (yeti branco < 1)
+  humanoid?: HumanoidSpec; // corpo Quaternius (UBC + roupa): animacoes da UAL por retarget, olhos ciano
 }
+
+/** Variacao de um morto humanoide sobre o mesmo corpo/rig (ver quaterniusRig.ts e tools/personagens). */
+interface HumanoidSpec {
+  attack: string; // clipe da UAL do golpe
+  tint?: string; // multiplicador de cor (hex) sobre pele e roupa: elites mais quentes/escuras
+  eyes?: number; // intensidade do brilho ciano dos olhos (1 = padrao)
+}
+
+const MORTOS = "/models/personagens/";
+type EmissiveMat = Material & { emissiveColor: Color3 };
+const clampN = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 
 const STATS: Record<SkeletonKind, SkelStats> = {
   minion: {
-    model: "/models/Skeleton_Minion.glb", height: 1.55, hp: 30, moveSpeed: 3.2, attackRange: 2.0, approachUntil: 1.8, cooldownSec: 0.35,
+    model: MORTOS + "morto_aldeao.glb", humanoid: { attack: "Zombie_Scratch" }, height: 1.7, hp: 30, moveSpeed: 3.2, attackRange: 2.0, approachUntil: 1.8, cooldownSec: 0.35,
     overhead: { startup: 0.35, active: 0.1, recovery: 0.45, damage: 8, knockback: 0, hitStopFrames: 4 }, damage: 8, guards: false, reward: 3, poise: 12,
   },
   warrior: {
-    model: "/models/Skeleton_Warrior.glb", height: 1.85, hp: 60, moveSpeed: 2.4, attackRange: 2.2, approachUntil: 2.0, cooldownSec: 0.5,
+    model: MORTOS + "morto_guerreiro.glb", humanoid: { attack: "Melee_Hook" }, height: 1.85, hp: 60, moveSpeed: 2.4, attackRange: 2.2, approachUntil: 2.0, cooldownSec: 0.5,
     overhead: { startup: 0.6, active: 0.12, recovery: 0.75, damage: 16, knockback: 0, hitStopFrames: 6 }, damage: 16, guards: false, reward: 4, poise: 25,
   },
   rogue: {
-    model: "/models/Skeleton_Rogue.glb", height: 1.78, hp: 42, moveSpeed: 3.7, attackRange: 2.0, approachUntil: 1.8, cooldownSec: 0.3,
+    model: MORTOS + "morto_ladino.glb", humanoid: { attack: "Punch_Jab" }, height: 1.78, hp: 42, moveSpeed: 3.7, attackRange: 2.0, approachUntil: 1.8, cooldownSec: 0.3,
     overhead: { startup: 0.32, active: 0.08, recovery: 0.42, damage: 11, knockback: 1, hitStopFrames: 5 }, damage: 11, guards: false, reward: 4, tellProfile: "swift", poise: 14,
   },
   heavy: {
-    model: "/models/Skeleton_Warrior.glb", height: 2.45, hp: 130, moveSpeed: 1.5, attackRange: 2.7, approachUntil: 2.3, cooldownSec: 0.85,
+    model: MORTOS + "morto_guerreiro.glb", humanoid: { attack: "Melee_Hook", tint: "#c9a79a", eyes: 1.3 }, height: 2.45, hp: 130, moveSpeed: 1.5, attackRange: 2.7, approachUntil: 2.3, cooldownSec: 0.85,
     overhead: { startup: 0.95, active: 0.15, recovery: 0.85, damage: 28, knockback: 3, hitStopFrames: 10 }, damage: 28, guards: true, reward: 8, tellProfile: "heavy", poise: 65, canUnblockable: true,
   },
   // Antigo: morto de profundidade, mais vida e golpe forte. Bestiário §3. (Repontado para
@@ -86,7 +101,7 @@ const STATS: Record<SkeletonKind, SkelStats> = {
   },
   // Sentinela: elite pré-chefe, enorme, tanque, bloqueia; drop alto. Bestiário §3.
   sentinela: {
-    model: "/models/Skeleton_Warrior.glb", height: 2.7, hp: 200, moveSpeed: 1.7, attackRange: 2.9, approachUntil: 2.5, cooldownSec: 0.8,
+    model: MORTOS + "morto_guerreiro.glb", humanoid: { attack: "Melee_Hook", tint: "#d6b48a", eyes: 1.6 }, height: 2.7, hp: 200, moveSpeed: 1.7, attackRange: 2.9, approachUntil: 2.5, cooldownSec: 0.8,
     overhead: { startup: 0.85, active: 0.15, recovery: 0.85, damage: 32, knockback: 4, hitStopFrames: 12 }, damage: 32, guards: true, reward: 20, tellProfile: "heavy", poise: 95, canUnblockable: true,
   },
 
@@ -99,7 +114,7 @@ const STATS: Record<SkeletonKind, SkelStats> = {
   },
   // Brutamonte: tanque lento e ENORME, golpe pesado lento de ler, bloqueia leve frontal.
   brutamonte: {
-    model: "/models/quaternius_monsters/yeti.glb", height: 2.5, hp: 150, moveSpeed: 1.6, attackRange: 2.8, approachUntil: 2.4, cooldownSec: 0.8,
+    model: "/models/quaternius_monsters/yeti.glb", monsterExposure: 0.7, height: 2.5, hp: 150, moveSpeed: 1.6, attackRange: 2.8, approachUntil: 2.4, cooldownSec: 0.8,
     overhead: { startup: 0.9, active: 0.15, recovery: 0.8, damage: 30, knockback: 4, hitStopFrames: 11 }, damage: 30, guards: true, reward: 12,
     behavior: "melee", faceOffset: Math.PI, tellProfile: "heavy", poise: 75, canUnblockable: true,
   },
@@ -113,18 +128,16 @@ const STATS: Record<SkeletonKind, SkelStats> = {
   // Projetil JUSTO (design de bullet legivel): antecipacao longa (cast 0.95s), tiro LENTO
   // (esquivavel a pe ou com a esquiva) e cadencia espacada (cooldown 1.8s) para nao saturar.
   conjurador: {
-    model: "/models/quaternius_monsters/mushroomking.glb", height: 2.1, hp: 70, moveSpeed: 1.8, attackRange: 11, approachUntil: 9, cooldownSec: 1.8,
+    model: MORTOS + "morto_conjurador.glb", humanoid: { attack: "Spell_Simple_Shoot", eyes: 1.2 }, height: 1.95, hp: 70, moveSpeed: 1.8, attackRange: 11, approachUntil: 9, cooldownSec: 1.8,
     overhead: { startup: 0.95, active: 0.12, recovery: 0.7, damage: 14, knockback: 1, hitStopFrames: 6 }, damage: 14, guards: false, reward: 10,
-    // O mushroomking (Quaternius) e o UNICO do pacote modelado virado para +Z (os demais -
-    // demon/yeti/ninja - viram para -Z e usam faceOffset Math.PI). Com Math.PI ele dava as
-    // costas ao heroi; faceOffset 0 o faz encarar. Verificado por render dos 4 modelos.
+    // Humanoide Quaternius (corpo UBC + roupa de camponesa): olha para +Z, sem faceOffset.
     behavior: "ranged", projectileSpeed: 6.5, faceOffset: 0, tellProfile: "cast", poise: 18,
   },
   // Arqueiro: esqueleto ranged ágil. Reusa a máquina ranged (mira telegrafada ~0.9s +
   // projétil lento esquivável do CombatDirector). Sem guarda, HP/poise baixos: força o
   // jogador a fechar distância e usar a cobertura dos pilares (bíblia-bestiário 3.3).
   arqueiro: {
-    model: "/models/Skeleton_Rogue.glb", height: 1.78, hp: 38, moveSpeed: 3.0, attackRange: 10, approachUntil: 8, cooldownSec: 1.5,
+    model: MORTOS + "morto_ladino.glb", humanoid: { attack: "OverhandThrow", tint: "#a9bfc4" }, height: 1.78, hp: 38, moveSpeed: 3.0, attackRange: 10, approachUntil: 8, cooldownSec: 1.5,
     overhead: { startup: 0.9, active: 0.1, recovery: 0.6, damage: 12, knockback: 1, hitStopFrames: 5 }, damage: 12, guards: false, reward: 8,
     behavior: "ranged", projectileSpeed: 8.5, faceOffset: Math.PI, tellProfile: "cast", poise: 14,
   },
@@ -163,8 +176,12 @@ export class Skeleton implements CombatTarget {
 
   private readonly scene: Scene;
   private rootNode: TransformNode | null = null;
-  private mats: StandardMaterial[] = [];
+  private mats: EmissiveMat[] = [];
   private matEmissive0: Color3[] = [];
+  private ownMats: Material[] = []; // materiais proprios da instancia (liberados no dispose)
+  private skeletons: Skeleton_[] = [];
+  private glowMeshes: AbstractMesh[] = [];
+  private contact: ContactShadowHandle | null = null;
 
   private readonly sm = new StateMachine<Mode>("approach");
   private readonly ai = new Ticker(0.12);
@@ -291,19 +308,35 @@ export class Skeleton implements CombatTarget {
     this.disposed = true;
     for (const g of this.animGroups) g.dispose();
     this.animGroups = [];
+    this.contact?.dispose();
+    this.contact = null;
+    const glow = this.scene.getGlowLayerByName("glow");
+    for (const m of this.glowMeshes) glow?.removeIncludedOnlyMesh(m as never);
+    this.glowMeshes = [];
     this.hpBar?.dispose();
     this.hpBar = null;
-    this.rootNode?.dispose(false, true);
+    // Nao derruba material/textura do container em cache (compartilhados entre inimigos do tipo):
+    // so os materiais PROPRIOS desta instancia e o esqueleto do Babylon (vazava um por morto).
+    this.rootNode?.dispose(false, false);
     this.rootNode = null;
+    for (const m of this.ownMats) m.dispose(false, false);
+    this.ownMats = [];
+    for (const sk of this.skeletons) sk.dispose();
+    this.skeletons = [];
   }
 
   private async load(spawn: Vector3): Promise<void> {
     const container = await loadModel(this.scene, this.stats.model);
-    const entries = container.instantiateModelsToScene(undefined, false);
+    const hum = this.stats.humanoid;
+    // Materiais POR INSTANCIA (texturas compartilhadas): o flash de dano e a telegrafia de um
+    // morto nao acendem os irmaos do mesmo tipo nem os que aparecem nos andares seguintes.
+    const entries = container.instantiateModelsToScene(undefined, true);
     const model = entries.rootNodes[0] as TransformNode | undefined;
+    this.skeletons = entries.skeletons;
     if (!model || this.disposed) {
       for (const g of entries.animationGroups) g.dispose();
-      model?.dispose(false, true);
+      model?.dispose(false, false);
+      for (const sk of this.skeletons) sk.dispose();
       return;
     }
     this.animGroups = entries.animationGroups;
@@ -317,19 +350,29 @@ export class Skeleton implements CombatTarget {
     // lógico (hurtbox/IA), por isso "nunca aparecia em cena". Só depois levo o root ao spawn.
     rootNode.position.setAll(0);
 
-    model.parent = rootNode;
-    model.rotationQuaternion = null;
-    model.position.setAll(0);
-    model.rotation.setAll(0);
-    model.scaling.setAll(1);
+    let fitNode: TransformNode = model;
+    if (hum) {
+      // Humanoide Quaternius: o __root__ do loader guarda a conversao de mao-dupla (nao pode ser
+      // zerado como nos KayKit/monstros); a escala e o aterramento vao num no de encaixe.
+      fitNode = new TransformNode("skeleton_fit", this.scene);
+      fitNode.parent = rootNode;
+      model.parent = fitNode;
+    } else {
+      model.parent = rootNode;
+      model.rotationQuaternion = null;
+      model.position.setAll(0);
+      model.rotation.setAll(0);
+      model.scaling.setAll(1);
+    }
     model.computeWorldMatrix(true);
     let b = model.getHierarchyBoundingVectors(true);
     const scale = this.stats.height / Math.max(0.001, b.max.y - b.min.y);
-    model.scaling.setAll(scale);
+    fitNode.scaling.setAll(scale);
+    fitNode.computeWorldMatrix(true);
     model.computeWorldMatrix(true);
     b = model.getHierarchyBoundingVectors(true);
     // root na origem => bounds locais: centra em XZ e aterra os pés na cota do root.
-    model.position.set(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
+    fitNode.position.set(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
     this.torsoY = this.stats.height * 0.5;
 
     // agora sim posiciona no spawn e enterra para a animação de emergir (sobe rasgando o chão).
@@ -337,29 +380,62 @@ export class Skeleton implements CombatTarget {
     rootNode.position.y = spawn.y - RISE_DEPTH;
     this.emergeTimer = EMERGE_SEC;
 
+    const glow = this.scene.getGlowLayerByName("glow");
     const meshes = model.getChildMeshes(false) as AbstractMesh[];
     for (const m of meshes) {
       m.isPickable = false;
-      const mat = m.material as StandardMaterial | null;
-      if (mat && "emissiveColor" in mat && !this.mats.includes(mat)) {
-        this.mats.push(mat);
-        this.matEmissive0.push(mat.emissiveColor?.clone?.() ?? Color3.Black());
+      const mat = m.material as (Material & { emissiveColor?: Color3; albedoColor?: Color3; emissiveIntensity?: number }) | null;
+      if (!mat) continue;
+      if (!this.ownMats.includes(mat)) this.ownMats.push(mat);
+      if (hum && /olhos/i.test(m.name)) {
+        // Olhos espectrais: emissivo ciano que nao entra no flash/telegrafia e brilha no glow.
+        mat.emissiveIntensity = hum.eyes ?? 1;
+        glow?.addIncludedOnlyMesh(m as never);
+        this.glowMeshes.push(m);
+        continue;
+      }
+      if (hum?.tint && mat.albedoColor) mat.albedoColor = mat.albedoColor.multiply(Color3.FromHexString(hum.tint));
+      if ("emissiveColor" in mat && mat.emissiveColor && !this.mats.includes(mat as EmissiveMat)) {
+        this.mats.push(mat as EmissiveMat);
+        this.matEmissive0.push(mat.emissiveColor.clone());
       }
     }
-    // ESTILO (Bloco 1, spec-estilo-visual-render §4.1b): contorno de tinta. Escala com o porte
-    // (inimigos maiores, linha mais grossa). Acompanha o esqueleto (renderOutline nativo).
-    outlineHierarchy(model, { width: this.stats.height * 0.018 });
+    // Monstros nao humanoides (Quaternius saturado): tinta da paleta (dessatura, esfria as sombras).
+    if (!hum) gradeMonsterMaterials(this.ownMats, this.stats.monsterExposure ?? 1);
+    // ESTILO (Bloco 1, spec-estilo-visual-render §4.1b): contorno de tinta. Largura em METROS de
+    // mundo (igual para todo ator, qualquer escala do modelo). Acompanha o esqueleto.
+    if (hum) semContornoNosOlhos(model);
+    outlineHierarchy(model, { worldWidth: this.stats.height * 0.016 });
+    this.contact = getContactShadows(this.scene).add(rootNode, Math.max(0.45, this.stats.height * 0.3));
+    this.contact.scale = 0;
 
-    const find = (re: RegExp): AnimationGroup | undefined => entries.animationGroups.find((g) => re.test(g.name));
     for (const g of entries.animationGroups) g.stop();
-    this.anims = {
-      idle: find(/^Idle$/i) ?? find(/idle/i),
-      walk: find(/^Walking_A$/i) ?? find(/walk/i),
-      attack: find(/1H_Melee_Attack_Slice_Diagonal/i) ?? find(/1H_Melee_Attack_Chop/i) ?? find(/melee_attack/i) ?? find(/^Punch$/i),
-      hit: find(/^Hit_A$/i) ?? find(/hit/i),
-      death: find(/^Death_A$/i) ?? find(/death/i),
-      awaken: find(/Skeletons_Awaken_Standing/i) ?? find(/awaken/i),
-    };
+    if (hum) {
+      const lib = await loadAnimLibrary(this.scene);
+      if (this.disposed) { this.dispose(); return; }
+      const g = retargetClips(lib, model, "morto" + rootNode.uniqueId, {
+        idle: "Zombie_Idle_Loop", walk: "Zombie_Walk_Fwd_Loop", attack: hum.attack, hit: "Hit_Chest", death: "Death01", awaken: "LayToIdle",
+      });
+      this.anims = g;
+      this.animGroups.push(...(Object.values(g) as AnimationGroup[]));
+      // Ritmo dos clipes: o golpe dura o que o tuning manda (startup+active+recovery); a emergencia,
+      // a janela de despertar; a passada acompanha a velocidade de movimento.
+      const dur = (c?: AnimationGroup): number => (c ? (c.to - c.from) / 60 : 1);
+      const o = this.stats.overhead;
+      if (g.attack) g.attack.speedRatio = clampN(dur(g.attack) / (o.startup + o.active + o.recovery), 0.6, 3);
+      if (g.awaken) g.awaken.speedRatio = dur(g.awaken) / EMERGE_SEC;
+      if (g.walk) g.walk.speedRatio = clampN(this.stats.moveSpeed / 1.2, 0.8, 2.6);
+    } else {
+      const find = (re: RegExp): AnimationGroup | undefined => entries.animationGroups.find((g) => re.test(g.name));
+      this.anims = {
+        idle: find(/^Idle$/i) ?? find(/idle/i),
+        walk: find(/^Walking_A$/i) ?? find(/walk/i),
+        attack: find(/1H_Melee_Attack_Slice_Diagonal/i) ?? find(/1H_Melee_Attack_Chop/i) ?? find(/melee_attack/i) ?? find(/^Punch$/i),
+        hit: find(/^Hit_A$/i) ?? find(/hit/i),
+        death: find(/^Death_A$/i) ?? find(/death/i),
+        awaken: find(/Skeletons_Awaken_Standing/i) ?? find(/awaken/i),
+      };
+    }
 
     this.hpBar = new HealthBar3D(this.scene, rootNode, this.stats.height * 1.08);
     this.loaded = true;
@@ -379,6 +455,7 @@ export class Skeleton implements CombatTarget {
     const t = 1 - this.emergeTimer / EMERGE_SEC; // 0..1
     const eased = 1 - (1 - t) * (1 - t); // ease-out: rompe o chão e assenta
     this.rootNode.position.y = this.base.y - RISE_DEPTH * (1 - eased);
+    if (this.contact) this.contact.scale = eased; // a sombra de contato "abre" conforme ele sobe
     if (this.emergeTimer <= 0) {
       this.rootNode.position.y = this.base.y;
       this.setAnim(this.anims.idle, true);
@@ -624,6 +701,7 @@ export class Skeleton implements CombatTarget {
         root.position.y = this.base.y - 0.7 * k;
         const vis = 1 - k;
         for (const m of root.getChildMeshes(false)) (m as AbstractMesh).visibility = vis;
+        if (this.contact) this.contact.scale = vis;
       }
       return;
     }
@@ -631,6 +709,7 @@ export class Skeleton implements CombatTarget {
     this.respawn = Math.max(0, this.respawn - dt);
     const k = this.respawn / RESPAWN_SEC;
     root.scaling.set(Math.max(0.05, k), Math.max(0.05, k), Math.max(0.05, k));
+    if (this.contact) this.contact.scale = k;
     if (this.respawn === 0) this.revive();
   }
 
@@ -639,6 +718,7 @@ export class Skeleton implements CombatTarget {
     this.health.reset();
     root.position.copyFrom(this.base);
     root.scaling.set(1, 1, 1);
+    if (this.contact) this.contact.scale = 1;
     for (let i = 0; i < this.mats.length; i++) this.mats[i]!.emissiveColor.copyFrom(this.matEmissive0[i]!);
     this.knock.setAll(0);
     this.flash = 0;

@@ -11,13 +11,18 @@ const [porta, out, cenario = "sala0"] = process.argv.slice(2);
   await p.goto(`http://localhost:${porta}/?renderer=webgl&perf`);
   await p.waitForFunction(() => window.__brasa, null, { timeout: 90000 });
   await p.waitForTimeout(3000);
-  await p.getByText(/novo jogo/i).first().click({ force: true, timeout: 12000 }).catch((e) => console.log("novo jogo:", String(e).slice(0, 80)));
-  await p.waitForTimeout(1500);
-  for (let i = 0; i < 4; i++) {
-    await p.getByRole("button", { name: /iniciar a descida|continuar/i }).last().click({ force: true, timeout: 3000 }).catch(() => {});
-    await p.waitForTimeout(700);
+  await p.getByText(/novo jogo/i).first().waitFor({ state: "visible", timeout: 60000 });
+  await p.waitForTimeout(1000);
+  await p.getByText(/novo jogo/i).first().click({ force: true }).catch((e) => console.log("novo jogo:", String(e).slice(0, 80)));
+  for (let i = 0; i < 14; i++) {
+    await p.waitForTimeout(1300);
+    if (await p.evaluate(() => { const e = document.querySelector(".hud-fagulha"); return !!e && getComputedStyle(e).display !== "none"; })) break;
+    await p.getByRole("button", { name: /iniciar a descida|^continuar$/i }).last().click({ force: true, timeout: 2000 }).catch(() => {});
   }
   await p.waitForTimeout(4500);
+  const emJogo = await p.evaluate(() => { const e = document.querySelector(".hud-fagulha"); return !!e && getComputedStyle(e).display !== "none"; });
+  console.log("em jogo:", emJogo);
+  if (!emJogo) { await p.screenshot({ path: `${out}/_erro_menu.png` }); await b.close(); process.exit(2); }
   const shot = (n) => p.screenshot({ path: `${out}/${n}.png` });
   const key = (code, down) => p.evaluate(([c, d]) => window.dispatchEvent(new KeyboardEvent(d ? "keydown" : "keyup", { code: c })), [code, down]);
   const draws = () => p.evaluate(() => { const e = [...document.querySelectorAll("div")].find((d) => /^draw calls:/.test(d.textContent || "") && d.children.length === 0); return e ? e.textContent.replace(/\n/g, " | ") : "?"; });
@@ -30,13 +35,43 @@ const [porta, out, cenario = "sala0"] = process.argv.slice(2);
       await shot("sala" + i);
     }
   }
+  if (cenario === "atores") {
+    // Draw calls dos atores = (sala inteira) - (sala com todas as malhas skinned, espada, brasa e sombra de contato desligadas)
+    const lerDraws = async () => { await p.waitForTimeout(900); const t = await draws(); const m = /draw calls: (\d+)/.exec(t); return m ? Number(m[1]) : -1; };
+    for (const i of (process.env.SALAS || "0,1,2,3,4,5,6").split(",").map(Number)) {
+      await p.evaluate((i) => window.__brasa.enterRoom(i), i);
+      await p.waitForTimeout(6500);
+      const total = await lerDraws();
+      const info = await p.evaluate(() => {
+        const s = window.__brasa.scene;
+        const atores = s.meshes.filter((m) => m.isEnabled() && (m.skeleton || /sword|brasa_mao|sombra_de_contato|bronze/i.test(m.name)));
+        window.__atores = atores;
+        const sks = new Set(s.meshes.filter((m) => m.isEnabled() && m.skeleton).map((m) => m.skeleton.uniqueId));
+        window.__atores.forEach((m) => m.setEnabled(false));
+        return { malhas: atores.length, esqueletos: sks.size };
+      });
+      const sem = await lerDraws();
+      await p.evaluate(() => window.__atores.forEach((m) => m.setEnabled(true)));
+      console.log(`sala ${i}: total ${total}, sem atores ${sem}, atores ${total - sem} draws, ${info.esqueletos} esqueletos (heroi + inimigos), ${info.malhas} malhas`);
+      await p.waitForTimeout(500);
+      await shot("sala" + i);
+    }
+  }
   if (cenario === "combate") {
-    await shot("c0_inicio");
-    await key("KeyJ", true); await p.waitForTimeout(120); await shot("c1_ataque_leve"); await key("KeyJ", false);
-    await p.waitForTimeout(600);
-    await key("Space", true); await p.waitForTimeout(40); await key("Space", false);
-    await p.waitForTimeout(900);
-    await shot("c2_depois");
+    // Sequencia: observa (idle/andar/ataque dos mortos), depois golpe leve, pesado, esquiva, bloqueio, fogo e uma
+    // saraivada de golpes leves ate matar. Salva quadros recortados em volta da heroina (q_XX.png).
+    const quadro = async (n) => p.screenshot({ path: `${out}/q_${String(n).padStart(2, "0")}.png`, clip: { x: 500, y: 250, width: 600, height: 420 } });
+    let n = 0;
+    const wait = (ms) => p.waitForTimeout(ms);
+    for (let i = 0; i < 8; i++) { await quadro(n++); await wait(450); }
+    for (const [tecla, hold, ap] of [["KeyJ", 60, 110], ["KeyK", 60, 160], ["KeyC", 60, 200], ["KeyE", 60, 150]]) {
+      await key(tecla, true); await wait(hold); await key(tecla, false); await wait(ap); await quadro(n++); await wait(250); await quadro(n++); await wait(700);
+    }
+    await key("KeyQ", true); await wait(350); await quadro(n++); await key("KeyQ", false); await wait(500);
+    for (let i = 0; i < 16; i++) { await key("KeyJ", true); await wait(50); await key("KeyJ", false); await wait(260); await quadro(n++); await wait(120); }
+    await wait(1500); await quadro(n++); await wait(1500); await quadro(n++);
+    console.log("hp:", JSON.stringify(await p.evaluate(() => window.__brasa.hp())), "vivos:", await p.evaluate(() => window.__brasa.enemiesAlive()));
+    await shot("c_fim");
   }
   console.log(logs.slice(-8).join("\n"));
   await b.close();

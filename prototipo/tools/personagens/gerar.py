@@ -113,8 +113,62 @@ def mantos():
         tingir(ranger, pano, BRONZE, OURO).save(os.path.join(SAIDA, "manto_%s.jpg" % k), quality=80)
         print("OK manto_%s.jpg" % k, os.path.getsize(os.path.join(SAIDA, "manto_%s.jpg" % k)) // 1024, "KB")
 
+def olho_morto(pele_cor):
+    """Textura do remendo de olhos dos mortos: pele cinza-azulada ao redor, globo e iris ciano-espectral.
+    Devolve (albedo, emissao): a emissao so acende o globo (o resto preto)."""
+    src = Image.open(os.path.join(UBC, "T_Eye_Brown.png")).convert("RGB")
+    w, h = src.size
+    alb = Image.new("RGB", (w, h), hexc(pele_cor)); emi = Image.new("RGB", (w, h), (0, 0, 0))
+    ap, ep, sp = alb.load(), emi.load(), src.load()
+    for y in range(h):
+        for x in range(w):
+            r, g_, b = sp[x, y]
+            mx, mn = max(r, g_, b), min(r, g_, b)
+            sat = (mx - mn) / (mx + 1)
+            iris = mx < 130 and (r - b) > 18 and sat > 0.3          # iris marrom e pupila escura
+            esclera = mx > 190 and sat < 0.22                        # branco do olho
+            if iris:
+                ap[x, y] = (30, 150, 175); ep[x, y] = (95, 183, 201)
+            elif esclera:
+                ap[x, y] = (150, 215, 225); ep[x, y] = (150, 215, 225)
+    soft = emi.filter(ImageFilter.GaussianBlur(1.1))
+    return alb, soft
+
 def mortos():
-    pass  # preenchido na fase 2
+    pele_cor = "#8da0a6"
+    olho_a, olho_e = olho_morto(pele_cor)
+    olho_a.save(os.path.join(TMP, "mo_a.png")); olho_e.save(os.path.join(TMP, "mo_e.png"))
+    peasant = carregar(os.path.join(OUT, "T_Peasant_BaseColor.png"), 512)
+    ranger = carregar(os.path.join(OUT, "T_Ranger_BaseColor.png"), 512)
+    pele_m = morto(carregar(os.path.join(UBC, "T_Superhero_Male_Dark.png"), 256), "#c3d1d3", 0.28, 1.15)
+    pele_f = morto(carregar(os.path.join(UBC, "T_Superhero_Female_Dark_BaseColor.png"), 256), "#c3d1d3", 0.28, 1.15)
+    aço = ("#1b1f23", "#8794a0", "#dde4ea")
+    couro = ("#0f0c09", "#54463a", "#9a846a")
+
+    def variante(nome, base, outfit, incluir, reduzir, roupa, pele):
+        blender({
+            "base": os.path.join(UBC, base), "outfits": [os.path.join(OUT, outfit)],
+            "incluir": incluir, "reduzir": reduzir,
+            "cabelo": {"altura": 0.085, "uv": ponto_escuro(roupa)},
+            "texturas": {"pele": png(pele, nome + "_pele"), "roupa": png(roupa, nome + "_roupa"), "olhos": png(olho_a, "mo_a")},
+            "emissao": {"olhos": png(olho_e, "mo_e")},
+            "saida": os.path.join(SAIDA, nome + ".glb"), "jpeg": 78}, nome)
+
+    cabeca = {"Superhero|SuperHero|Retopology": 0.45}
+    # minion: aldeao comum, trapos desbotados
+    variante("morto_aldeao", "Superhero_Male_FullBody.gltf", "Male_Peasant.gltf", ["Arms", "Body", "Feet", "Legs"],
+             {**cabeca, "Arms": 0.3, "Feet": 0.35, "Body": 0.55, "Legs": 0.7}, morto(peasant, "#d3dcde", 0.4, 1.05), pele_m)
+    # guerreiro: couraca de ferro velho, sem capuz
+    variante("morto_guerreiro", "Superhero_Male_FullBody.gltf", "Male_Ranger.gltf", ["Body", "Arms", "Legs", "Feet", "Belt", "Pauldron"],
+             {**cabeca, "Feet": 0.14, "Bracer": 0.25, "Pauldron": 0.45, "Arms$": 0.5, "Body$": 0.55, "Belt": 0.6},
+             tingir(ranger, ("#0b0e11", "#3d464f", "#95a3b0"), couro, aço), pele_m)
+    # ladino: capuz de trapo verde-azulado escuro
+    variante("morto_ladino", "Superhero_Male_FullBody.gltf", "Male_Ranger.gltf", ["Hood", "Body", "Arms", "Legs", "Feet", "Belt"],
+             {**cabeca, "Feet": 0.14, "Bracer": 0.25, "Hood": 0.6, "Arms$": 0.5, "Body$": 0.55, "Belt": 0.6},
+             tingir(ranger, ("#060d10", "#223a40", "#5f929c"), couro, aço), pele_m)
+    # conjurador: vestes frias de camponesa, tom violeta apagado
+    variante("morto_conjurador", "Superhero_Female_FullBody.gltf", "Female_Peasant.gltf", ["Arms", "Body", "Feet", "Legs"],
+             {**cabeca, "Arms": 0.35, "Feet": 0.35, "Body": 0.6, "Legs": 0.7}, morto(peasant, "#c4c0e0", 0.5, 1.0), pele_f)
 
 def anim():
     CL = ("Idle_Loop,Walk_Loop,Jog_Fwd_Loop,Sprint_Loop,Sword_Idle,Sword_Regular_A,Sword_Regular_B,Melee_Hook,"

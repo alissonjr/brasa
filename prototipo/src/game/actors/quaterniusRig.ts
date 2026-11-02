@@ -38,7 +38,8 @@ export function retargetClips<K extends string>(
   lib: AnimationGroup[], root: TransformNode, tag: string, wanted: Record<K, string>,
 ): Partial<Record<K, AnimationGroup>> {
   const nos = new Map<string, TransformNode>();
-  for (const n of root.getChildTransformNodes(false)) nos.set(n.name, n as TransformNode);
+  // instantiateModelsToScene renomeia os clones para "Clone of <nome>": o retarget casa pelo nome ORIGINAL do osso.
+  for (const n of root.getChildTransformNodes(false)) nos.set(n.name.replace(/^Clone of /, ""), n as TransformNode);
   // Alvo de descarte para ossos que o personagem não tem (nó órfão, sem custo visual).
   const lixo = new TransformNode("lixo_" + tag, root.getScene());
   lixo.parent = root;
