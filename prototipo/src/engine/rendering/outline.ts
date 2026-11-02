@@ -30,6 +30,28 @@ export interface OutlineOptions {
 
 const DEFAULT_COLOR = Color3.FromHexString("#0b0e14"); // quase preto, leve azul (tom do breu)
 
+// Folga para o resto das uniformes do vertex shader do contorno (matrizes, luzes, morph, etc.).
+const VERTEX_UNIFORM_RESERVE = 96;
+const warned = new Set<string>();
+
+/** O GPU comporta as matrizes de osso desta malha como uniformes (4 vetores por osso + folga)? */
+export function canUseBoneUniforms(mesh: AbstractMesh): boolean {
+  const sk = mesh.skeleton;
+  if (!sk) return true;
+  const caps = mesh.getScene().getEngine().getCaps();
+  const max = caps.maxVertexUniformVectors ?? 0;
+  return max >= sk.bones.length * 4 + VERTEX_UNIFORM_RESERVE;
+}
+
+function warnOnce(mesh: AbstractMesh): void {
+  const sk = mesh.skeleton!;
+  const key = sk.name + sk.bones.length;
+  if (warned.has(key)) return;
+  warned.add(key);
+  const max = mesh.getScene().getEngine().getCaps().maxVertexUniformVectors;
+  console.warn(`[outline] ${sk.bones.length} ossos não cabem em uniformes (maxVertexUniformVectors=${max}); contorno de casco desligado, fica o edge-detect de cena.`);
+}
+
 /** Liga o contorno numa malha. No-op se a malha não tem geometria ou pede `metadata.noOutline`. */
 export function addOutline(mesh: AbstractMesh, opts: OutlineOptions = {}): void {
   if (mesh.getTotalVertices() <= 0) return;
@@ -37,8 +59,17 @@ export function addOutline(mesh: AbstractMesh, opts: OutlineOptions = {}): void 
   // O OutlineRenderer reaproveita as unidades de textura da malha. Com os ossos guardados
   // numa TEXTURA (padrão em malhas skinned), o contorno sobrescreve a unidade e a malha
   // inteira passa a amostrar a textura de ossos como se fosse o albedo (cores neon,
-  // listras). Ossos em uniformes (limite do KayKit: ~40 ossos) resolvem sem custo visual.
-  if (mesh.skeleton) mesh.skeleton.useTextureToStoreBoneMatrices = false;
+  // listras). Ossos em UNIFORMES resolvem sem custo visual, mas cada osso gasta 4 vetores do
+  // vertex shader (65 ossos = 260, acima do mínimo garantido do WebGL2, 256). Por isso só
+  // trocamos para uniformes quando o GPU comprovadamente comporta (ver canUseBoneUniforms); senão
+  // a malha fica SEM o contorno de casco e a linha vem do edge-detect de cena (sceneOutline).
+  if (mesh.skeleton) {
+    if (!canUseBoneUniforms(mesh)) {
+      warnOnce(mesh);
+      return;
+    }
+    mesh.skeleton.useTextureToStoreBoneMatrices = false;
+  }
   mesh.renderOutline = true;
   mesh.outlineColor = (opts.color ?? DEFAULT_COLOR).clone();
   if (opts.worldWidth !== undefined) {
