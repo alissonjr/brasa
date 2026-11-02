@@ -1,4 +1,4 @@
-import { Color3, MeshBuilder, Mesh, StandardMaterial, TransformNode, VertexData } from "@babylonjs/core";
+import { Color3, MeshBuilder, Mesh, StandardMaterial, TransformNode, VertexBuffer, VertexData } from "@babylonjs/core";
 import type { Scene } from "@babylonjs/core";
 
 /**
@@ -77,7 +77,15 @@ export function buildSword(scene: Scene): TransformNode {
   blade.parent = root;
   blade.position.y = 0.2;
 
-  for (const m of [pommel, grip, guard, blade]) m.isPickable = false;
+  // Funde as 3 peças de bronze numa malha só (2 draw calls por espada em vez de 4, em todo passe).
+  for (const m of [pommel, guard]) m.removeVerticesData(VertexBuffer.UVKind); // a lâmina não tem UV: atributos iguais para fundir
+  const bronzeParts = Mesh.MergeMeshes([pommel, guard, blade], true, true, undefined, false, false);
+  if (bronzeParts) {
+    bronzeParts.name = "swordBronze";
+    bronzeParts.parent = root;
+    bronzeParts.isPickable = false;
+  }
+  grip.isPickable = false;
   return root;
 }
 
