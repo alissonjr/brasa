@@ -17,12 +17,11 @@ import {
   StandardMaterial,
   TransformNode,
   Vector3,
-  Vector4,
 } from "@babylonjs/core";
 import type { AbstractMesh, AssetContainer, Camera, IDisposable, Material, Observer, Scene } from "@babylonjs/core";
 import { createLightPool, loadContainer, toonifyHierarchy } from "@engine";
 import { pickLayout } from "./cryptLayouts";
-import { buildPoolGroup, buildRaisedSlabs, inCalm, paintFloor } from "./cryptDecor";
+import { buildFloorScape, buildPoolGroup } from "./cryptDecor";
 import { buildCave } from "./cryptCave";
 import { applyGrade, createAtmosphere, themeFor, tintArchitecture } from "./cryptTheme";
 import type { EnemyBounds } from "../../actors/enemies/skeleton";
@@ -574,29 +573,22 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   ground.parent = roomRoot;
   aggregates.push(new PhysicsAggregate(ground, PhysicsShapeType.BOX, { mass: 0 }, scene));
 
-  // --- LAJE BASE solida: o piso visivel. Recebe UMA textura procedural pintada (lajes
-  //     irregulares, rachaduras, sujeira, sangue, ossos, assinatura do tipo de sala; ver
-  //     cryptDecor.paintFloor), o que tambem substitui a antiga grade de juntas (1 draw a menos).
-  //     Topo em y=0; as faces laterais amostram um bolsao escuro da textura (faceUV). ---
-  const floorArt = paintFloor(scene, L, def.kind, def.index);
-  {
-    const baseMat = new StandardMaterial("lajeBaseMat", scene);
-    baseMat.diffuseTexture = floorArt.tex;
-    baseMat.diffuseColor = Color3.White();
-    baseMat.emissiveColor = Color3.FromHexString("#0e1116");
-    baseMat.specularColor = Color3.Black();
-    const side = new Vector4(0, 0, floorArt.sideUV.u, floorArt.sideUV.v);
-    const slab = MeshBuilder.CreateBox(
-      "laje_base",
-      { width: HALFX * 2, height: 1.0, depth: HALFZ * 2, faceUV: [side, side, side, side, new Vector4(0, 0, 1, 1), side] },
-      scene
-    );
-    slab.material = baseMat;
-    slab.position.set(0, -0.5, 0); // topo em y=0 = a superficie caminhavel (E o piso visivel agora)
-    slab.isPickable = false;
-    slab.receiveShadows = true;
-    slab.parent = roomRoot;
-    track(slab);
+  // --- PISO 3D (cryptFloor): lajes reais com juntas fundas, algumas erguidas/afundadas, e a cenografia
+  //     de apoio como geometria (ossos, entulho, fendas, musgo, tapete, água rebaixada com ondulação).
+  //     Tudo em poucas malhas (laje+detalhes fundidos, água, brasas). A superfície caminhável segue em y=0. ---
+  const floorArt = buildFloorScape(scene, L, def.kind, def.index, P);
+  for (const m of floorArt.meshes) { m.parent = roomRoot; track(m); }
+  ctx.shadow.addShadowCaster(floorArt.floor); // detalhes em relevo (ossos, entulho, bordas) projetam sombra no piso
+  casters.push(floorArt.floor);
+  // O chão físico é plano: bacias e lagoa ganham colisor invisível (sem custo de desenho).
+  for (const c of floorArt.colliders) {
+    const box = MeshBuilder.CreateBox("colisor_agua", { width: c.x1 - c.x0, height: 1, depth: c.z1 - c.z0 }, scene);
+    box.position.set((c.x0 + c.x1) / 2, 0.5, (c.z0 + c.z1) / 2);
+    box.isVisible = false;
+    box.isPickable = false;
+    box.checkCollisions = true;
+    track(box);
+    aggregates.push(new PhysicsAggregate(box, PhysicsShapeType.BOX, { mass: 0 }, scene));
   }
 
   // --- CAVERNA em volta do santuario (camera alta): rampa de rocha por fora dos muros baixos ---
@@ -625,51 +617,11 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // recuados do KayKit (floor/floor_alt) no chao: os recessos escuros liam como BURACOS/
   // celulas pretas em angulo rasante. Mantemos so o medalhao e as tabuas como ACENTOS, e a
   // grelha sutil de juntas (abaixo) da textura ao piso sem o efeito de grade-sobre-o-vazio.
-  const fd = kitBase(P.floor_deco!, "floor");
-  if (fd) kitInstances(fd, [{ x: 0, z: 0 }], 0.04);
-  const fw = kitBase(P.floor_wood!, "floor");
-  if (fw) kitInstances(fw, [{ x: -7, z: -3 }, { x: -7, z: -6 }], 0.05);
   // --- W4: DECALQUE DE CHÃO por tipo de sala (poça / círculo ritual / rachaduras) ---
   // Malha plana fina logo acima do piso (sem z-fight). 1 draw call cada (malha única).
   // O material e a cor-base ficam capturados para a coreografia de luz (brilham ao acender).
-  let decalMat: StandardMaterial | null = null;
-  let decalBaseEmissive = Color3.Black();
-  {
-    const mat = new StandardMaterial("decalMat", scene);
-    mat.diffuseColor = Color3.Black();
-    mat.specularColor = Color3.Black();
-    mat.disableLighting = true;
-    let mesh: Mesh | null = null;
-    // (cisterna: as poças viraram pintura de piso, ver cryptDecor.paintFloor; sem decalque proprio)
-    if (def.kind === "santuario") {
-      // círculo ritual: anel dourado gravado no centro.
-      mesh = MeshBuilder.CreateTorus("decal_circulo", { diameter: 5.4, thickness: 0.16, tessellation: 56 }, scene);
-      mat.emissiveColor = Color3.FromHexString("#b98f4a");
-      mat.alpha = 0.85;
-    } else if (def.kind === "guardiao") {
-      // rachaduras irradiando do centro (clímax): barras finas mescladas (1 draw call).
-      const bars: Mesh[] = [];
-      for (let i = 0; i < 9; i++) {
-        const b = MeshBuilder.CreateBox("rachadura", { width: 0.14, height: 0.03, depth: 4.5 + (i % 3) * 1.6 }, scene);
-        b.rotation.y = (i / 9) * Math.PI * 2 + rng(i) * 0.3;
-        b.bakeCurrentTransformIntoVertices();
-        bars.push(b);
-      }
-      mesh = Mesh.MergeMeshes(bars, true, true) ?? null;
-      mat.emissiveColor = Color3.FromHexString("#7a1c0c");
-      mat.alpha = 0.95;
-    }
-    if (mesh) {
-      mesh.material = mat;
-      mesh.isPickable = false;
-      mesh.position.set(0, 0.05, Math.min(0, AZ - 6)); // centro da zona de combate
-      mesh.parent = roomRoot;
-      decalMat = mat;
-      decalBaseEmissive = mat.emissiveColor.clone();
-    } else {
-      mat.dispose();
-    }
-  }
+  const decalMat: StandardMaterial | null = floorArt.emissive?.mat ?? null;
+  const decalBaseEmissive = decalMat ? decalMat.emissiveColor.clone() : Color3.Black();
 
   // --- W4: NICHO/ALCOVA de parede (>= 1 por sala): recuo escuro com ossada + ponto de
   //     inscrição (lido por proximidade, item 5). Recesso = caixa escura encostada na
@@ -893,7 +845,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     if (def.kind === "salao") {
       addPools([{ x: -7.5 * dressMirror, z: -3, r: 3.6 }, { x: 7 * dressMirror, z: 4, r: 3.2 }], poolCol.accent, 0.26, "warm");
     } else if (def.kind === "cisterna") {
-      addPools(floorArt.puddles.map((p) => ({ x: p.x, z: p.z, r: p.r * 1.9 })), poolCol.accent, 0.1, "cold");
+      addPools(floorArt.puddles.map((p) => ({ x: p.x, z: p.z, r: p.r * 1.4 })), poolCol.accent, 0.08, "cold");
     } else if (def.kind === "santuario") {
       addPools(floorArt.candles, poolCol.accent, 0.4, "warm");
       addPools([{ x: 0, z: zc, r: 5.6 }], "#7a6cc8", 0.16, "cold");
@@ -902,13 +854,6 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       addPools([{ x: 0, z: zc, r: 6.5 }], "#a01810", 0.14, "warm");
     }
   }
-  // LAJES ERGUIDAS/TOMBADAS (1 malha fundida), fora da faixa de combate.
-  {
-    const RAISED: Record<RoomKind, string> = { guarda: "#444952", salao: "#484640", cisterna: "#32464a", santuario: "#484756", guardiao: "#2e2a34" };
-    const raised = buildRaisedSlabs(scene, L, def.kind, def.index, floorArt.slabs, Color3.FromHexString(RAISED[def.kind]));
-    if (raised) { raised.parent = roomRoot; track(raised); }
-  }
-
   // --- CANDELABROS de ferro pendentes do teto: cubo central + braços radiais + aro +
   //     6 grupos de velas acesas + luz quente. Fixtura de verdade, não um ponto de luz. ---
   const chandMat = new StandardMaterial("matCandelabro", scene);
@@ -1039,37 +984,11 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     }
   }
 
-  /** Pontos de cenografia 3D FORA da faixa de combate (L.calm), da saida, do spawn e do estrado. */
-  function scatterRim(n: number, salt: number, margin = 1.6): { x: number; z: number; k: number }[] {
-    const out: { x: number; z: number; k: number }[] = [];
-    for (let t = 0; t < n * 12 && out.length < n; t++) {
-      const x = (rng(salt + t * 3) - 0.5) * (HALFX * 2 - margin * 2);
-      const z = (rng(salt + t * 3 + 1) - 0.5) * (HALFZ * 2 - margin * 2);
-      if (inCalm(L, x, z, 1.05)) continue;
-      if (Math.hypot(x - L.exit.x, z - L.exit.z) < 4.2) continue;
-      if (Math.abs(x) < 5.2 && z > AZ - 3.6) continue; // estrado e degrau
-      if (L.pillars.some((p) => Math.hypot(p.x - x, p.z - z) < 1.7)) continue;
-      out.push({ x, z, k: rng(salt + t * 3 + 2) });
-    }
-    return out;
-  }
-
   function clusterGrime(density: number): void {
-    // Escombros, caveiras e ossadas 3D (batch: nenhum draw call novo), so fora da faixa de combate.
-    scatterRim(3 + Math.round(density * 7), 400).forEach((p, i) =>
-      batch("rubble", { x: p.x, z: p.z, rotY: seedRot(i), scale: 0.65 + p.k * 0.6 })
-    );
-    scatterRim(3 + Math.round(density * 8), 700).forEach((p, i) =>
-      batch("skull", { x: p.x, z: p.z, rotY: seedRot(i + 9), scale: 0.34 + p.k * 0.1 })
-    );
+    // Pilha de caveiras junto ao estrado (o entulho e as ossadas soltas do chão vivem em cryptFloor).
     const pile = Math.round(density * 7);
     for (let i = 0; i < pile; i++)
       batch("skull", { x: -(HALFX - 2.6) + rng(i + 30) * 1.6, z: (AZ - 0.6) + rng(i + 40) * 1.6, y: rng(i + 50) * 0.25, rotY: seedRot(i), scale: 0.3 + rng(i + 10) * 0.1 });
-    if (density > 0.6) {
-      const bones = scatterRim(5, 900);
-      const names = ["bone_A", "bone_B", "bone_C", "ribcage", "bone_A"];
-      bones.forEach((p, i) => batch(names[i % names.length]!, { x: p.x, z: p.z, rotY: seedRot(i + 20) }));
-    }
   }
 
   // Espalha BICHOS (modelos reais low-poly) rente as paredes/cantos, se os assets existirem
@@ -1246,6 +1165,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       if (f.mesh.isEnabled() !== on) f.mesh.setEnabled(on);
       f.mesh.scaling.y = (0.9 + 0.18 * Math.sin(t * 13 + f.seed)) * (0.4 + 0.6 * f.ignite);
     }
+    floorArt.update(t);
     if (beam.isEnabled()) {
       beam.rotation.y = t * 0.5;
       const s = 1 + 0.07 * Math.sin(t * 3);
