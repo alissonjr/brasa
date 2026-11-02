@@ -1,4 +1,4 @@
-import { Color3, Mesh, MeshBuilder, Vector3, VertexBuffer, VertexData } from "@babylonjs/core";
+import { Color3, Mesh, MeshBuilder, Quaternion, Vector3, VertexBuffer, VertexData } from "@babylonjs/core";
 import type { Scene } from "@babylonjs/core";
 import type { FloorTheme } from "./cryptTheme";
 import type { Layout } from "./cryptLayouts";
@@ -32,6 +32,8 @@ export interface CaveCtx {
   geoWater: Geo; // agua, cascatas, marolas
   /** Manchas escuras de sangue/ferrugem na rocha (usadas na pintura do terreno). */
   stains: { x: number; z: number; r: number }[];
+  /** Colisores (caixas) de pecas de cena dentro da sala; o chamador os cria. */
+  colliders: { cx: number; cz: number; w: number; d: number }[];
 }
 
 const TAU = Math.PI * 2;
@@ -495,25 +497,6 @@ function box(c: CaveCtx, w: number, h: number, d: number, x: number, y: number, 
   return m;
 }
 
-/** Sarcofago arrombado: tampa deslizada, interior escuro, ossos pelo chao (o povo morto, andar 1). */
-export function tomb(c: CaveCtx, x: number, z: number, ry: number): void {
-  const y = c.surf(x, z);
-  const stone = col("#76788a");
-  box(c, 2.2, 0.55, 0.95, x, y + 0.22, z, stone, { ry });
-  box(c, 1.9, 0.06, 0.62, x, y + 0.5, z, col("#0a0c12"), { ry }, 0.9);
-  const lx = Math.cos(ry) * 0.85;
-  const lz = -Math.sin(ry) * 0.85;
-  box(c, 2.25, 0.22, 1.0, x + lx, y + 0.66, z + lz + 0.25, stone, { ry: ry + 0.38, rz: 0.1 });
-  skull(c, x - lx * 0.6 + 0.5, z - lz * 0.6 + 0.9, 1, ry + 1, undefined);
-  bone(c, x + 0.4, z + 1.1, 0.6, ry + 0.7);
-  bone(c, x - 0.9, z + 0.95, 0.5, ry - 0.5);
-  // segundo tumulo menor, tombado
-  const x2 = x + 3.4;
-  const z2 = z - 0.6;
-  box(c, 1.7, 0.45, 0.8, x2, c.surf(x2, z2) + 0.15, z2, stone, { ry: ry + 0.5, rz: 0.22 });
-  box(c, 1.7, 0.15, 0.85, x2 + 0.6, c.surf(x2 + 0.6, z2 + 0.7) + 0.08, z2 + 0.7, stone, { ry: ry - 0.3, rx: 0.12 });
-}
-
 /** Acampamento apagado da Acendedora que desceu antes: circulo de pedras, cinza, trapo vermelho. */
 export function camp(c: CaveCtx, x: number, z: number): void {
   const y = c.surf(x, z);
@@ -576,36 +559,209 @@ export function grates(c: CaveCtx, spots: { x: number; z: number; ry: number }[]
   }
 }
 
-/** Duas Acendedoras (luto): uma tombou na porta, voltando; outra seguiu mais fundo. Velas votivas. */
-export function twoRemains(c: CaveCtx): void {
-  const cloak = col("#4a4658");
-  // 1) a que voltou ate a porta: fora do vao da porta (sul), cabeca rumo a sala
-  const door = rimPoint(c, "s", c.doorX + 1.8, 2.4);
-  const dy = c.surf(door.x, door.z);
-  skull(c, door.x, door.z + 0.9, 1.05, Math.PI, undefined);
-  box(c, 0.7, 0.1, 1.5, door.x, dy + 0.09, door.z - 0.1, cloak, { ry: 0.12 });
-  for (let i = 0; i < 4; i++) {
-    box(c, 0.55 - i * 0.04, 0.05, 0.05, door.x, dy + 0.18, door.z + 0.1 - i * 0.14, col("#a8a290"), { ry: 0.1 }, 0.8);
+
+// ---------------------------------------------------------------------------------------------
+// Cenas contadas sem texto (Cronica): tumulo arrombado por dentro, manto rasgado e fagulha
+// apagada, duas Acendedoras. Tudo e malha fundida na rocha (sem draw call novo).
+// ---------------------------------------------------------------------------------------------
+
+/** Mundo a partir de um quadro local (origem x,z; giro ry como no Babylon; lx lateral, lz frente). */
+function toWorld(x: number, z: number, ry: number, lx: number, lz: number): { x: number; z: number } {
+  const co = Math.cos(ry);
+  const sn = Math.sin(ry);
+  return { x: x + lx * co + lz * sn, z: z - lx * sn + lz * co };
+}
+
+/** Cor chapada: aponta os UVs para um ponto fixo da textura (a peca de cena nao herda o desenho da rocha). */
+function flat(m: Mesh, gain = 3.0): Mesh {
+  const n = m.getTotalVertices();
+  const uv = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) { uv[i * 2] = 0.37; uv[i * 2 + 1] = 0.52; }
+  m.setVerticesData(VertexBuffer.UVKind, uv);
+  // a textura nesse ponto e escura: compensa nas cores por vertice (podem passar de 1)
+  const cl = m.getVerticesData(VertexBuffer.ColorKind);
+  if (cl) {
+    const out = new Float32Array(cl.length);
+    for (let i = 0; i < cl.length; i++) out[i] = i % 4 === 3 ? 1 : cl[i]! * gain;
+    m.setVerticesData(VertexBuffer.ColorKind, out);
   }
-  bone(c, door.x - 0.7, door.z + 0.4, 0.7, 0.3);
-  bone(c, door.x + 0.7, door.z + 0.3, 0.7, -0.3);
-  bone(c, door.x - 0.35, door.z - 0.9, 0.6, 1.4);
-  // 2) a que desceu mais fundo: ossos e manto rente ao fundo (norte), junto a saida
-  const deep = rimPoint(c, "n", -4.2, 2.8);
-  const ey = c.surf(deep.x, deep.z);
-  box(c, 0.8, 0.1, 1.5, deep.x, ey + 0.09, deep.z, cloak, { ry: -0.5 });
-  skull(c, deep.x + 0.35, deep.z - 0.9, 1, 0.6, undefined);
-  bone(c, deep.x - 0.4, deep.z + 0.3, 0.7, -0.8);
-  bone(c, deep.x + 0.4, deep.z + 0.2, 0.7, 0.6);
-  // velas votivas (emissivo): pequenas, em pares junto de cada ossada
-  for (const [px, pz] of [[door.x - 1.3, door.z + 0.2], [door.x + 1.2, door.z - 0.4], [deep.x - 1.4, deep.z - 0.2], [deep.x + 1.5, deep.z + 0.3], [deep.x + 1.1, deep.z - 1.2]] as const) {
+  return m;
+}
+
+/** Haste (osso, graveto) entre dois pontos de mundo. */
+function strut(c: CaveCtx, a: Vector3, b: Vector3, dia: number, color: Color3, k = 0.85): void {
+  const d = b.subtract(a);
+  const len = d.length();
+  const m = MeshBuilder.CreateCylinder("haste", { diameter: dia, height: 1, tessellation: 5 }, c.scene);
+  paint(m, jit(color, c.rnd, 0.16), k);
+  m.scaling.set(1, len, 1);
+  m.rotationQuaternion = Quaternion.FromUnitVectorsToRef(Vector3.Up(), d.normalizeToNew(), new Quaternion());
+  m.position.copyFrom(a.add(b).scale(0.5));
+  m.bakeCurrentTransformIntoVertices();
+  c.lit.push(m);
+}
+
+/**
+ * Tumulo ARROMBADO POR DENTRO: a tampa foi empurrada para FORA (cai encostada na frente, de
+ * ponta), a borda da frente esta lascada, as lascas voam para fora, o vao e escuro e um braco
+ * de osso passa por cima da borda. `ry` gira o conjunto; a frente (+z local) e o lado de fora.
+ */
+export function openTomb(c: CaveCtx, x: number, z: number, ry: number, y0: number): void {
+  const stone = col("#767888");
+  const fresh = col("#a4a6b4");
+  const W = (lx: number, lz: number): { x: number; z: number } => toWorld(x, z, ry, lx, lz);
+  box(c, 2.3, 0.55, 1.0, x, y0 + 0.275, z, stone, { ry });
+  const inn = W(0, 0);
+  box(c, 1.9, 0.05, 0.66, inn.x, y0 + 0.56, inn.z, col("#07080c"), { ry }, 1);
+  // tampa empurrada para fora: de ponta, apoiada na frente do tumulo
+  const lid = W(0.25, 1.18);
+  box(c, 2.3, 0.22, 1.05, lid.x, y0 + 0.4, lid.z, stone, { ry: ry + 0.18, rx: ry === 0 ? -0.62 : -0.62 }, 0.9);
+  // lascas frescas voltadas para fora (claras: a quebra recente)
+  const chips: [number, number, number, number][] = [[-0.5, 1.0, 0.3, 0.26], [0.7, 1.55, -0.4, 0.2], [-0.95, 1.75, 0.8, 0.17], [1.05, 1.0, 0.2, 0.22], [0.1, 2.0, 0.6, 0.15]];
+  for (const [lx, lz, rr, sz] of chips) {
+    const w = W(lx, lz);
+    const m = MeshBuilder.CreatePolyhedron("lasca", { type: 1, size: sz }, c.scene);
+    paint(m, jit(fresh, c.rnd, 0.2), 0.85);
+    place(m, w.x, y0 + sz * 0.5, w.z, { sx: 1.7, sy: 0.55, ry: ry + rr });
+    c.lit.push(m);
+  }
+  // borda da frente quebrada: dois dentes claros faltando no topo
+  for (const lx of [-0.4, 0.55]) {
+    const w = W(lx, 0.5);
+    box(c, 0.3, 0.1, 0.12, w.x, y0 + 0.57, w.z, fresh, { ry: ry + (lx > 0 ? 0.3 : -0.2) }, 0.8);
+  }
+  // ossada la dentro: cranio, costelas, e um braco que cruza a borda para o lado de fora
+  const sk = W(-0.65, -0.05);
+  skull(c, sk.x, sk.z, 1, ry + 1.4, y0 + 0.5, col("#a8a290"));
+  for (let i = 0; i < 4; i++) {
+    const r = W(0.05 + i * 0.2, -0.05);
+    box(c, 0.07, 0.05, 0.5, r.x, y0 + 0.6, r.z, col("#a8a290"), { ry }, 0.8);
+  }
+  const a1 = W(-0.2, 0.1);
+  const a2 = W(-0.3, 0.95);
+  strut(c, new Vector3(a1.x, y0 + 0.62, a1.z), new Vector3(a2.x, y0 + 0.1, a2.z), 0.12, col("#b4ae9a"));
+  const hand = W(-0.3, 1.1);
+  for (let i = 0; i < 3; i++) {
+    const f = W(-0.3 + (i - 1) * 0.07, 1.22);
+    strut(c, new Vector3(hand.x, y0 + 0.05, hand.z), new Vector3(f.x, y0 + 0.03, f.z), 0.03, col("#a8a290"));
+  }
+  const b2 = W(0.5, 1.5);
+  bone(c, b2.x, b2.z, 0.55, ry + 0.9, y0 + 0.04 - c.surf(b2.x, b2.z));
+}
+
+/** Manto rasgado de Acendedora, caido no chao: capa aberta, capuz vazio, rasgo na altura do peito. */
+export function tornCloak(c: CaveCtx, x: number, z: number, ry: number, y0: number, color: Color3): void {
+  const W = (lx: number, lz: number): { x: number; z: number } => toWorld(x, z, ry, lx, lz);
+  const dk = new Color3(color.r * 0.6, color.g * 0.6, color.b * 0.6);
+  const fb = (w: number, h: number, d: number, lx: number, lz: number, y: number, col2: Color3, rot = 0, k = 0.9): void => {
+    const p = W(lx, lz);
+    flat(box(c, w, h, d, p.x, y0 + y, p.z, col2, { ry: ry + rot }, k));
+  };
+  // capa aberta em leque (camada de baixo) e uma dobra por cima
+  const fan = MeshBuilder.CreateCylinder("capa", { diameter: 1.7, height: 0.04, tessellation: 7 }, c.scene);
+  paint(fan, jit(color, c.rnd, 0.1), 0.95);
+  place(fan, x, y0 + 0.03, z, { ry, sz: 1.1 });
+  c.lit.push(flat(fan));
+  fb(0.95, 0.04, 0.85, 0.35, -0.3, 0.07, dk, 0.5);
+  fb(0.6, 0.04, 0.5, -0.55, -0.5, 0.07, dk, -0.5);
+  // rasgo no peito: fenda escura longa e tiras puxadas para os lados
+  fb(0.8, 0.05, 0.16, 0, 0.2, 0.085, col("#08060a"), 0, 1);
+  for (const [lx, lz, rot] of [[-0.5, 0.34, 0.55], [0.52, 0.32, -0.45], [-0.4, 0.04, -0.6], [0.44, 0.06, 0.55]] as const) fb(0.26, 0.04, 0.08, lx, lz, 0.1, color, rot);
+  // capuz vazio, amassado, com a boca escura e um fecho claro
+  const h = W(0, 0.92);
+  const hood = MeshBuilder.CreateSphere("capuz", { diameter: 0.62, segments: 5 }, c.scene);
+  paint(hood, jit(dk, c.rnd, 0.1), 0.95);
+  place(hood, h.x, y0 + 0.13, h.z, { sy: 0.5, sz: 1.2, ry });
+  c.lit.push(flat(hood));
+  const mouth = W(0, 1.1);
+  const mo = MeshBuilder.CreateCylinder("boca_capuz", { diameter: 0.32, height: 0.02, tessellation: 7 }, c.scene);
+  paint(mo, col("#06050a"), 1);
+  place(mo, mouth.x, y0 + 0.26, mouth.z, { rx: 0.55, ry });
+  c.lit.push(flat(mo));
+  fb(0.1, 0.05, 0.1, 0, 0.62, 0.09, col("#b09040"), 0.4, 0.9);
+}
+
+/** Fagulha apagada: pedra escura rachada, cinza e um fiapo de fumaca fria (solido, sem emissivo). */
+export function deadSpark(c: CaveCtx, x: number, z: number, y0: number): void {
+  const ash = MeshBuilder.CreateCylinder("cinza_fagulha", { diameter: 0.8, height: 0.02, tessellation: 8 }, c.scene);
+  paint(ash, col("#2c2c36"), 0.9);
+  place(ash, x, y0 + 0.012, z);
+  c.lit.push(flat(ash));
+  const st = MeshBuilder.CreatePolyhedron("fagulha_apagada", { type: 3, size: 0.2 }, c.scene);
+  paint(st, col("#4a444e"), 0.9);
+  place(st, x, y0 + 0.14, z, { sx: 1, sy: 0.85, ry: 0.5 });
+  c.lit.push(flat(st));
+  flat(box(c, 0.34, 0.025, 0.045, x, y0 + 0.285, z, col("#6a2a1e"), { ry: 0.6 }, 0.8));
+  flat(box(c, 0.2, 0.025, 0.04, x + 0.05, y0 + 0.288, z - 0.04, col("#6a2a1e"), { ry: -0.5 }, 0.8));
+  // fumaca fria: bolhas achatadas que sobem em curva e se afinam
+  const smoke = col("#bcc4d0");
+  for (const [dx, dy, dz, d] of [[0.02, 0.46, 0, 0.24], [0.12, 0.7, 0.04, 0.19], [0.06, 0.92, 0.13, 0.14], [-0.06, 1.1, 0.21, 0.1]] as const) {
+    const m = MeshBuilder.CreateSphere("fumaca_fria", { diameter: d, segments: 4 }, c.scene);
+    paint(m, smoke, 0.85);
+    place(m, x + dx, y0 + dy, z + dz, { sy: 1.25 });
+    c.lit.push(flat(m));
+  }
+}
+
+/** Ossada de Acendedora: manto, capuz, cranio, coluna, costelas, bacia e ossos longos. `pose` varia a pessoa. */
+export function acendedoraRemains(c: CaveCtx, x: number, z: number, ry: number, y0: number, cloak: Color3, pose: "supina" | "curvada"): void {
+  const bone0 = col("#a8a290");
+  const W = (lx: number, lz: number): { x: number; z: number } => toWorld(x, z, ry, lx, lz);
+  // manto por baixo (maior) com o capuz junto ao cranio
+  const cl = W(0, 0.1);
+  const cape = MeshBuilder.CreateCylinder("manto", { diameter: 1.7, height: 0.035, tessellation: 8 }, c.scene);
+  paint(cape, jit(cloak, c.rnd, 0.1), 0.95);
+  place(cape, cl.x, y0 + 0.025, cl.z, { ry, sz: 1.15 });
+  c.lit.push(flat(cape, 1.6));
+  const cl2 = W(pose === "supina" ? 0.5 : -0.5, -0.2);
+  flat(box(c, 0.8, 0.035, 0.9, cl2.x, y0 + 0.05, cl2.z, new Color3(cloak.r * 0.7, cloak.g * 0.7, cloak.b * 0.7), { ry: ry + 0.4 }, 0.9), 1.6);
+  const hd = W(0, 1.05);
+  const hood = MeshBuilder.CreateSphere("capuz", { diameter: 0.5, segments: 5 }, c.scene);
+  paint(hood, jit(new Color3(cloak.r * 0.8, cloak.g * 0.8, cloak.b * 0.8), c.rnd, 0.1), 0.85);
+  place(hood, hd.x, y0 + 0.12, hd.z, { sy: 0.55, sz: 1.1, ry });
+  c.lit.push(flat(hood, 1.6));
+  // cranio sobre o capuz, coluna e costelas
+  const skp = W(pose === "supina" ? 0 : 0.12, 1.1);
+  skull(c, skp.x, skp.z, 1, ry + (pose === "supina" ? Math.PI : 2.2), y0 + 0.13, bone0);
+  const s0 = W(0, 0.85);
+  const s1 = W(0, -0.1);
+  strut(c, new Vector3(s0.x, y0 + 0.07, s0.z), new Vector3(s1.x, y0 + 0.07, s1.z), 0.1, bone0);
+  for (let i = 0; i < 4; i++) {
+    const r = W(0, 0.7 - i * 0.18);
+    box(c, 0.5 - i * 0.05, 0.045, 0.05, r.x, y0 + 0.09, r.z, bone0, { ry }, 0.8);
+  }
+  const pv = W(0, -0.18);
+  box(c, 0.32, 0.05, 0.2, pv.x, y0 + 0.08, pv.z, bone0, { ry }, 0.8);
+  const bendL = pose === "curvada" ? 0.55 : 0.1;
+  for (const sd of [-1, 1]) {
+    const hip = W(0.12 * sd, -0.2);
+    const knee = W(0.28 * sd + (pose === "curvada" ? 0.2 * sd : 0), -0.75 + (pose === "curvada" ? 0.3 : 0));
+    const foot = W(0.3 * sd + bendL * sd * (pose === "curvada" ? 1 : 0), -1.3 + (pose === "curvada" ? 0.2 : 0));
+    strut(c, new Vector3(hip.x, y0 + 0.08, hip.z), new Vector3(knee.x, y0 + 0.07, knee.z), 0.1, bone0);
+    strut(c, new Vector3(knee.x, y0 + 0.07, knee.z), new Vector3(foot.x, y0 + 0.05, foot.z), 0.085, bone0);
+    // bracos: supina com as maos sobre o peito; curvada com um braco esticado para frente (para o fundo)
+    const sh = W(0.22 * sd, 0.62);
+    const reach = pose === "curvada" && sd > 0;
+    const el = W((reach ? 0.55 : 0.34) * sd, reach ? 1.4 : 0.25);
+    const hn = W((reach ? 0.5 : 0.1) * sd, reach ? 2.1 : 0.3);
+    strut(c, new Vector3(sh.x, y0 + 0.08, sh.z), new Vector3(el.x, y0 + 0.07, el.z), 0.08, bone0);
+    strut(c, new Vector3(el.x, y0 + 0.07, el.z), new Vector3(hn.x, y0 + 0.05, hn.z), 0.07, bone0);
+  }
+  // fagulha do cinto apagada (pedra escura) e velas votivas de cada lado
+  const sp = W(-0.35, 0.3);
+  const st = MeshBuilder.CreatePolyhedron("fagulha_cinto", { type: 3, size: 0.08 }, c.scene);
+  paint(st, col("#2a262d"), 0.9);
+  place(st, sp.x, y0 + 0.07, sp.z, { sy: 0.8 });
+  c.lit.push(st);
+  for (const [lx, lz] of [[-0.95, 0.9], [0.95, 0.1]] as const) {
+    const w = W(lx, lz);
     const m = MeshBuilder.CreateCylinder("vela", { diameter: 0.1, height: 0.22, tessellation: 5 }, c.scene);
     paint(m, new Color3(1, 1, 1));
-    place(m, px, c.surf(px, pz) + 0.12, pz);
+    place(m, w.x, y0 + 0.11, w.z);
     c.glow.push(m);
     const f = MeshBuilder.CreateCylinder("chama_vela", { diameterTop: 0, diameterBottom: 0.09, height: 0.2, tessellation: 4 }, c.scene);
     paint(f, new Color3(1.6, 1.4, 1));
-    place(f, px, c.surf(px, pz) + 0.33, pz);
+    place(f, w.x, y0 + 0.32, w.z);
     c.glow.push(f);
   }
 }

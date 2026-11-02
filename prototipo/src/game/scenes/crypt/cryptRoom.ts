@@ -651,6 +651,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   if (cave) {
     for (const m of cave.meshes) track(m);
     for (const m of cave.glow) ctx.glow.addIncludedOnlyMesh(m);
+    for (const k of cave.colliders) wallCollider(k.cx, k.cz, k.w, k.d); // pecas de cena solidas (tumulo)
   }
   const atmosphere = ALTA ? createAtmosphere(scene, THEME) : null;
 
