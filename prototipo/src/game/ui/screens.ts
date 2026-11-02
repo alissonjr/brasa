@@ -2,7 +2,9 @@ import "./fonts";
 import "./ds/tokens.css";
 import "./theme.css";
 import "./ds/components.css";
+import "./ds/codex.css";
 import { icon } from "./ds/icons";
+import { illustration, type IllustrationId } from "./ds/illustrations";
 import { DEFAULT_BINDINGS, INPUT_ACTIONS, el, type InputAction, type KeyBindings, type Screen } from "@engine";
 import type { DialogueSpeed, Quality } from "@platform";
 import { T, setLanguage } from "./strings";
@@ -15,11 +17,16 @@ import { LANDMARKS, WORLD_HALF, type LandmarkKind } from "../content/map";
 import { CAMPAIGN, chapterName, currentObjective, findChapter, progressPercent } from "../content/campaign";
 import { ACHIEVEMENTS } from "../content/achievements";
 import {
-  CODEX_CATEGORIES,
-  codexByCategory,
-  codexUnlockedCount,
+  CODEX_DESCENT,
+  CODEX_ENTRIES,
+  CODEX_TOTAL,
+  codexProgress,
   isCodexUnlocked,
+  romanNumeral,
   type CodexCategory,
+  type CodexDecal,
+  type CodexEntry,
+  type CodexFloor,
 } from "../content/codex";
 import {
   DIFFICULTIES,
@@ -1017,103 +1024,242 @@ export class ControlsScreen implements Screen {
   }
 }
 
-// --- Crônica (Codex de lore) ---
+// --- Crônica: A Parede (Codex de lore) ---
 
 const CATEGORY_LABEL: Record<CodexCategory, () => string> = {
-  personagens: () => T.catPersonagens,
-  lugares: () => T.catLugares,
-  relatos: () => T.catRelatos,
+  personagens: () => T.catPessoa,
+  lugares: () => T.catLugar,
+  relatos: () => T.catRelato,
 };
+
+/** Inclinação (graus) de cada decalque preso na pedra: nenhum fica perfeitamente reto. */
+const SLAB_TILT = [-1.6, 1.1, -0.7, 1.5, -1.2, 0.8, -0.5];
+
+/** O que o folheto mostra: um decalque de andar ou um nicho. */
+interface CodexPage {
+  art: IllustrationId;
+  title: string;
+  /** Linha em itálico sob o título (o eco do andar, ou o resumo do nicho). */
+  verse: string;
+  body: string[];
+  /** Duas pontas do selo no alto do folheto (ex.: "Andar I" e a camada do poço). */
+  seal: [string, string];
+  caption: string;
+  /** Texto gravado na pedra (só nos decalques). */
+  stone?: string;
+}
+
+function decalPage(f: CodexFloor, d: CodexDecal): CodexPage {
+  return {
+    art: d.art,
+    title: d.title,
+    verse: d.echo,
+    body: d.body,
+    seal: [`${T.andar} ${romanNumeral(f.n)}`, f.layer],
+    caption: `${T.andar} ${romanNumeral(f.n)} · ${f.name}`,
+    stone: d.inscription,
+  };
+}
+
+function entryPage(e: CodexEntry): CodexPage {
+  return {
+    art: e.art,
+    title: e.title,
+    verse: e.lead,
+    body: e.body,
+    seal: [CATEGORY_LABEL[e.category](), e.floor > 0 ? `${T.andar} ${romanNumeral(e.floor)}` : T.cronicaDesdeBoca],
+    caption: e.title,
+  };
+}
+
+/** Cabeçalho de uma faixa da parede: rótulo, fio ornamentado e uma contagem à direita. */
+function codexFaixa(label: string, right: string, extra = ""): HTMLElement {
+  return el(
+    "div",
+    { class: ("codex-faixa " + extra).trim() },
+    el("span", { class: "ds-label", text: label }),
+    el("span", { class: "ds-divider" }),
+    el("span", { class: "ds-label codex-faixa__r", text: right })
+  );
+}
 
 export class CodexScreen implements Screen {
   readonly element: HTMLElement;
+  /** Última laje/nicho aberta: o foco volta a ela quando o folheto fecha. */
+  private opener: HTMLElement | null = null;
 
   constructor(ctx: UiContext, onBack: () => void = () => ctx.ui.back()) {
-    const state = ctx.progression.state();
-    const { unlocked, total } = codexUnlockedCount(state);
-    const body = el("div", { class: "codex-body" });
+    const log = ctx.codex;
+    const fresh = log.takeFresh(); // o que foi liberado desde a última vez: papel cai, nicho acende
+    const prog = codexProgress(log);
+    const open = (node: HTMLElement, page: CodexPage): void => {
+      this.opener = node;
+      ctx.ui.push(new CodexEntryScreen(ctx, page));
+    };
+    // O "novo" só vale para a primeira exibição: ao fim da animação, tira a classe, para o
+    // papel não cair de novo quando o folheto fecha e esta tela volta a aparecer.
+    const settle = (node: HTMLElement, animated: HTMLElement): void => {
+      animated.addEventListener("animationend", (e) => {
+        if (e.target === animated) node.classList.remove("is-new");
+      });
+    };
 
-    for (const cat of CODEX_CATEGORIES) {
-      const entries = codexByCategory(cat);
-      if (!entries.length) continue;
-      body.append(el("div", { class: "opt-section", text: CATEGORY_LABEL[cat]() }));
-      for (const entry of entries) {
-        const open = isCodexUnlocked(entry, state);
-        const row = el(
-          "div",
-          { class: "ds-row codex-row" + (open ? "" : " locked") },
-          el("span", { class: "codex-seal codex-seal-" + cat }),
+    const steps = el("div", { class: "codex-steps" });
+    CODEX_DESCENT.forEach((f, i) => {
+      const num = romanNumeral(f.n);
+      const d = f.decal;
+      const readNow = !!d && isCodexUnlocked(d, log);
+      const next = CODEX_DESCENT[i + 1]?.decal;
+      const lit = readNow && !!next && isCodexUnlocked(next, log);
+      const style = `--k:${i};--rot:${SLAB_TILT[i] ?? 0}deg`;
+      if (d && readNow) {
+        const paper = el("span", { class: "codex-paper" });
+        const q = el("q", { text: d.inscription });
+        paper.append(q, el("small", { text: d.title }));
+        const slab = el(
+          "button",
+          {
+            class: "codex-slab" + (lit ? " is-lit" : "") + (fresh.has(d.id) ? " is-new" : ""),
+            type: "button",
+            style,
+            "aria-label": `${T.andar} ${num}: ${d.title}`,
+          },
+          el("span", { class: "codex-slab__n" }, el("b", { text: num }), el("span", { text: f.layerShort })),
+          paper
+        );
+        slab.addEventListener("pointerenter", uiHover);
+        slab.addEventListener("click", () => {
+          uiClick();
+          open(slab, decalPage(f, d));
+        });
+        if (fresh.has(d.id)) settle(slab, q);
+        steps.append(slab);
+      } else {
+        const vago = el("span", { class: "codex-vago" });
+        vago.innerHTML = icon("lock", 22);
+        vago.append(el("span", { text: T.cronicaLajeVazia }));
+        steps.append(
           el(
             "div",
-            { class: "codex-text" },
-            el("strong", { text: open ? entry.title : "???" }),
-            el("span", { text: open ? entry.lead : T.registroOculto }),
-          ),
+            { class: "codex-slab is-empty", style, role: "img", "aria-label": `${T.andar} ${num}, ${T.cronicaSemDecalque}` },
+            el("span", { class: "codex-slab__n" }, el("b", { text: num }), el("span")),
+            vago
+          )
         );
-        if (open) {
-          row.classList.add("clickable", "ds-row--interactive");
-          row.setAttribute("tabindex", "0");
-          const openEntry = (): void => ctx.ui.push(new CodexEntryScreen(ctx, entry.title, entry.body, entry.model));
-          row.addEventListener("click", openEntry);
-          row.addEventListener("keydown", (e) => {
-            if ((e as KeyboardEvent).key === "Enter") openEntry();
-          });
-        }
-        body.append(row);
+      }
+    });
+
+    const niches = el("div", { class: "codex-niches" });
+    for (const e of CODEX_ENTRIES) {
+      const lit = isCodexUnlocked(e, log);
+      const arch = el("span", { class: "codex-niche__arch" });
+      arch.innerHTML = illustration(e.art);
+      if (lit) {
+        const niche = el(
+          "button",
+          {
+            class: "codex-niche" + (fresh.has(e.id) ? " is-new" : ""),
+            type: "button",
+            "aria-label": `${CATEGORY_LABEL[e.category]()}: ${e.title}`,
+          },
+          arch,
+          el("span", { class: "codex-niche__t", text: e.title }),
+          el("span", { class: "codex-niche__s", text: CATEGORY_LABEL[e.category]() })
+        );
+        niche.addEventListener("pointerenter", uiHover);
+        niche.addEventListener("click", () => {
+          uiClick();
+          open(niche, entryPage(e));
+        });
+        if (fresh.has(e.id)) settle(niche, arch);
+        niches.append(niche);
+      } else {
+        const vela = el("span", { class: "codex-niche__vela" });
+        vela.innerHTML = icon("flame", 20);
+        arch.append(vela);
+        const where = `${T.andar} ${romanNumeral(e.floor)}`;
+        niches.append(
+          el(
+            "div",
+            { class: "codex-niche is-empty", role: "img", "aria-label": `${T.cronicaApagado}, ${where}` },
+            arch,
+            el("span", { class: "codex-niche__t", text: T.cronicaApagado }),
+            el("span", { class: "codex-niche__s", text: where })
+          )
+        );
       }
     }
+
+    const wall = el(
+      "section",
+      { class: "codex-wall", "aria-label": T.cronicaPedra },
+      codexFaixa(T.cronicaPedra, `${T.cronicaDecalques} ${prog.decals}/${CODEX_TOTAL.decals}`),
+      steps,
+      codexFaixa(T.cronicaNichos, `${T.cronicaRegistros} ${prog.entries}/${CODEX_TOTAL.entries}`, "codex-faixa--nichos"),
+      niches
+    );
 
     this.element = backdrop(
       [
         el("h2", { class: "menu-title", text: T.cronica }),
-        el("p", { class: "menu-subtitle", text: `${T.cronicaSubtitulo} (${unlocked}/${total})` }),
-        body,
+        el("p", { class: "menu-subtitle", text: T.cronicaSubtitulo }),
+        wall,
         btn(T.voltar, onBack),
       ],
-      "codex-panel",
+      "codex-panel"
     );
-  }
-}
-
-class CodexEntryScreen implements Screen {
-  readonly element: HTMLElement;
-  private readonly stage?: ModelStage;
-
-  constructor(ctx: UiContext, title: string, bodyText: string, modelUrl?: string) {
-    const paras = bodyText.split("\n").map((p) => el("p", { class: "codex-para", text: p }));
-    const article = el("div", { class: "codex-article" }, ...paras);
-
-    if (modelUrl) {
-      // Verbete imersivo: vitrine 3D girando ao lado do texto (duas colunas).
-      this.stage = new ModelStage({ modelUrl, autoRotate: !ctx.settings.get().reducedMotion });
-      const stageCol = el(
-        "div",
-        { class: "codex-stage-col" },
-        this.stage.element,
-        el("span", { class: "model-stage-hint", text: T.arrasteParaGirar })
-      );
-      this.element = backdrop(
-        [
-          el("h2", { class: "menu-title", text: title }),
-          el("div", { class: "codex-spread" }, stageCol, el("div", { class: "codex-spread-text" }, article)),
-          btn(T.voltar, () => ctx.ui.back()),
-        ],
-        "codex-panel codex-panel-spread",
-      );
-    } else {
-      this.element = backdrop(
-        [el("h2", { class: "menu-title", text: title }), article, btn(T.voltar, () => ctx.ui.back())],
-        "codex-panel",
-      );
-    }
   }
 
   onShow(): void {
-    this.stage?.start();
+    // O UiManager foca o primeiro controle logo depois deste gancho; adia um quadro para
+    // devolver o foco à laje/nicho que o jogador abriu.
+    const o = this.opener;
+    const body = this.element.querySelector<HTMLElement>(".menu-body");
+    requestAnimationFrame(() => {
+      if (o) o.focus();
+      else if (body) body.scrollTop = 0; // primeira vez: começa no topo da parede
+    });
   }
+}
 
-  onHide(): void {
-    this.stage?.dispose();
+/** O folheto: a gravura impressa em papel velho, com o texto ao lado. Esc/Voltar fecham. */
+class CodexEntryScreen implements Screen {
+  readonly element: HTMLElement;
+
+  constructor(ctx: UiContext, page: CodexPage) {
+    const back = btn(T.voltar, () => ctx.ui.back());
+    back.classList.add("ds-btn--ghost");
+
+    const plate = el("div", { class: "codex-folheto__plate" });
+    plate.innerHTML = illustration(page.art);
+    const figure = el("figure", { class: "codex-folheto__img" }, plate, el("figcaption", { text: page.caption }));
+
+    const text = el(
+      "div",
+      { class: "codex-folheto__txt" },
+      el("h2", { text: page.title }),
+      el("p", { class: "codex-folheto__ver", text: page.verse }),
+      ...page.body.map((p) => el("p", { class: "codex-folheto__par", text: p }))
+    );
+    if (page.stone) {
+      text.append(el("div", { class: "codex-folheto__pedra" }, el("small", { text: T.cronicaGravada }), page.stone));
+    }
+
+    this.element = el(
+      "div",
+      { class: "menu-backdrop codex-veu" },
+      el(
+        "article",
+        { class: "codex-folheto" },
+        el(
+          "div",
+          { class: "codex-folheto__bar" },
+          back,
+          el("div", { class: "codex-folheto__sel" }, el("span", { text: page.seal[0] }), el("span", { text: page.seal[1] }))
+        ),
+        el("div", { class: "codex-folheto__scroll" }, figure, text)
+      )
+    );
   }
 }
 

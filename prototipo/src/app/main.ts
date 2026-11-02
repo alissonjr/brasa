@@ -25,6 +25,12 @@ import {
   chapterName,
   progressPercent,
   readGameSave,
+  CodexLog,
+  FLOOR_ECHOES,
+  FLOOR_INSCRIPTIONS,
+  MARK_BOSS_DOWN,
+  markFloor,
+  markRead,
   achievementForObjective,
   setLanguage,
   createAutosaveIndicator,
@@ -137,6 +143,19 @@ async function main(): Promise<void> {
   platform.progression.setChapter(gameSave?.chapter || DEFAULT_CHAPTER, gameSave?.checkpoint ?? "");
   for (const id of gameSave?.objectives ?? []) platform.progression.completeObjective(id);
   platform.achievements.load(gameSave?.achievements ?? []);
+
+  // CRÔNICA: marcas do que o jogador já viu (andares alcançados, inscrições lidas, queda do
+  // Guardião). Alimentada pelo `crypt:floor`, pela leitura da inscrição e pela queda do chefe;
+  // guardada no save. `codexNews` junta os avisos "Nova página" até haver um momento calmo.
+  const codex = new CodexLog(gameSave?.codex ?? []);
+  const codexNews: string[] = [];
+  const markCodex = (id: string): void => {
+    const r = codex.mark(id);
+    if (!r.added) return;
+    codexNews.push(...r.titles);
+    if (gameActive) void doAutosave(); // fora do jogo (boot, transição) quem chama já salva
+  };
+  platform.events.on<{ index: number }>("crypt:floor", ({ index }) => markCodex(markFloor(index + 1)));
 
   // --- JOGO: a descida pela cripta (uma sala por vez, com descarte) ---
   stage("Acendendo a fagulha...");
@@ -363,31 +382,12 @@ async function main(): Promise<void> {
       storyEl.style.opacity = "0";
     }, holdMs);
   };
-  // Um eco/memória por andar (sussurro do passado encenado ao entrar; biblia-narrativa).
-  // Beats de revelação por andar (canon fechado: povo morto -> alguém desceu antes -> o custo
-  // -> luto -> a verdade se monta -> confronto). Ver narrativa-e-historia.md seção 0.
-  const ECHOES = [
-    "Lê os nomes gravados nos bancos. Foram teu povo, antes do frio.",
-    "Um manto rasgado. Uma fagulha apagada no chão. Alguém desceu antes de ti.",
-    "Dizem que ela foi a primeira. Dizem que já ardia aqui quando a primeira desceu.",
-    "A Brasa não pede lenha. Pede quem a alimente por dentro.",
-    "Dois conjuntos de ossos. Um voltou até a porta. O outro desceu mais fundo.",
-    "Marta dizia: se não eu, então tu. Agora sinto o peso do que ela carregou.",
-    "No fundo, a primeira Acendedora ainda arde. E te esperava.",
-  ];
-
-  // INSCRIÇÕES por proximidade (item 5): texto curto GRAVADO na pedra do nicho, lido ao se
-  // aproximar (distinto do ECO, que é a voz/memória ao ENTRAR). Fragmentário, coerente com o
-  // canon (povo morto -> alguém desceu -> o custo -> luto -> a verdade -> confronto).
-  const INSCRIPTIONS = [
-    "Aqui jaz a guarda da chama. Foram teu povo, antes do frio.",
-    "Outra desceu por estas escadas. Não a vimos voltar.",
-    "Quem acendeu a primeira Brasa? A pedra não responde.",
-    "A chama cobra em carne: uma vida por geração.",
-    "Que descanses, tu que voltaste. E tu, que desceste mais.",
-    "Marta gravou aqui: não temas o fundo. Teme ficar.",
-    "Ela ainda guarda o fogo. Liberta-a, ou toma seu lugar.",
-  ];
+  // Eco (memória ouvida ao ENTRAR) e inscrição (texto GRAVADO na pedra do nicho, lido ao se
+  // aproximar) de cada andar. O texto vive em content/codex.ts, junto do decalque da Crônica,
+  // para o jogo e a Crônica nunca divergirem. Beats do canon fechado: povo morto -> alguém
+  // desceu antes -> o custo -> luto -> a verdade se monta -> confronto (narrativa §0).
+  const ECHOES = FLOOR_ECHOES;
+  const INSCRIPTIONS = FLOOR_INSCRIPTIONS;
   // Placa discreta da inscrição (estilo lapidar): aparece ao chegar perto do nicho.
   const inscriptionEl = document.createElement("div");
   inscriptionEl.className = "hud-inscription";
@@ -619,6 +619,7 @@ async function main(): Promise<void> {
     if (nearReadable && input.isHeld("interact")) {
       showStory(nearReadable.text, 6500, false);
       readShown.add(nearReadable.text);
+      markCodex(markRead(floorIndex + 1)); // inscrição lida: o decalque cai na Crônica
       nearReadable = null;
     }
   };
@@ -886,6 +887,7 @@ async function main(): Promise<void> {
         objectives: prog.objectivesDone,
         inkState: "",
         achievements: platform.achievements.all(),
+        codex: codex.all(),
         character,
         run: {
           active: runActive,
@@ -976,6 +978,7 @@ async function main(): Promise<void> {
     score: platform.score,
     achievements: platform.achievements,
     progression: platform.progression,
+    codex,
     hasAutosave: carregado !== null,
     playtimeSec: () => loadedPlaytime + Math.round((performance.now() - startedAt) / 1000),
     playerPos: () => ({ x: hero.position.x, z: hero.position.z }),
@@ -990,6 +993,7 @@ async function main(): Promise<void> {
       platform.score.reset(0);
       platform.progression.load({ chapterId: DEFAULT_CHAPTER, checkpointId: "", objectivesDone: [] });
       platform.achievements.load([]);
+      codex.load([]); // Crônica nova junto com a jornada nova
       resetRun(); // descida do zero
       enterRoom(0);
       startGame();
@@ -1010,6 +1014,7 @@ async function main(): Promise<void> {
           objectivesDone: g.objectives,
         });
         platform.achievements.load(g.achievements);
+        codex.load(g.codex);
         if (g.run.active) restoreRun(g.run);
         else {
           resetRun();
@@ -1131,6 +1136,7 @@ async function main(): Promise<void> {
       Math.hypot(hero.position.x - currentRoom.inscriptionPos.x, hero.position.z - currentRoom.inscriptionPos.z) <= 3.0) {
       inscriptionEl.textContent = INSCRIPTIONS[floorIndex] ?? "";
       inscriptionEl.style.opacity = "1";
+      markCodex(markRead(floorIndex + 1)); // a pedra se lê ao chegar perto: o decalque cai na Crônica
     } else {
       inscriptionEl.style.opacity = "0";
     }
@@ -1173,6 +1179,10 @@ async function main(): Promise<void> {
     const hc = hero.combat;
     damageNumbers.update(dt / 1000, gameActive && !descending ? { hp: hc.healthFraction * hc.maxHealth, max: hc.maxHealth, x: hero.position.x, y: hero.position.y, z: hero.position.z } : null);
     if (gameActive) updateIgnite(dt / 1000); // recuperar estilha / abrir passagem
+    if (gameActive && !descending && codexNews.length) {
+      // Aviso "Nova página na Crônica" num momento calmo (nunca durante o fade entre andares).
+      gameHud.notifyCodex(codexNews.splice(0).join(", "));
+    }
     if (gameActive) {
       updateReadables(); // ler inscrições/pergaminhos ([R] perto)
       if (nearReadable) { promptEl.textContent = "Pressione [R] para ler"; promptEl.style.opacity = "1"; }
@@ -1191,7 +1201,10 @@ async function main(): Promise<void> {
         if (!DESCENT[floorIndex]?.boss) playStinger("limpa"); // alívio curto da câmara limpa
 
         // Confronto encenado: ao cair, o Guardião (a Primeira) sussurra a verdade (canon §0).
-        if (DESCENT[floorIndex]?.boss) showStory("Vai. Acende a Brasa... e não a deixes sozinha, como eu fiquei.", 6500, false);
+        if (DESCENT[floorIndex]?.boss) {
+          showStory("Vai. Acende a Brasa... e não a deixes sozinha, como eu fiquei.", 6500, false);
+          markCodex(MARK_BOSS_DOWN); // o Guardião sussurrou a verdade: a Primeira entra na Crônica
+        }
       }
       tryDescend();
       if (descentDone && !winShown) {

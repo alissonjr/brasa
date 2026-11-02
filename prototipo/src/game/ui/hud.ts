@@ -1,5 +1,6 @@
 import { el } from "@engine";
 import { LANDMARKS, type LandmarkKind } from "../content/map";
+import { icon } from "./ds/icons";
 import { T, onLanguageChange } from "./strings";
 
 /**
@@ -92,6 +93,24 @@ export class GameHud {
       toast.classList.remove("show");
       window.setTimeout(() => toast.remove(), 400);
     }, 3600);
+  }
+
+  /** Aviso "Nova página na Crônica" (pílula `ds-toast`), com os títulos do que foi liberado. */
+  notifyCodex(titles: string): void {
+    const glyph = el("span", { class: "hud-codex-toast__glyph" });
+    glyph.innerHTML = icon("scroll", 18);
+    const toast = el(
+      "div",
+      { class: "ds-toast hud-codex-toast", role: "status" },
+      glyph,
+      el("span", {}, el("b", { text: T.cronicaNovaPagina }), el("span", { text: `: ${titles}` }))
+    );
+    this.toastLayer.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add("show"));
+    window.setTimeout(() => {
+      toast.classList.remove("show");
+      window.setTimeout(() => toast.remove(), 400);
+    }, 4600);
   }
 
   update(s: HudState): void {

@@ -1,0 +1,424 @@
+/* CAMADA JOGO (Brasa). Crônica: "A Parede" (CodexScreen) e o folheto (CodexEntryScreen).
+   Só usa tokens (tokens.css) e componentes .ds-*. Nenhum valor de cor solto.
+   O "papel" é papel velho e ESCURO, para combinar com o poço: pergaminho de ouro apagado sobre
+   a pedra, com a letra em osso (texto de leitura longa, contraste de sobra). */
+
+.codex-panel {
+  --paper-hi: color-mix(in srgb, var(--gold-700) 58%, var(--ink-800));
+  --paper-lo: color-mix(in srgb, var(--gold-800) 82%, var(--ink-850));
+  --paper-stain: color-mix(in srgb, var(--gold-600) 22%, transparent);
+  --paper-ink: var(--text-hi);
+  --paper-ink-soft: var(--text-mid);
+  --paper-label: var(--gold-400);
+  --step: 16px; /* quanto cada laje desce em relação à anterior */
+  --slab-h: clamp(172px, 20vh, 216px); /* a parede cabe na altura da tela sem rolar, quando dá */
+  --arch-w: clamp(104px, 15vh, 168px);
+  width: min(96vw, 1480px);
+  max-width: none;
+}
+.codex-panel .menu-body { gap: var(--sp-4); }
+
+/* ---------- A parede ---------- */
+.codex-wall {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--sp-5) var(--sp-5);
+  border-radius: var(--radius-md);
+  border: var(--line) solid var(--ink-500);
+  box-shadow: var(--shadow-2), inset 0 0 80px color-mix(in srgb, var(--ink-950) 85%, transparent);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--ember-500) 9%, transparent), transparent 22%),
+    repeating-linear-gradient(0deg, transparent 0 69px, color-mix(in srgb, var(--ink-950) 70%, transparent) 69px 71px),
+    repeating-linear-gradient(90deg, transparent 0 139px, color-mix(in srgb, var(--ink-950) 55%, transparent) 139px 141px),
+    linear-gradient(165deg, var(--ink-700), var(--ink-800) 50%, var(--ink-850));
+}
+.codex-faixa { display: flex; align-items: center; gap: var(--sp-3); }
+.codex-faixa .ds-divider { flex: 1; }
+.codex-faixa__r { color: var(--text-lo); white-space: nowrap; }
+.codex-faixa--nichos { margin-top: var(--sp-3); }
+
+/* ---------- Lajes (as inscrições descem a parede, como a descida) ---------- */
+.codex-steps {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0 var(--sp-2);
+  isolation: isolate; /* o degrau (z-index -1) fica atrás das lajes e à frente da parede */
+}
+.codex-slab {
+  all: unset;
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: var(--slab-h);
+  margin-top: calc(var(--k, 0) * var(--step));
+  padding: var(--sp-3);
+  border-radius: var(--radius-sm);
+  border: var(--line) solid var(--ink-500);
+  background:
+    repeating-linear-gradient(100deg, transparent 0 17px, color-mix(in srgb, var(--ink-950) 25%, transparent) 17px 18px),
+    linear-gradient(165deg, var(--ink-600), var(--ink-700) 45%, var(--ink-800));
+  box-shadow: var(--shadow-2), inset 0 1px 0 color-mix(in srgb, var(--gold-300) 14%, transparent), inset 0 -10px 20px color-mix(in srgb, var(--ink-950) 55%, transparent);
+}
+button.codex-slab {
+  cursor: pointer;
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) ease, border-color var(--dur-base) ease;
+}
+button.codex-slab:hover { transform: translateY(-5px); border-color: var(--gold-500); box-shadow: var(--shadow-3), var(--glow-gold); }
+button.codex-slab:focus-visible { outline: 2px solid var(--ember-300); outline-offset: 3px; }
+button.codex-slab:active { transform: translateY(-2px); }
+
+/* O degrau: do centro de cada laje ao centro da seguinte (sobe a borda, desce o degrau). */
+.codex-slab:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  top: -8px;
+  width: calc(100% + var(--sp-3));
+  height: calc(var(--step) + 8px);
+  border-top: 2px dashed var(--ink-500);
+  border-right: 2px dashed var(--ink-500);
+  pointer-events: none;
+}
+.codex-slab.is-lit:not(:last-child)::after { border-style: solid; border-color: var(--ember-400); filter: drop-shadow(0 0 5px var(--ember-400)); }
+
+.codex-slab__n {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: var(--sp-2);
+  font-family: var(--font-display);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-lo);
+}
+.codex-slab__n b {
+  font-size: var(--fs-lg);
+  letter-spacing: 0.1em;
+  color: var(--gold-400);
+  text-shadow: 0 -1px 0 var(--ink-950), 0 1px 0 color-mix(in srgb, var(--gold-300) 30%, transparent);
+}
+.codex-slab.is-empty .codex-slab__n b { color: var(--ink-500); }
+
+/* O decalque: papel velho e escuro preso na pedra; a letra é o carvão passado por cima. */
+.codex-paper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+  padding: var(--sp-3);
+  transform: rotate(var(--rot, 0deg));
+  color: var(--paper-ink);
+  background:
+    radial-gradient(ellipse at 15% 85%, var(--paper-stain), transparent 55%),
+    radial-gradient(ellipse at 90% 10%, color-mix(in srgb, var(--gold-500) 14%, transparent), transparent 50%),
+    linear-gradient(170deg, var(--paper-hi), var(--paper-lo));
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--ink-950) 70%, transparent), inset 0 0 22px color-mix(in srgb, var(--ink-950) 55%, transparent);
+  clip-path: polygon(1% 2%, 30% 0, 62% 1.5%, 99% 0, 100% 40%, 98.5% 98%, 66% 100%, 33% 98.5%, 0 100%, 1.5% 55%);
+}
+.codex-paper q {
+  quotes: none;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.55;
+  color: var(--gold-100);
+  text-shadow: 0 1px 0 var(--ink-950), 0 0 8px color-mix(in srgb, var(--ember-500) 22%, transparent);
+}
+.codex-paper small {
+  display: block;
+  margin-top: var(--sp-2);
+  font-family: var(--font-text);
+  font-style: italic;
+  font-size: var(--fs-sm);
+  color: var(--paper-label);
+}
+
+/* Laje sem decalque */
+.codex-slab.is-empty { cursor: default; }
+.codex-vago {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: var(--sp-3);
+  text-align: center;
+  color: var(--frost-300);
+  border: var(--line) dashed var(--frost-500);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--ink-950) 45%, transparent);
+}
+.codex-vago .ds-icon { opacity: 0.8; }
+.codex-vago span { font-size: var(--fs-sm); font-style: italic; line-height: 1.3; color: var(--text-lo); }
+
+/* ---------- Nichos (quem e o que a pedra guarda) ---------- */
+.codex-niches { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: var(--sp-3); }
+.codex-niche {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-2);
+  text-align: center;
+}
+button.codex-niche { cursor: pointer; }
+.codex-niche__arch {
+  position: relative;
+  width: min(100%, var(--arch-w));
+  aspect-ratio: 3 / 3.4;
+  overflow: hidden;
+  border-radius: 999px 999px var(--radius-sm) var(--radius-sm);
+  border: var(--line) solid var(--gold-600);
+  background: var(--ink-950);
+  box-shadow: inset 0 0 0 3px var(--ink-900), var(--shadow-2);
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) ease, border-color var(--dur-base) ease;
+}
+button.codex-niche:hover .codex-niche__arch { transform: translateY(-4px); border-color: var(--gold-300); box-shadow: inset 0 0 0 3px var(--ink-900), var(--shadow-3), var(--glow-gold); }
+button.codex-niche:focus-visible .codex-niche__arch { outline: 2px solid var(--ember-300); outline-offset: 3px; }
+.codex-niche__t {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  color: var(--text-hi);
+}
+.codex-niche__s { font-family: var(--font-display); font-size: var(--fs-2xs); letter-spacing: 0.2em; text-transform: uppercase; color: var(--gold-500); }
+
+/* Nicho apagado: a gravura some no escuro e uma vela fria espera a luz */
+.codex-niche.is-empty .codex-niche__arch { border-color: var(--ink-500); border-style: dashed; }
+.codex-niche.is-empty .codex-niche__arch .gv { filter: brightness(0.12) saturate(0.2); }
+.codex-niche.is-empty .codex-niche__arch::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 90%, color-mix(in srgb, var(--frost-300) 25%, transparent), transparent 60%);
+}
+.codex-niche.is-empty .codex-niche__t { color: var(--text-lo); }
+.codex-niche__vela { position: absolute; left: 50%; bottom: 14%; z-index: 1; transform: translateX(-50%); color: var(--frost-300); }
+
+/* ---------- Desbloqueio: o papel cai sobre a laje, o carvão varre o texto, o nicho acende ---------- */
+.codex-slab.is-new .codex-paper { animation: codex-cai 1.1s var(--ease-spring) both; }
+.codex-slab.is-new .codex-paper q { animation: codex-carvao 2.2s 0.5s var(--ease-out) both; }
+.codex-niche.is-new .codex-niche__arch { animation: codex-acende 1.6s var(--ease-out) both; }
+@keyframes codex-cai {
+  from { transform: translateY(-70px) rotate(calc(var(--rot, 0deg) * 6)); opacity: 0; }
+  to { transform: rotate(var(--rot, 0deg)); opacity: 1; }
+}
+@property --codex-varre { syntax: "<percentage>"; inherits: false; initial-value: 100%; }
+@keyframes codex-carvao { from { --codex-varre: 0%; } to { --codex-varre: 100%; } }
+.codex-slab.is-new .codex-paper q {
+  -webkit-mask-image: linear-gradient(100deg, var(--ink-950) var(--codex-varre), transparent var(--codex-varre));
+  mask-image: linear-gradient(100deg, var(--ink-950) var(--codex-varre), transparent var(--codex-varre));
+}
+@keyframes codex-acende {
+  0% { box-shadow: inset 0 0 0 3px var(--ink-900), 0 0 0 0 transparent; }
+  40% { box-shadow: inset 0 0 0 3px var(--ink-900), 0 0 60px 12px color-mix(in srgb, var(--ember-300) 70%, transparent); }
+  100% { box-shadow: inset 0 0 0 3px var(--ink-900), var(--shadow-2); }
+}
+
+/* ---------- Folheto: a gravura impressa em papel velho, com o texto ---------- */
+.codex-veu { z-index: var(--z-modal); }
+.codex-folheto {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1060px, 100%);
+  max-height: min(92vh, 100%);
+  overflow: hidden;
+  color: var(--paper-ink);
+  --paper-hi: color-mix(in srgb, var(--gold-700) 58%, var(--ink-800));
+  --paper-lo: color-mix(in srgb, var(--gold-800) 82%, var(--ink-850));
+  --paper-ink: var(--text-hi);
+  --paper-ink-soft: var(--text-mid);
+  --paper-label: var(--gold-400);
+  background:
+    radial-gradient(ellipse at 8% 92%, color-mix(in srgb, var(--gold-600) 24%, transparent), transparent 55%),
+    radial-gradient(ellipse at 95% 6%, color-mix(in srgb, var(--gold-500) 14%, transparent), transparent 50%),
+    linear-gradient(172deg, var(--paper-hi), var(--paper-lo));
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-3), 0 0 0 1px var(--gold-700), 0 0 0 6px var(--ink-900), 0 0 0 7px var(--gold-600), var(--glow-ember-lg);
+  animation: ds-rise var(--dur-slow) var(--ease-out) both;
+}
+.codex-folheto__bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-5);
+  border-bottom: var(--line) solid color-mix(in srgb, var(--gold-600) 55%, transparent);
+}
+.codex-folheto__sel {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--sp-1) var(--sp-5);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--paper-label);
+}
+.codex-folheto__scroll {
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: minmax(260px, 40%) 1fr;
+  grid-auto-rows: max-content; /* a gravura (aspect-ratio) não encolhe por cima do texto */
+  align-content: start;
+  gap: var(--sp-6);
+  padding: var(--sp-6);
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold-600) transparent;
+}
+.codex-folheto__img {
+  position: relative;
+  align-self: start;
+  margin: 0;
+  aspect-ratio: 4 / 5;
+  overflow: hidden;
+  border: 3px solid var(--gold-600);
+  outline: var(--line) solid var(--gold-700);
+  outline-offset: 4px;
+  background: var(--ink-900);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--ink-950) 70%, transparent);
+}
+.codex-folheto__plate { position: absolute; inset: 0; }
+.codex-folheto__img figcaption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 4px var(--sp-2);
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.26em;
+  text-transform: uppercase;
+  color: var(--gold-300);
+  background: var(--ink-950);
+}
+.codex-folheto__txt { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.codex-folheto h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-3xl);
+  line-height: 1.05;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gold-200);
+  text-shadow: 0 2px 0 var(--ink-950);
+}
+.codex-folheto__ver { margin: 0; font-style: italic; font-size: var(--fs-lg); line-height: 1.4; color: var(--paper-label); }
+.codex-folheto__txt p.codex-folheto__par { margin: 0; max-width: 58ch; font-size: var(--fs-md); line-height: 1.65; color: var(--paper-ink); }
+.codex-folheto__pedra {
+  margin-top: auto;
+  padding: var(--sp-3) var(--sp-4);
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-sm);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1.6;
+  color: var(--gold-200);
+  background: var(--ink-950);
+  border: var(--line) solid var(--gold-700);
+}
+.codex-folheto__pedra small { display: block; margin-bottom: 4px; font-size: var(--fs-2xs); letter-spacing: 0.3em; color: var(--gold-500); }
+
+/* ---------- Telas médias e estreitas (390 px) ---------- */
+@media (max-width: 1280px) {
+  .codex-panel { --slab-h: clamp(196px, 23vh, 240px); }
+  .codex-paper q { font-size: var(--fs-2xs); }
+}
+@media (max-width: 1100px) {
+  .codex-steps { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: var(--sp-4); }
+  .codex-panel { --slab-h: 228px; }
+  .codex-slab { margin-top: 0; }
+  .codex-slab::after { display: none; }
+  .codex-niches { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: var(--sp-4); }
+}
+@media (max-width: 760px) {
+  .codex-panel { padding: var(--sp-4) var(--sp-3) var(--sp-3); min-width: 0; }
+  .codex-wall { padding: var(--sp-3); }
+  .codex-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-3); }
+  .codex-panel { --slab-h: 220px; }
+  .codex-slab { padding: var(--sp-2); }
+  .codex-paper { padding: var(--sp-2); }
+  .codex-paper q { font-size: 10.5px; letter-spacing: 0.04em; }
+  .codex-niches { gap: var(--sp-2); }
+  .codex-niche__t { font-size: 9px; letter-spacing: 0.08em; }
+  .codex-niche__s { display: none; }
+  .codex-faixa { gap: var(--sp-2); }
+  .codex-faixa__r { font-size: 9px; letter-spacing: 0.14em; }
+  .codex-veu { padding: var(--sp-2); align-items: flex-end; }
+  .codex-folheto { max-height: 94vh; }
+  .codex-folheto__bar { padding: var(--sp-2) var(--sp-3); }
+  .codex-folheto__sel { letter-spacing: 0.16em; }
+  /* o rodapé da folha sobe além do botão flutuante de som, que fica no canto da tela */
+  .codex-folheto__scroll { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); padding: var(--sp-4) var(--sp-4) calc(var(--sp-4) + 48px); }
+  .codex-folheto__img { aspect-ratio: 1 / 1; }
+  .codex-folheto h2 { font-size: var(--fs-xl); }
+}
+
+/* ---------- Alto contraste (opção do jogador) ---------- */
+.ui-root.high-contrast .codex-wall { background: var(--ink-950); border-color: var(--gold-300); }
+.ui-root.high-contrast .codex-slab { background: var(--ink-900); border-color: var(--gold-300); }
+.ui-root.high-contrast .codex-paper,
+.ui-root.high-contrast .codex-folheto { --paper-hi: var(--ink-950); --paper-lo: var(--ink-950); --paper-ink: var(--gold-100); --paper-ink-soft: var(--gold-100); --paper-label: var(--gold-200); }
+.ui-root.high-contrast .codex-paper { border: var(--line) solid var(--gold-300); background: var(--ink-950); }
+.ui-root.high-contrast .codex-folheto { background: var(--ink-950); box-shadow: 0 0 0 2px var(--gold-300); }
+.ui-root.high-contrast .codex-niche__t,
+.ui-root.high-contrast .codex-niche__s,
+.ui-root.high-contrast .codex-faixa__r,
+.ui-root.high-contrast .codex-vago span { color: var(--gold-100); }
+.ui-root.high-contrast .codex-niche.is-empty .codex-niche__arch .gv { filter: brightness(0.35); }
+
+/* Reduzir movimento: o papel já nasce no lugar e o nicho já nasce aceso.
+   (Dentro do jogo a opção vem como .reduce-motion; a media query cobre o sistema.) */
+.ui-root.reduce-motion .codex-slab.is-new .codex-paper,
+.ui-root.reduce-motion .codex-slab.is-new .codex-paper q,
+.ui-root.reduce-motion .codex-niche.is-new .codex-niche__arch { animation: none; }
+.ui-root.reduce-motion .codex-slab.is-new .codex-paper q { -webkit-mask-image: none; mask-image: none; }
+.ui-root.reduce-motion button.codex-slab:hover,
+.ui-root.reduce-motion button.codex-niche:hover .codex-niche__arch { transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .codex-slab.is-new .codex-paper,
+  .codex-slab.is-new .codex-paper q,
+  .codex-niche.is-new .codex-niche__arch,
+  .codex-folheto { animation: none; }
+  .codex-slab.is-new .codex-paper q { -webkit-mask-image: none; mask-image: none; }
+}
+
+/* ---------- Aviso "Nova página na Crônica" (HUD) ---------- */
+.hud-codex-toast {
+  max-width: min(92vw, 560px);
+  color: var(--text-hi);
+  border-color: var(--ember-400);
+  box-shadow: var(--shadow-3), var(--glow-ember);
+  opacity: 0;
+  transform: translateY(-10px);
+  transition: opacity var(--dur-slow) ease, transform var(--dur-slow) var(--ease-out);
+}
+.hud-codex-toast.show { opacity: 1; transform: none; }
+.hud-codex-toast b { font-family: var(--font-display); font-size: var(--fs-sm); letter-spacing: 0.08em; color: var(--gold-200); }
+.hud-codex-toast__glyph { display: inline-flex; color: var(--ember-300); }
+.ui-root.high-contrast .hud-codex-toast { background: var(--ink-950); border-color: var(--gold-300); }
