@@ -35,6 +35,12 @@ import { loadAnimLibrary, retargetClips } from "../actors/quaterniusRig";
 
 const FIT_HEIGHT = 2.0;
 const ACCENT_DEFAULT = "#ff8a3c";
+const CAM_RADIUS = 4.9;
+const CAM_TARGET_Y = 0.98;
+/** Em que fração da largura a Acendedora fica quando o texto ocupa a coluna esquerda. */
+const HERO_SCREEN_X = 0.68;
+/** Proporção mínima (largura/altura) para o layout em duas colunas (igual ao CSS). */
+const WIDE_ASPECT = 1.3;
 const KIT = "/assets/dungeon_kit/";
 
 export interface TitleSceneOptions {
@@ -52,6 +58,7 @@ export class TitleScene {
   private camera?: ArcRotateCamera;
   private brasaLight?: PointLight;
   private torchLights: PointLight[] = [];
+  private rimLights: DirectionalLight[] = [];
   private shadow?: ShadowGenerator;
   private resizeObs?: ResizeObserver;
   private t = 0;
@@ -81,7 +88,7 @@ export class TitleScene {
     scene.fogColor = new Color3(0.03, 0.05, 0.08);
     scene.fogDensity = 0.05;
 
-    const camera = new ArcRotateCamera("titleCam", -Math.PI / 2, 1.36, 6.0, new Vector3(0, 1.05, 0.2), scene);
+    const camera = new ArcRotateCamera("titleCam", Math.PI / 2, 1.44, CAM_RADIUS, new Vector3(0, CAM_TARGET_Y, 0.2), scene);
     camera.fov = 0.72;
     camera.minZ = 0.05;
     camera.maxZ = 80;
@@ -93,9 +100,15 @@ export class TitleScene {
     hemi.diffuse = new Color3(0.4, 0.5, 0.72);
     hemi.groundColor = new Color3(0.02, 0.03, 0.05);
 
-    const rim = new DirectionalLight("titleRim", new Vector3(0.4, -0.25, -0.9), scene);
-    rim.intensity = 0.5;
-    rim.diffuse = new Color3(0.5, 0.64, 0.98);
+    // Luz de aro: recorte frio vindo de trás-esquerda (separa a silhueta da parede) e um
+    // contra-recorte quente de trás-direita (a chama da cripta contornando o manto).
+    const rim = new DirectionalLight("titleRim", new Vector3(0.55, -0.18, 0.85), scene);
+    rim.intensity = 1.5;
+    rim.diffuse = new Color3(0.42, 0.62, 1.0);
+    const rimWarm = new DirectionalLight("titleRimWarm", new Vector3(-0.6, -0.15, 0.8), scene);
+    rimWarm.intensity = 1.1;
+    rimWarm.diffuse = new Color3(1.0, 0.6, 0.3);
+    this.rimLights = [rim, rimWarm];
 
     // Sol-de-sombra quente vindo de cima-frente: dá as sombras dramáticas no chão/parede.
     const sun = new DirectionalLight("titleSun", new Vector3(-0.25, -1, 0.55), scene);
@@ -109,9 +122,9 @@ export class TitleScene {
     this.shadow = shadow;
 
     // A Brasa: ponto quente no chão, à frente da Acendedora (entre ela e a câmera).
-    const brasa = new PointLight("brasa", new Vector3(0.0, 0.4, 1.5), scene);
+    const brasa = new PointLight("brasa", new Vector3(0.45, 0.34, 1.15), scene);
     brasa.diffuse = accent;
-    brasa.intensity = 15.0;
+    brasa.intensity = 11.0;
     brasa.range = 16;
     this.brasaLight = brasa;
 
@@ -121,16 +134,18 @@ export class TitleScene {
     fill.intensity = 9.0;
     fill.range = 7;
 
-    const ember = MeshBuilder.CreateSphere("brasaMesh", { diameter: 0.36, segments: 12 }, scene);
-    ember.position.copyFrom(brasa.position);
+    const ember = MeshBuilder.CreateSphere("brasaMesh", { diameter: 0.14, segments: 12 }, scene);
+    ember.position.set(brasa.position.x, 0.12, brasa.position.z);
     const emberMat = new StandardMaterial("brasaMat", scene);
     emberMat.emissiveColor = accent;
     emberMat.diffuseColor = new Color3(0, 0, 0);
     emberMat.specularColor = new Color3(0, 0, 0);
     ember.material = emberMat;
 
+    this.buildHearth(scene, brasa.position);
+
     const glow = new GlowLayer("titleGlow", scene);
-    glow.intensity = 1.0;
+    glow.intensity = 0.7;
 
     // Pipeline cinematográfico: tone mapping ACES + bloom + vinheta + grão + aberração.
     const pipe = new DefaultRenderingPipeline("titlePipe", true, scene, [camera]);
@@ -155,6 +170,7 @@ export class TitleScene {
     ip.vignetteColor = new Color4(0.01, 0.015, 0.03, 1);
 
     if (!this.opts.reducedMotion) {
+      this.spawnFlame(scene, brasa.position, accent);
       this.spawnEmbers(scene, brasa.position, accent);
       this.spawnDust(scene);
     }
@@ -166,19 +182,20 @@ export class TitleScene {
       const dt = engine.getDeltaTime() / 1000;
       this.t += dt;
       const f = 0.82 + 0.18 * Math.sin(this.t * 7.3) * Math.sin(this.t * 2.1) + 0.06 * Math.sin(this.t * 19);
-      brasa.intensity = 15.0 * f;
+      brasa.intensity = 11.0 * f;
       fill.intensity = 9.0 * (0.9 + 0.1 * f);
-      emberMat.emissiveColor = accent.scale(0.8 + 0.5 * f);
+      emberMat.emissiveColor = accent.scale(0.5 + 0.3 * f);
       for (let i = 0; i < this.torchLights.length; i++) {
         const tf = 0.7 + 0.3 * Math.sin(this.t * (9 + i * 3) + i * 2.1) + 0.1 * Math.sin(this.t * 23 + i);
         this.torchLights[i]!.intensity = 2.4 * tf;
       }
       if (!this.opts.reducedMotion && this.camera) {
         // Deriva + dolly lento (parallax cinematográfico de login screen).
-        this.camera.alpha = -Math.PI / 2 + Math.sin(this.t * 0.11) * 0.13;
-        this.camera.beta = 1.36 + Math.sin(this.t * 0.08) * 0.035;
-        this.camera.radius = 6.0 + Math.sin(this.t * 0.05) * 0.5;
+        this.camera.alpha = Math.PI / 2 + Math.sin(this.t * 0.11) * 0.13;
+        this.camera.beta = 1.42 + Math.sin(this.t * 0.08) * 0.035;
+        this.camera.radius = CAM_RADIUS + Math.sin(this.t * 0.05) * 0.3;
       }
+      this.frameHero();
       scene.render();
     });
 
@@ -187,6 +204,24 @@ export class TitleScene {
       this.resizeObs = new ResizeObserver(() => this.engine?.resize());
       this.resizeObs.observe(this.canvas);
     }
+  }
+
+  /**
+   * Enquadra a Acendedora no terço direito quando a tela é larga (o texto do menu ocupa a
+   * coluna esquerda, ver theme.css); em telas quase quadradas ou altas, ela fica ao centro.
+   */
+  private frameHero(): void {
+    const cam = this.camera;
+    const eng = this.engine;
+    if (!cam || !eng) return;
+    const aspect = eng.getRenderWidth() / Math.max(1, eng.getRenderHeight());
+    let shift = 0;
+    if (aspect >= WIDE_ASPECT) {
+      const halfW = cam.radius * Math.tan(cam.fov / 2) * aspect;
+      shift = (HERO_SCREEN_X - 0.5) * 2 * halfW;
+    }
+    // A câmera olha para -Z (mundo de mão esquerda): a direita da tela é -X, então o alvo vai para +X.
+    cam.target.x = shift;
   }
 
   setAccent(hex: string): void {
@@ -201,6 +236,7 @@ export class TitleScene {
     this.camera = undefined;
     this.brasaLight = undefined;
     this.torchLights = [];
+    this.rimLights = [];
     this.shadow = undefined;
     this.engine?.stopRenderLoop();
     this.engine?.dispose();
@@ -245,14 +281,14 @@ export class TitleScene {
         for (const m of w.getChildMeshes(false)) m.receiveShadows = true;
         cast(w);
       }
-      // Pilares ladeando, logo atrás dela (enquadram o plano).
-      cast(place(pillarC, new Vector3(-3.4, 0, -2.6)));
-      cast(place(pillarC, new Vector3(3.4, 0, -2.6)));
-      // Pilares quebrados em PRIMEIRO PLANO (silhueta/parallax perto da câmera).
-      cast(place(brokenC, new Vector3(-5.2, 0, 3.4)));
-      cast(place(brokenC, new Vector3(5.2, 0, 3.4)));
+      // Pilares ladeando a parede de fundo (enquadram o plano da heroína).
+      cast(place(pillarC, new Vector3(-4.3, 0, -2.6)));
+      cast(place(pillarC, new Vector3(4.3, 0, -2.6)));
+      // Pilar quebrado em PRIMEIRO PLANO, na borda esquerda do quadro (silhueta e paralaxe;
+      // fica atrás da coluna de texto, longe da figura).
+      cast(place(brokenC, new Vector3(2.9, 0, 2.0)));
       // Tochas na parede do fundo: chama emissiva (glow) + luz quente piscando.
-      for (const x of [-3.2, 3.2]) {
+      for (const x of [-2.6, 2.6]) {
         place(torchC, new Vector3(x, 2.4, -3.7));
         const tl = new PointLight(`torchL${x}`, new Vector3(x, 2.6, -3.2), scene);
         tl.diffuse = new Color3(1.0, 0.66, 0.36);
@@ -263,6 +299,56 @@ export class TitleScene {
     } catch (err) {
       console.warn("[title-scene] câmara não carregou (segue só com a figura)", err);
     }
+  }
+
+  /** Braseiro de pedras ao redor da Brasa: dá chão e escala à chama (graybox, sem asset). */
+  private buildHearth(scene: Scene, at: Vector3): void {
+    const stone = new StandardMaterial("hearthStone", scene);
+    stone.diffuseColor = new Color3(0.07, 0.065, 0.07);
+    stone.specularColor = new Color3(0, 0, 0);
+    const n = 8;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + 0.3;
+      const b = MeshBuilder.CreateBox(`hearth${i}`, { width: 0.16, height: 0.1 + (i % 3) * 0.035, depth: 0.12 }, scene);
+      b.position.set(at.x + Math.cos(a) * 0.27, 0.05, at.z + Math.sin(a) * 0.27);
+      b.rotation.y = -a + (i % 2) * 0.2;
+      b.material = stone;
+      b.receiveShadows = true;
+    }
+    const ash = MeshBuilder.CreateDisc("hearthAsh", { radius: 0.27, tessellation: 20 }, scene);
+    ash.rotation.x = Math.PI / 2;
+    ash.position.set(at.x, 0.012, at.z);
+    const ashMat = new StandardMaterial("hearthAshMat", scene);
+    ashMat.diffuseColor = new Color3(0.05, 0.04, 0.04);
+    ashMat.emissiveColor = new Color3(0.12, 0.035, 0.01);
+    ashMat.specularColor = new Color3(0, 0, 0);
+    ash.material = ashMat;
+  }
+
+  /** A chama da Brasa: línguas de fogo subindo da pedra (aditivas, curtas e rápidas). */
+  private spawnFlame(scene: Scene, at: Vector3, accent: Color3): void {
+    const tex = softDot(scene, "flameTex");
+    const ps = new ParticleSystem("brasaFlame", 120, scene);
+    ps.particleTexture = tex;
+    ps.emitter = new Vector3(at.x, 0.12, at.z);
+    ps.minEmitBox = new Vector3(-0.07, 0, -0.07);
+    ps.maxEmitBox = new Vector3(0.07, 0.05, 0.07);
+    ps.color1 = new Color4(1, 0.7, 0.3, 0.8);
+    ps.color2 = new Color4(accent.r, accent.g, accent.b, 0.7);
+    ps.colorDead = new Color4(0.5, 0.1, 0, 0);
+    ps.minSize = 0.15;
+    ps.maxSize = 0.32;
+    ps.minLifeTime = 0.5;
+    ps.maxLifeTime = 1.1;
+    ps.emitRate = 110;
+    ps.blendMode = ParticleSystem.BLENDMODE_ADD;
+    ps.gravity = new Vector3(0, 0.8, 0);
+    ps.direction1 = new Vector3(-0.1, 1, -0.1);
+    ps.direction2 = new Vector3(0.1, 1.4, 0.1);
+    ps.minEmitPower = 0.3;
+    ps.maxEmitPower = 0.7;
+    ps.updateSpeed = 0.02;
+    ps.start();
   }
 
   private spawnEmbers(scene: Scene, at: Vector3, accent: Color3): void {
@@ -347,6 +433,8 @@ export class TitleScene {
       m.receiveShadows = true;
       this.shadow?.addShadowCaster(m);
     }
+    // Luz de aro só na figura: nas lajes e na parede ela lavaria o chão de branco.
+    for (const l of this.rimLights) l.includedOnlyMeshes = meshes.filter((m) => m.getTotalVertices() > 0);
     this.element.classList.add("title-scene-ready");
   }
 }
