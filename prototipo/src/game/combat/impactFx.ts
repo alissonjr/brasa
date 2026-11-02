@@ -48,7 +48,7 @@ export class ImpactFx {
 }
 
 /** Ponto radial branco (alpha no centro -> 0 na borda) para a partícula, gerado em runtime. */
-function dotTexture(scene: Scene): DynamicTexture {
+export function dotTexture(scene: Scene): DynamicTexture {
   const size = 32;
   const tex = new DynamicTexture("impactDot", size, scene, false);
   const c = tex.getContext() as unknown as CanvasRenderingContext2D;

@@ -4,7 +4,8 @@ import "@babylonjs/loaders/glTF"; // registra o loader glTF
 import { assetUrl, createLightPool, getActorLight, outlineHierarchy, type CharacterVisual } from "@engine";
 import { buildSword } from "./weapons";
 import { loadAnimLibrary, PERSONAGENS_DIR, retargetClips, semContornoNosOlhos } from "./quaterniusRig";
-import type { ClipSync } from "../combat/heroCombat";
+import type { ClipSync, DrinkInfo } from "../combat/heroCombat";
+import { DrinkPose } from "./drinkPose";
 import { landThud } from "../combat/combatSound";
 
 /**
@@ -103,7 +104,7 @@ export interface LandEvent {
 }
 
 /** Ação one-shot/hold do herói, sobreposta à locomoção. */
-export type HeroAction = "idle" | "light" | "heavy" | "dodge" | "block" | "hit" | "ember" | "death";
+export type HeroAction = "idle" | "light" | "heavy" | "dodge" | "block" | "hit" | "ember" | "death" | "drink";
 
 export class HeroModel implements CharacterVisual {
   readonly root: TransformNode;
@@ -122,6 +123,7 @@ export class HeroModel implements CharacterVisual {
   private wFade = 1; // fade de saída planejado da ação corrente (1..0)
   private trail?: TrailMesh; // rastro da lâmina (só ligado no giro do golpe)
   private trailOn = false;
+  private drinkPose?: DrinkPose; // o gole: pose do braço livre por IK, por cima da locomoção (ver drinkPose.ts)
   // O Babylon erra a mistura de 3+ animações no mesmo osso (a pose vira a de repouso): durante
   // qualquer mistura com ação só entram no máximo DUAS animações ativas (ação + ação anterior, ou
   // ação + UM clipe de locomoção `locoDom`, escolhido pela velocidade no começo da ação).
@@ -228,8 +230,10 @@ export class HeroModel implements CharacterVisual {
   /** Lâmina (weapons.ts) em hand_r e brasa em hand_l. Offsets ajustados contra o osso do rig Quaternius. */
   private attachProps(nos: Map<string, TransformNode>): void {
     const handR = nos.get("hand_r");
+    const swordMats: Material[] = [];
     if (handR) {
       const sword = buildSword(this.scene);
+      for (const m of sword.getChildMeshes(false)) if (m.material) swordMats.push(m.material);
       sword.parent = handR;
       // No osso da mão do rig UE (medido): +X local sobe pelo antebraço, +Z local é a frente da
       // palma e -X aponta para os dedos. A lâmina (+Y do weapons.ts) deita para a frente (+Z).
@@ -280,6 +284,20 @@ export class HeroModel implements CharacterVisual {
       this.emberMat = mat;
       this.emberNode = holder;
     }
+    this.drinkPose = new DrinkPose(this.scene, this.root, nos, { emberOrb: this.emberNode?.getChildMeshes(true)[0] ?? null, swordMats });
+  }
+
+  /**
+   * O gole do quadro (de HeroCombat.drinkInfo; null fora dele): o braço livre leva o frasco à boca por cima
+   * da locomoção (as pernas seguem andando). Chamada todo quadro pelo ator; não gasta animação da mistura.
+   */
+  setDrink(info: DrinkInfo | null): void {
+    this.drinkPose?.setState(info);
+  }
+
+  /** Elixir de Fúria ativo: a lâmina esquenta. */
+  setFury(on: boolean): void {
+    this.drinkPose?.setFury(on);
   }
 
   /**
@@ -340,6 +358,7 @@ export class HeroModel implements CharacterVisual {
    */
   setAction(kind: HeroAction, sync: ClipSync | null = null, timeScale = 1): void {
     if (!this.loaded) return;
+    if (kind === "drink") kind = "idle"; // o gole não é clipe: a locomoção segue e DrinkPose sobrescreve o braço
     const seq = sync ? sync.seq : -1;
     if (kind !== this.actionKind || seq !== this.actionSeq) this.beginAction(kind, sync);
     this.sync = sync;
