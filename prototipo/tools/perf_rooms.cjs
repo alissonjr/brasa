@@ -36,16 +36,14 @@ const WAIT = Number(process.argv[3] || 9000);
     await p.evaluate((n) => window.__brasa && window.__brasa.enterRoom(n), i);
     await p.waitForTimeout(WAIT);
   }
-  if (process.argv[4] === "nos") {
-    for (const kind of ["estante", "bancada"]) {
-      for (let from = 0; from < 6; from++) {
-        await p.evaluate(([k, f]) => window.__brasa && window.__brasa.enterNode && window.__brasa.enterNode(k, f), [kind, from]);
-        await p.waitForTimeout(Math.min(WAIT, 6000));
-      }
+  if (process.argv[4] === "nos") { // antessalas A1..A7 (redesenho da descida)
+    for (let i = 0; i < 7; i++) {
+      await p.evaluate((n) => window.__brasa && window.__brasa.enterAntessala && window.__brasa.enterAntessala(n), i);
+      await p.waitForTimeout(Math.min(WAIT, 6000));
     }
   }
   console.log("andar | tipo       | draw calls (limite normativo: 60)");
-  for (const k of Object.keys(rows).sort((a, b) => Number(a) - Number(b))) console.log(`${k.padStart(5)} | ${rows[k].kind.padEnd(10)} | ${rows[k].draws}${Number(k) > 10 ? "   (antecamara, origem " + ((Number(k) - 11) % 10 + 1) + ")" : ""}`);
+  for (const k of Object.keys(rows).sort((a, b) => Number(a) - Number(b))) console.log(`${k.padStart(5)} | ${rows[k].kind.padEnd(10)} | ${rows[k].draws}${Number(k) > 10 ? "   (antessala A" + (Number(k) - 10 + 1) + ")" : ""}`);
   console.log(errs.length ? errs.join("\n") : "SEM PAGEERROR");
   await b.close();
 })().catch((e) => { console.error("FAIL", e.message); process.exit(1); });
