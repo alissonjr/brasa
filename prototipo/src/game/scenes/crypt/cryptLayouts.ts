@@ -22,6 +22,8 @@ export interface WallSeg { x: number; z: number; rotY?: number; }
 export interface PillarSpot { x: number; z: number; broken?: boolean; rotY?: number; }
 export interface TorchSpot { x: number; z: number; rotY: number; }
 export interface BoxCol { cx: number; cz: number; w: number; d: number; }
+/** Porta lateral (parede LESTE): centro do gatilho (colado à parede) e giro da peça do portão. */
+export interface DoorSpot { x: number; z: number; rotY: number; }
 
 export interface Layout {
   kind: RoomKind;
@@ -41,6 +43,8 @@ export interface Layout {
   pillars: PillarSpot[];
   torches: TorchSpot[];
   enemyAnchor: { x: number; z: number }; // centro em torno do qual os inimigos surgem
+  /** Portas laterais (vazio quando o andar não tem porta: só existe com `RoomDef.sideDoor`). */
+  doors: DoorSpot[];
   /** Faixa central de COMBATE (elipse spawn->saida): cenografia 3D proibida e detalhe de piso atenuado. */
   calm: { cx: number; cz: number; rx: number; rz: number };
 }
@@ -68,6 +72,8 @@ interface ShapeOpts {
   pillars: PillarSpot[];
   /** x do vao da porta na parede sul (entrada). default 2. */
   doorX?: number;
+  /** Andar com porta lateral: troca o segmento da parede leste mais perto de `halfZ - 9` pelo portao. */
+  sideDoor?: boolean;
 }
 
 /** Monta uma planta retangular aberta a partir das dimensoes + arranjo de pilares. */
@@ -89,6 +95,15 @@ function rect(kind: RoomKind, shape: string, o: ShapeOpts): Layout {
   for (const z of zs) {
     walls.push({ x: halfX, z, rotY: Math.PI / 2 });
     walls.push({ x: -halfX, z, rotY: Math.PI / 2 });
+  }
+  // Porta lateral (parede leste, perto do fundo): o portao ocupa o segmento de parede. O gatilho
+  // e colado na parede (o colisor continuo segue valendo: a porta nao precisa de vao).
+  const doors: DoorSpot[] = [];
+  if (o.sideDoor) {
+    const dz = zs.reduce((a, b) => (Math.abs(b - (halfZ - 9)) < Math.abs(a - (halfZ - 9)) ? b : a), zs[0]!);
+    const i = walls.findIndex((w) => w.x === halfX && w.z === dz && w.rotY === Math.PI / 2);
+    if (i >= 0) walls.splice(i, 1);
+    doors.push({ x: r1(halfX - 0.4), z: dz, rotY: -Math.PI / 2 });
   }
   // Alguns segmentos quebrados (acento de ruina) trocando paredes inteiras por quebradas.
   const brk: WallSeg[] = [];
@@ -138,6 +153,7 @@ function rect(kind: RoomKind, shape: string, o: ShapeOpts): Layout {
     broken,
     wallColliders,
     corners,
+    doors,
     pillars: o.pillars,
     torches,
     enemyAnchor: { x: 0, z: Math.min(2.5, halfZ - 6) },
@@ -184,19 +200,27 @@ function pillarsForest(_halfX: number, halfZ: number): PillarSpot[] {
  * CONSECUTIVOS nunca repetem a forma. O kind define o tema do dressing (cryptRoom).
  */
 export function pickLayout(def: RoomDef): Layout {
+  const side = !!def.sideDoor;
+  // ANTECAMARA (nó): 12x12, sem pilares nem altar. A escada para o andar seguinte fica no fundo,
+  // longe do ponto de chegada (a sala-padrão a poria a 3 m do spawn).
+  if (def.node) {
+    const l = rect(def.kind, "camara_12", { halfX: 6, halfZ: 6, pillars: [] });
+    l.exit = { x: 0, z: 2.6, radius: 2.0 };
+    return l;
+  }
   switch (def.index) {
     case 0: // abertura: salao quadrado classico (tutorial)
-      return rect(def.kind, "quadrado_24", { halfX: 12, halfZ: 12, pillars: pillarsRimmed(12, 12) });
+      return rect(def.kind, "quadrado_24", { halfX: 12, halfZ: 12, pillars: pillarsRimmed(12, 12), sideDoor: side });
     case 1: // salao LARGO (36x24): horizonte aberto
-      return rect(def.kind, "largo_36x24", { halfX: 18, halfZ: 12, pillars: pillarsRimmed(18, 12) });
+      return rect(def.kind, "largo_36x24", { halfX: 18, halfZ: 12, pillars: pillarsRimmed(18, 12), sideDoor: side });
     case 2: // CORREDOR longo (24x48): combate em avenida, altar distante
-      return rect(def.kind, "corredor_24x48", { halfX: 12, halfZ: 24, pillars: pillarsColonnade(12, 24) });
+      return rect(def.kind, "corredor_24x48", { halfX: 12, halfZ: 24, pillars: pillarsColonnade(12, 24), sideDoor: side });
     case 3: // cripta de PILARES (24x24): cobertura e flanqueio
-      return rect(def.kind, "pilares_24", { halfX: 12, halfZ: 12, pillars: pillarsForest(12, 12) });
+      return rect(def.kind, "pilares_24", { halfX: 12, halfZ: 12, pillars: pillarsForest(12, 12), sideDoor: side });
     case 4: // salao largo de novo, porem com colunata (difere do 1 e do 3)
-      return rect(def.kind, "largo_colunata_36x24", { halfX: 18, halfZ: 12, pillars: pillarsColonnade(18, 12) });
+      return rect(def.kind, "largo_colunata_36x24", { halfX: 18, halfZ: 12, pillars: pillarsColonnade(18, 12), sideDoor: side });
     case 5: // corredor medio (24x36)
-      return rect(def.kind, "corredor_24x36", { halfX: 12, halfZ: 18, pillars: pillarsColonnade(12, 18) });
+      return rect(def.kind, "corredor_24x36", { halfX: 12, halfZ: 18, pillars: pillarsColonnade(12, 18), sideDoor: side });
     case 6: // ARENA do Guardiao (36x36): ampla e simetrica, estrado maior
     default:
       return rect(def.kind, "arena_36", { halfX: 18, halfZ: 18, daisScale: 1.25, pillars: pillarsRimmed(18, 18) });

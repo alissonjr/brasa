@@ -274,3 +274,67 @@ real**.
 - Se a arma consegue brilhar por degrau (depende do modelo em `weapons.ts`).
 - Segunda leva: Provação, terceira saída, Sabedoria como meta-progressão.
 - Atualização dos documentos antigos listados na seção 7 (deve acompanhar P1, V2 e Q-etapas).
+
+## 13. Registro de implementação: F0 e F1-A (branch `explor-f0`)
+
+Status: IMPLEMENTADO e testado. As frentes seguintes (livros, Ferida e poções novas, colunas,
+Instabilidade, arena que encolhe) ainda não existem; as antecâmaras são salas vazias marcadas.
+
+**O que existe**
+
+- `game/run/rota.ts` (puro, sem Babylon): `NodeKind`, `planRoute(seed)` (as 14 sequências válidas
+  de R2, sorteadas por semente com sal próprio), `exitsFor`, `resumePlace` (R7), `retryPlace` (R8),
+  `RouteState` (plano, escolhas, nó atual, gasto), `stepCommit` (R4) e os números (0,6 s, 9 m,
+  raio 1,8, cura 25% e 20%). `game/run/exploracao.ts`: `ExploracaoHooks` e `ExploracaoRegistry`
+  (carrega os campos de save que nenhum sistema registrado possui, para não perdê-los).
+- `RunSave` ganhou `rota`, `no`, `gasto`, `secretos`, `sabedoria`, `livros`, `raiz`, `cera`,
+  `unguento`, `ferida`, todos com default e leitura defensiva em `readRun`; `SAVE_SCHEMA_VERSION`
+  não subiu. Save antigo no meio de uma descida semeia `rota` com "alcapao" por passagem feita.
+- Porta lateral: parede leste, segmento de parede trocado pelo portão do kit (fundido ao cenário
+  estático); veu e poça de luz da cor da antecâmara, sem luz pontual, acendem junto do alçapão.
+  Ícone (`hatch`, `book`, `potion`) e anel de compromisso são DOM projetado
+  (`game/ui/exitMarkers.ts`); assinaturas sonoras `saidaAlcapao`, `saidaEstante`, `saidaBancada`.
+- Antecâmara: `buildCryptRoom` com `RoomDef.node` (planta `camara_12`, 12 x 12, sem altar, sem
+  inimigos, sem dressing). O tema vem do andar de origem; `RoomKind` não foi estendido.
+- Cura própria da antecâmara (25% Estante, 20% Bancada) na entrada, uma vez (`gasto: ["cura"]`).
+- Guarda de desperdício: Recuperação com a vida cheia não consome (Unguento entra com a Ferida).
+
+**Decisões de implementação (fora do texto das specs)**
+
+- O compromisso de 0,6 s só vale nos andares COM porta; a primeira passagem e a escada da
+  antecâmara continuam de pisar e descer. O relicário fica a ~3 m do alçapão, então ao abrir as
+  saídas a Acendedora costuma estar pisando o gatilho dele: o compromisso só conta depois de sair
+  de todos os gatilhos uma vez ("armar").
+- Com porta lateral, o "Tratado das Acendedoras" (texto lido com [R]) sai de z = 3,5 para
+  z = -2,5 (parede leste), para a leitura não disparar o anel da porta.
+- A porta fica no segmento de parede mais próximo de `halfZ - 9` (z = 2, 2 ou 10, 14 conforme a
+  planta), o que dá 11,8 m a 12,3 m do alçapão em todas as plantas (teste: R4 pede 9 m).
+
+**Linha de base de draw calls em GPU real** (`node tools/perf_rooms.cjs <porta> 9000 nos`, Chromium
+com `--use-angle=gl-egl`, 1280x900, 9 s por sala; o contador inclui sombra e contorno; varia 2 a 4
+entre execuções e depende do ponto de vista da câmera). Medido duas vezes em cada base:
+
+| Andar | Tipo | `integracao` + perf90 (antes) | `explor-f0` (depois) |
+|---|---|---|---|
+| 1 | guarda | 54, 54 | 54, 54 |
+| 2 | salão | 65, 65 | 65, 65 |
+| 3 | cisterna | 56, 58 | 58, 56 |
+| 4 | salão | 80, 80 | 80, 80 |
+| 5 | santuário | 72, 72 | 72, 72 |
+| 6 | cisterna | 78, 75 | 74, 78 |
+| 7 | Guardião | 50, 50 | 50, 50 |
+| antecâmara Estante ou Bancada, origem em qualquer andar | | não existia | 41 a 43 |
+
+Antes do perf90 (base com `personagens-c` só), a mesma medição deu 99 a 139 nos andares 1 a 6 e
+55 a 58 nas antecâmaras; o corte de 6 a 9 draw calls por sala que a fusão da borda do alçapão
+dava naquela base agora vem do perf90. A porta aberta custa de 0 a 4 draw calls (só quando está
+no quadro; medido ligando e desligando o véu e a poça): dentro do delta de +6 da decisão D7.
+Antecâmaras ficam em 41 a 43, bem abaixo do teto de 60.
+
+**Como testar**
+
+- `node tools/test_exploracao.mjs` (21 testes: plano de rota, retomada, save, ganchos, plantas).
+- Dev: `window.__brasa.enterNode("estante", 2)`, `route()`, `takeFragment()`, `room()` (traz `doors`).
+
+**Achado fora do escopo:** a contagem de texturas da cena cresce ~20 por montagem de sala (ao
+alternar andares 6 vezes: 48 para 183); o descarte só solta `DynamicTexture`. Não vem desta frente.

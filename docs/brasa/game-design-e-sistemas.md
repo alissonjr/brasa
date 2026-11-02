@@ -181,6 +181,13 @@ mão.
 
 ## 5. Sistema: acender o braseiro
 
+> **Atualização (exploração F1-A, `spec-exploracao-portas-e-salas.md`):** o fluxo do código (W8)
+> não acende um braseiro por sala. Limpa-se a câmara, colhe-se a estilha no relicário, e as
+> saídas abrem juntas: o alçapão da Brasa (tela do braseiro: cura 40%, banca e uma dádiva) ou,
+> nas passagens 2 a 6, uma porta lateral para uma antecâmara (Estante ou Bancada). A porta
+> lateral SUBSTITUI a visita ao braseiro daquela passagem. O texto abaixo descreve o desenho
+> original e fica como referência.
+
 `[DESIGN]` `[NORMATIVO]` O braseiro é o pivô do jogo: encerra a sala, paga a recompensa e
 destrava a saída numa só interação. É o que conecta combate, progressão, luz e exploração.
 

@@ -3,7 +3,9 @@
 // cada sistema de exploracao (docs/brasa/spec-exploracao-indice.md, secao 3).
 //
 // Uso (com o servidor de dev ja rodando):
-//   node tools/perf_rooms.cjs [porta] [esperaMsPorSala]
+//   node tools/perf_rooms.cjs [porta] [esperaMsPorSala] [nos]
+// Com o 3o argumento "nos", mede tambem as antecamaras (Estante e Bancada, origem 0 a 5); o orcamento
+// delas e de no maximo 60 draw calls (docs/brasa/spec-exploracao-indice.md, secao 3 e decisao D7).
 // Usa a GPU real (gl-egl); NAO usar swiftshader: satura a CPU e derruba a maquina para os outros.
 // Variaveis: PW_PATH = caminho do modulo playwright (default: cache do npx deste ambiente).
 // Nota: o contador do Babylon INCLUI os passes de sombra e de outline; compare sempre o
@@ -34,8 +36,16 @@ const WAIT = Number(process.argv[3] || 9000);
     await p.evaluate((n) => window.__brasa && window.__brasa.enterRoom(n), i);
     await p.waitForTimeout(WAIT);
   }
+  if (process.argv[4] === "nos") {
+    for (const kind of ["estante", "bancada"]) {
+      for (let from = 0; from < 6; from++) {
+        await p.evaluate(([k, f]) => window.__brasa && window.__brasa.enterNode && window.__brasa.enterNode(k, f), [kind, from]);
+        await p.waitForTimeout(Math.min(WAIT, 6000));
+      }
+    }
+  }
   console.log("andar | tipo       | draw calls (limite normativo: 60)");
-  for (const k of Object.keys(rows).sort()) console.log(`${k.padStart(5)} | ${rows[k].kind.padEnd(10)} | ${rows[k].draws}`);
+  for (const k of Object.keys(rows).sort((a, b) => Number(a) - Number(b))) console.log(`${k.padStart(5)} | ${rows[k].kind.padEnd(10)} | ${rows[k].draws}${Number(k) > 10 ? "   (antecamara, origem " + ((Number(k) - 11) % 10 + 1) + ")" : ""}`);
   console.log(errs.length ? errs.join("\n") : "SEM PAGEERROR");
   await b.close();
 })().catch((e) => { console.error("FAIL", e.message); process.exit(1); });

@@ -170,6 +170,17 @@ export function healChime(): void {
   tone(a, t + 0.06, 780, 800, 0.22, 0.06 * vol); // terça/quinta acima (consonante, "alívio")
 }
 
+/** "Negativo" curto e baixo: a ação foi recusada (poção com a vida cheia). Dois tons descendo, sem susto. */
+export function denyBlip(): void {
+  const vol = getVolume();
+  if (vol <= 0) return;
+  const a = audio();
+  if (!a) return;
+  const t = a.currentTime;
+  tone(a, t, 300, 250, 0.09, 0.06 * vol);
+  tone(a, t + 0.07, 220, 180, 0.12, 0.06 * vol);
+}
+
 /** Som de DANO ao herói: thud abafado e grave (mais "feio" que o acerto). `blocked` = clank metálico. */
 export function heroHurt(blocked = false): void {
   const vol = getVolume();
