@@ -422,3 +422,13 @@ html.reduce-motion button.codex-niche:hover .codex-niche__arch { transform: none
 .hud-codex-toast b { font-family: var(--font-display); font-size: var(--fs-sm); letter-spacing: 0.08em; color: var(--gold-200); }
 .hud-codex-toast__glyph { display: inline-flex; color: var(--ember-300); }
 html.high-contrast .hud-codex-toast { background: var(--ink-950); border-color: var(--gold-300); }
+
+/* ---------- Decalque em dois estados (murais, R5) ----------
+   Só a gravura: a miniatura do mural no lugar do texto carvoado. Completo: como sempre. */
+.codex-paper--gravura { min-height: 0; padding: var(--sp-2); gap: var(--sp-1); justify-content: flex-start; }
+.codex-paper__art .gv { position: absolute; inset: 0; }
+.codex-paper__art { position: relative; flex: 1 1 0; min-height: 0; overflow: hidden; border: var(--line) solid var(--gold-700); border-radius: var(--radius-sm); background: var(--ink-950); }
+.codex-paper--gravura small { margin-top: var(--sp-1); }
+.codex-slab.is-new .codex-paper--gravura .codex-paper__art { animation: codex-acende 1.6s var(--ease-out) both; }
+/* A linha do que se enfrentou, depois de limpar a câmara */
+.codex-folheto__reg { margin: var(--sp-3) 0 0; padding-top: var(--sp-2); border-top: var(--line) dashed var(--ink-500); font-style: italic; color: var(--text-lo); }
