@@ -189,6 +189,7 @@ async function main(): Promise<void> {
       enemiesAlive: () => combat.enemiesAlive,
       tp: (x: number, z: number, y = 1.5) => hero.teleport(new Vector3(x, y, z)),
       heal: () => hero.combat.health.heal(9999),
+      enterRoom: (i: number) => enterRoom(i), // DEV: pula para o andar i (medição de perf / capturas)
     };
   }
   // Gate de performance (NORMATIVO): mede draw calls + fps por sala. Overlay sob ?perf ou F9.
