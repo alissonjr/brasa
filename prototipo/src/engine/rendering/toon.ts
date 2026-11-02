@@ -21,6 +21,16 @@ export interface ToonOptions {
   skipDisableLighting?: boolean;
   /** Máximo de luzes simultâneas (a cena usa 6 para não descartar a ambiente). Default 6. */
   maxLights?: number;
+  /**
+   * Cache PERSISTENTE de CellMaterials (sobrevive ao descarte da sala). Com ele, materiais-fonte
+   * equivalentes (mesmo nome, cor e textura: o KayKit repete "Stone", "Metal"... em cada glb)
+   * viram UM CellMaterial para a cena toda, em vez de um por peça por sala. O dono do cache é
+   * quem libera; quem descarta a sala precisa soltar `mesh.material` desses antes de descartar
+   * com materiais (ver isCachedToon).
+   */
+  cache?: Map<string, CellMaterial>;
+  /** Tinta por material (só com `cache`): devolve a cor final do material (unifica paleta entre pacotes). */
+  recolor?: (name: string, color: Color3) => Color3;
 }
 
 /** Lê a textura/cor difusa de um Standard ou PBR (o que houver). */
@@ -50,6 +60,7 @@ export function toonifyHierarchy(root: Node, opts: ToonOptions = {}): CellMateri
   const maxLights = opts.maxLights ?? 6;
   const highLevel = opts.highLevel ?? true;
   const cache = new Map<Material, CellMaterial>();
+  const shared = opts.cache;
 
   for (const mesh of root.getChildMeshes(false)) {
     const src = mesh.material;
@@ -60,12 +71,50 @@ export function toonifyHierarchy(root: Node, opts: ToonOptions = {}): CellMateri
     if (skipDL && !isLit(src)) continue; // emissivos (chamas/feixe/decalque): deixa liso
     let cell = cache.get(src);
     if (!cell) {
-      cell = makeCell(scene, src, { highLevel, maxLights });
+      cell = shared ? sharedCell(scene, src, shared, { highLevel, maxLights }, opts.recolor) : makeCell(scene, src, { highLevel, maxLights });
       cache.set(src, cell);
     }
     mesh.material = cell;
   }
   return [...new Set(cache.values())];
+}
+
+function sharedCell(
+  scene: Scene,
+  src: Material,
+  shared: Map<string, CellMaterial>,
+  o: { highLevel: boolean; maxLights: number },
+  recolor?: (name: string, color: Color3) => Color3
+): CellMaterial {
+  const { tex, color } = readDiffuse(src);
+  const key = `${src.name}|${color.r.toFixed(3)},${color.g.toFixed(3)},${color.b.toFixed(3)}|${tex?.name ?? ""}|${src.backFaceCulling ? 1 : 0}`;
+  let cell = shared.get(key);
+  if (!cell) {
+    cell = makeCell(scene, src, o);
+    if (recolor) cell.diffuseColor = recolor(src.name, cell.diffuseColor);
+    shared.set(key, cell);
+  }
+  return cell;
+}
+
+/**
+ * CellMaterial persistente equivalente a um material-fonte LIT (Standard/PBR), ou null se o
+ * material não é convertível (emissivo/disableLighting, Multi, desconhecido). Usa o `cache`
+ * compartilhado (mesma chave de toonifyHierarchy com `cache`).
+ */
+export function toonMaterialFor(scene: Scene, src: Material | null, opts: ToonOptions & { cache: Map<string, CellMaterial> }): CellMaterial | null {
+  if (!src) return null;
+  if (src instanceof CellMaterial) return src;
+  if (!(src instanceof StandardMaterial || src instanceof PBRMaterial)) return null;
+  if ((opts.skipDisableLighting ?? true) && !isLit(src)) return null;
+  return sharedCell(scene, src, opts.cache, { highLevel: opts.highLevel ?? true, maxLights: opts.maxLights ?? 6 }, opts.recolor);
+}
+
+/** true se o material é um CellMaterial de um cache persistente (não pode ser descartado com a sala). */
+export function isCachedToon(mat: Material | null | undefined, cache: Map<string, CellMaterial>): boolean {
+  if (!mat) return false;
+  for (const c of cache.values()) if (c === mat) return true;
+  return false;
 }
 
 function makeCell(scene: Scene, src: Material, o: { highLevel: boolean; maxLights: number }): CellMaterial {

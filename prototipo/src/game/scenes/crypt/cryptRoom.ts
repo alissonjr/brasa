@@ -19,8 +19,10 @@ import {
   Vector3,
   Vector4,
 } from "@babylonjs/core";
-import type { AbstractMesh, AssetContainer, Camera, IDisposable, Material, Observer, Scene } from "@babylonjs/core";
-import { createLightPool, loadContainer, toonifyHierarchy } from "@engine";
+import type { AbstractMesh, AssetContainer, Camera, IDisposable, Material, Node as BNode, Observer, Scene } from "@babylonjs/core";
+import { createLightPool, isCachedToon, loadContainer, toonifyHierarchy, toonMaterialFor } from "@engine";
+import { CellMaterial } from "@babylonjs/materials/cell";
+import { mergeStaticByMaterial } from "./staticMerge";
 import { pickLayout } from "./cryptLayouts";
 import { buildPoolGroup, buildRaisedSlabs, inCalm, paintFloor } from "./cryptDecor";
 import { buildCave } from "./cryptCave";
@@ -131,6 +133,22 @@ export interface ArenaControls {
   spawnFrostZone(x: number, z: number, radius: number, telegraphSec: number, activeSec: number): void;
   /** true se (x,z) está dentro de uma zona de gelo ATIVA agora (o chefe pune quem fica parado nela). */
   inActiveFrost(x: number, z: number): boolean;
+}
+
+// CellMaterials do kit, PERSISTENTES entre salas (um por material equivalente: nome+cor+textura).
+// Sala nova reaproveita os mesmos materiais (sem vazamento de material/textura ao descer) e o
+// cenário estático se funde por material (ver staticMerge.ts). A sala NUNCA os descarta.
+const KIT_TOON = new Map<string, CellMaterial>();
+/** Paleta do kit: o vermelho puro do KayKit (estandartes, bau, cadeira) gritava contra a pedra fria. */
+function kitRecolor(name: string, c0: Color3): Color3 {
+  // As cores do glTF do kit sao LINEARES; o CellMaterial le diffuseColor como esta (sem a curva de
+  // gamma), entao a pedra saia escura demais (paredes quase pretas). Levanta de leve (expoente 0,62).
+  const c = new Color3(Math.pow(c0.r, 0.62), Math.pow(c0.g, 0.62), Math.pow(c0.b, 0.62));
+  if (name === "Red") {
+    const l = c.r * 0.3 + c.g * 0.59 + c.b * 0.11;
+    return new Color3(c.r * 0.45 + l * 0.55, c.g * 0.45 + l * 0.55, c.b * 0.45 + l * 0.55).scale(0.62);
+  }
+  return c;
 }
 
 // Containers do kit (carregados uma vez, compartilhados por todos os andares).
@@ -337,7 +355,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     // Sem isso, os andares COMPARTILHAM os materiais do container em cache; ao descartar um
     // andar, o dispose mata esses materiais compartilhados e o PRÓXIMO andar nasce com as
     // malhas sem material -> cai no material default BRANCO (cripta esbranquiçada).
-    const entries = container.instantiateModelsToScene(undefined, true);
+    const entries = container.instantiateModelsToScene(undefined, false);
     const root = entries.rootNodes[0] as TransformNode | undefined;
     if (!root) return null;
     root.computeWorldMatrix(true);
@@ -379,7 +397,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
 
   function placeProp(
     container: AssetContainer,
-    oIn: { x: number; z: number; y?: number; rotY?: number; scale?: number; targetH?: number; collider?: boolean; cast?: boolean; tall?: boolean }
+    oIn: { x: number; z: number; y?: number; rotY?: number; scale?: number; targetH?: number; collider?: boolean; cast?: boolean; tall?: boolean; dyn?: boolean }
   ): TransformNode | null {
     const o = dressVar(oIn); // espelho/jitter por andar (no-op fora do dressing)
     if (!o) return null; // peca alta no lado da camera: descartada
@@ -387,7 +405,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     // Sem isso, os andares COMPARTILHAM os materiais do container em cache; ao descartar um
     // andar, o dispose mata esses materiais compartilhados e o PRÓXIMO andar nasce com as
     // malhas sem material -> cai no material default BRANCO (cripta esbranquiçada).
-    const entries = container.instantiateModelsToScene(undefined, true);
+    const entries = container.instantiateModelsToScene(undefined, false);
     const root = entries.rootNodes[0] as TransformNode | undefined;
     if (!root) return null;
     root.rotationQuaternion = null;
@@ -407,6 +425,8 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     const cz = (b.min.z + b.max.z) / 2;
     root.position.set(o.x - cx, (o.y ?? 0) - b.min.y, o.z - cz);
     root.parent = roomRoot;
+    // dyn: a peca se mexe/some depois (alcapao, vaso, cadeira, bicho): fica FORA da fusao estatica.
+    if (oIn.dyn) root.metadata = { dyn: true };
     if (o.collider) colliderBox(root, 0.65); // pegada enxuta: mais espaço de caminhada entre props
     if (o.cast !== false) for (const m of root.getChildMeshes(false)) { ctx.shadow.addShadowCaster(m as AbstractMesh); casters.push(m as AbstractMesh); }
     return root;
@@ -415,7 +435,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // VASO/POTE QUEBRAVEL: ao ser atingido pela arma, some + estilhaca (o burst/som vem do
   // CombatDirector). Registra um StrikeProp; sem colisor (atravessavel) p/ leitura limpa.
   function placeBreakable(container: AssetContainer, o: { x: number; z: number; rotY?: number; scale?: number }): void {
-    const root = placeProp(container, { x: o.x, z: o.z, rotY: o.rotY, scale: o.scale, cast: false });
+    const root = placeProp(container, { x: o.x, z: o.z, rotY: o.rotY, scale: o.scale, cast: false, dyn: true });
     if (!root) return;
     strikeProps.push({
       pos: new Vector3(o.x, 0.6, o.z),
@@ -428,7 +448,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // CADEIRA CHUTAVEL: ao ser atingida/empurrada, TOMBA (anima a queda) e fica caida. Mantem o
   // colisor enquanto em pe; ao tombar, vira deco (sem colisor novo). Um StrikeProp por cadeira.
   function placeKickable(container: AssetContainer, o: { x: number; z: number; rotY?: number }): void {
-    const root = placeProp(container, { x: o.x, z: o.z, rotY: o.rotY, collider: true, cast: true });
+    const root = placeProp(container, { x: o.x, z: o.z, rotY: o.rotY, collider: true, cast: true, dyn: true });
     if (!root) return;
     let down = false;
     strikeProps.push({
@@ -476,7 +496,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     // Sem isso, os andares COMPARTILHAM os materiais do container em cache; ao descartar um
     // andar, o dispose mata esses materiais compartilhados e o PRÓXIMO andar nasce com as
     // malhas sem material -> cai no material default BRANCO (cripta esbranquiçada).
-    const entries = container.instantiateModelsToScene(undefined, true);
+    const entries = container.instantiateModelsToScene(undefined, false);
     const root = entries.rootNodes[0] as TransformNode | undefined;
     if (!root) return null;
     root.computeWorldMatrix(true);
@@ -804,7 +824,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     track(bar);
   }
   // Alcapao (tampa) por cima do buraco: visivel enquanto ha inimigos; ABRE (some) ao limpar.
-  const hatch = placeProp(P.trapdoor!, { x: EX, z: EZ, y: 0.05, scale: HOLE / 2.2, cast: false });
+  const hatch = placeProp(P.trapdoor!, { x: EX, z: EZ, y: 0.05, scale: HOLE / 2.2, cast: false, dyn: true });
   const beamMat = new StandardMaterial("feixe", scene);
   beamMat.emissiveColor = Color3.FromHexString("#ffd089");
   beamMat.diffuseColor = Color3.Black();
@@ -1092,7 +1112,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       const z = onX ? (rng(i + 135) - 0.5) * (HALFZ * 1.5) : wallSign * (HALFZ - 1.0 - rng(i + 136) * 1.5);
       // Tripo gera ~1-2u; bicho e pequeno. Normaliza pela altura-alvo (placeProp aterra os pes).
       const targetH = k === "spider" ? 0.35 : k === "roach" ? 0.22 : 0.45; // m
-      const root = placeProp(cache![k]!, { x, z, rotY: rng(i + 137) * Math.PI * 2, targetH, cast: false });
+      const root = placeProp(cache![k]!, { x, z, rotY: rng(i + 137) * Math.PI * 2, targetH, cast: false, dyn: true });
       if (!root) continue;
       for (const m of root.getChildMeshes(false)) (m as AbstractMesh).material = critterMat;
       // BICHO MATAVEL: um golpe o esmaga (some + estilhaco), reusando o sistema de StrikeProp.
@@ -1223,7 +1243,32 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // ESTILO (Bloco 1, spec-estilo-visual-render §4.1a): cenário em faixas toon. Converte só as
   // malhas do MUNDO (roomRoot) que são LIT; chamas/feixe/decalques (disableLighting) ficam
   // lisos e os atores não estão em roomRoot, então o emissivo de combate deles fica intacto.
-  toonifyHierarchy(roomRoot, { skipDisableLighting: true, maxLights: 6 });
+  // Materiais do kit PERSISTENTES (KIT_TOON) e cenario estatico fundido por material: a sala
+  // inteira (props avulsos + bases de thin instances) vira ~1 malha por material em vez de
+  // dezenas de props. Alcapao, vasos, cadeiras e bichos (metadata.dyn) ficam independentes.
+  const toonOpts = { skipDisableLighting: true, maxLights: 6, cache: KIT_TOON, recolor: kitRecolor };
+  {
+    const casterSet = new Set<AbstractMesh>(casters);
+    const isDyn = (m: AbstractMesh): boolean => {
+      for (let n: BNode | null = m; n && n !== roomRoot; n = n.parent) if ((n.metadata as { dyn?: boolean } | null)?.dyn) return true;
+      return false;
+    };
+    const res = mergeStaticByMaterial(scene, roomRoot, {
+      parent: roomRoot,
+      eligible: (m) => !isDyn(m),
+      resolve: (src) => toonMaterialFor(scene, src, toonOpts),
+      casts: (m) => casterSet.has(m),
+    });
+    for (const r of res.removed) {
+      if (casterSet.has(r)) {
+        ctx.shadow.removeShadowCaster(r);
+        const i = casters.indexOf(r);
+        if (i >= 0) casters.splice(i, 1);
+      }
+    }
+    for (const mm of res.merged) if (mm.casts) { ctx.shadow.addShadowCaster(mm.mesh); casters.push(mm.mesh); }
+  }
+  toonifyHierarchy(roomRoot, toonOpts);
 
   // Materiais aceitam ate 6 luzes (evita a ambiente ser descartada).
   for (const m of scene.materials) {
@@ -1535,6 +1580,9 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       for (const c of casters) ctx.shadow.removeShadowCaster(c);
       for (const a of aggregates) a.dispose();
       for (const l of lights) l.dispose();
+      // Os CellMaterials do kit sao PERSISTENTES (KIT_TOON): solta-os das malhas antes de
+      // descartar a sala com materiais, senao o dispose os mataria e a proxima sala nasceria branca.
+      for (const m of roomRoot.getChildMeshes(false)) if (isCachedToon(m.material, KIT_TOON)) m.material = null;
       roomRoot.dispose(false, true);
     },
   };

@@ -8,7 +8,7 @@
 export { createEngine } from "./rendering/createEngine";
 // Pipeline estilizado (toon/tinta + AO + finalização + edge-detect). Ver
 // docs/brasa/spec-estilo-visual-render.md. Genérico: o jogo decide cores/intensidades.
-export { toonifyHierarchy } from "./rendering/toon";
+export { toonifyHierarchy, toonMaterialFor, isCachedToon } from "./rendering/toon";
 export type { ToonOptions } from "./rendering/toon";
 export { addOutline, outlineHierarchy, clearOutline } from "./rendering/outline";
 export type { OutlineOptions } from "./rendering/outline";
