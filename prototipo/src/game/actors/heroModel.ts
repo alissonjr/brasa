@@ -381,8 +381,8 @@ export class HeroModel implements CharacterVisual {
     const old = this.actionGroup;
     if (!old && !this.prevGroup) {
       // Vindo da locomoção (ou do ar): congela a mistura num único clipe (o da velocidade atual, ou a pose de ar).
-      this.locoDom = this.domNow(this.lastSpeed);
-      this.landT = -1; // a aterrissagem agachada não entra sob uma ação
+      // Ação logo no toque: a base fica no agachamento da aterrissagem (sem estalo de pose) até a mistura da ação cobri-la.
+      this.locoDom = this.landT >= 0 && this.airMode === "ground" ? "jumpLand" : this.domNow(this.lastSpeed);
     }
     const oldW = this.loaded ? Math.min(this.wIn, this.wFade) : 0;
     this.actionKind = kind;
@@ -492,11 +492,12 @@ export class HeroModel implements CharacterVisual {
   /** Clipe-base dominante agora: a pose do ar (se está no ar) ou a locomoção da velocidade atual. */
   private domNow(speed: number): BaseKey {
     if (this.airMode === "ground") return this.speedDom(speed);
-    return this.airMode === "jump" && this.airMix().a2 < 0.5 ? "jumpStart" : "jumpLoop";
+    return this.airMode === "jump" && this.vy > 0.25 ? "jumpStart" : "jumpLoop";
   }
 
   /** Sob uma ação, troca o clipe-base só quando a física mudou de regime (decolou ou pousou); no chão o dominante fica congelado. */
   private rebaseDom(speed: number): void {
+    if (this.locoDom === "jumpLand" && this.landT >= 0 && this.airMode === "ground") return;
     const inAir = this.locoDom === "jumpStart" || this.locoDom === "jumpLoop" || this.locoDom === "jumpLand";
     if (this.airMode !== "ground" || inAir) this.locoDom = this.domNow(speed);
   }
