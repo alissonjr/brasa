@@ -1,15 +1,25 @@
 import { Mesh, VertexData } from "@babylonjs/core";
-import type { AbstractMesh, Material, Node, Skeleton } from "@babylonjs/core";
+import type { AbstractMesh, Material, Node } from "@babylonjs/core";
 
 /**
- * CAMADA ENGINE (genérica). Funde as partes SKINNED de um personagem que dividem o mesmo
- * esqueleto, o mesmo material e o mesmo pai (braço, perna, corpo, cabeça... do KayKit) numa
- * malha só. Cada parte custa um draw call por passe (principal, profundidade, sombra e
- * contorno); um morto de 9 partes custava ~36 por frame, fundido custa ~8.
+ * CAMADA ENGINE (genérica). Funde as partes SKINNED de um personagem que dividem a MESMA
+ * instância de Skeleton, o mesmo material e o mesmo pai, numa malha só. Cada parte custa um
+ * draw call por passe (principal, profundidade, sombra, contorno); n partes fundidas em 1
+ * cortam ~4n chamadas por ator.
+ *
+ * API: `mergeSkinnedParts(root, { exclude? })` -> Mesh[] (as malhas fundidas; as partes
+ * originais são descartadas SEM derrubar material/texturas). Chamar depois de instanciar o
+ * modelo e ANTES de ligar contorno/sombra (os novos Mesh não herdam isso).
  *
  * Os vértices ficam no espaço LOCAL de cada parte (sem baixar a matriz de mundo para dentro
- * deles, como o Mesh.MergeMeshes faz, o que dobraria a transformação do esqueleto). Só
- * funde partes cuja matriz local seja idêntica; senão deixa como está.
+ * deles, como o Mesh.MergeMeshes faz, o que dobraria a transformação do esqueleto).
+ *
+ * LIMITE (medido em 2026-11): os GLB do KayKit (Rogue_Hooded, Skeleton_*) exportam UMA skin
+ * por parte, cada qual com matrizes de bind-inverso DIFERENTES (o osso "hips" tem bind-inverso
+ * distinto em cada skin). Essas partes têm Skeleton próprio, portanto NÃO são fundidas aqui
+ * (fundir com o esqueleto de uma delas desmonta o personagem: braços e tronco colapsam). Já os
+ * modelos de uma skin só (Quaternius: demon + tridente, orc + arma, mushroomking + chapéu)
+ * compartilham o Skeleton e fundem de forma exata.
  */
 
 export interface MergeSkinnedOptions {
@@ -24,10 +34,9 @@ function sameMatrix(a: AbstractMesh, b: AbstractMesh): boolean {
   return true;
 }
 
-/** Devolve as malhas fundidas (uma por grupo esqueleto+material). Partes isoladas ficam intactas. */
+/** Devolve as malhas fundidas (uma por grupo esqueleto+material+pai). Partes isoladas ficam intactas. */
 export function mergeSkinnedParts(root: Node, opts: MergeSkinnedOptions = {}): Mesh[] {
   const groups = new Map<string, Mesh[]>();
-  const skelOf = new Map<string, Skeleton>();
   for (const m of root.getChildMeshes(false)) {
     if (!(m instanceof Mesh) || !m.skeleton || m.getTotalVertices() <= 0 || !m.material) continue;
     if (opts.exclude?.test(m.name)) continue;
@@ -35,10 +44,9 @@ export function mergeSkinnedParts(root: Node, opts: MergeSkinnedOptions = {}): M
     let g = groups.get(key);
     if (!g) groups.set(key, (g = []));
     g.push(m);
-    skelOf.set(key, m.skeleton);
   }
   const out: Mesh[] = [];
-  for (const [key, parts] of groups) {
+  for (const parts of groups.values()) {
     if (parts.length < 2) continue;
     const first = parts[0]!;
     if (!parts.every((p) => sameMatrix(first, p))) continue;
@@ -52,7 +60,7 @@ export function mergeSkinnedParts(root: Node, opts: MergeSkinnedOptions = {}): M
     else mesh.rotation.copyFrom(first.rotation);
     mesh.scaling.copyFrom(first.scaling);
     mesh.material = first.material as Material;
-    mesh.skeleton = skelOf.get(key)!;
+    mesh.skeleton = first.skeleton;
     mesh.numBoneInfluencers = Math.max(...parts.map((p) => p.numBoneInfluencers));
     mesh.isPickable = false;
     mesh.receiveShadows = first.receiveShadows;

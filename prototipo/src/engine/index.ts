@@ -12,6 +12,8 @@ export { toonifyHierarchy } from "./rendering/toon";
 export type { ToonOptions } from "./rendering/toon";
 export { addOutline, outlineHierarchy, clearOutline } from "./rendering/outline";
 export type { OutlineOptions } from "./rendering/outline";
+export { getContactShadows, ContactShadows } from "./rendering/contactShadows";
+export type { ContactShadowHandle } from "./rendering/contactShadows";
 export { mergeSkinnedParts } from "./rendering/mergeSkinned";
 export type { MergeSkinnedOptions } from "./rendering/mergeSkinned";
 export { enableSsao } from "./rendering/ssao";
