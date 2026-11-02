@@ -15,6 +15,8 @@ export interface Settings {
   masterVolume: number;
   musicVolume: number;
   sfxVolume: number;
+  /** Silencia todo o áudio sem mexer nos controles de volume (botão e tecla M). */
+  muted: boolean;
   language: "pt" | "en";
   uiScale: number; // escala da interface (1 = 100%)
   reducedMotion: boolean; // reduz animações/transições (acessibilidade vestibular)
@@ -35,6 +37,7 @@ const DEFAULTS: Settings = {
   masterVolume: 1,
   musicVolume: 0.8,
   sfxVolume: 1,
+  muted: false,
   language: "pt",
   uiScale: 1,
   reducedMotion: prefersReducedMotion(), // respeita a preferência do SO por padrão

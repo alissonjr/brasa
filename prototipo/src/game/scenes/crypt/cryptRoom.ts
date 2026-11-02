@@ -23,6 +23,7 @@ import type { AbstractMesh, AssetContainer, Camera, IDisposable, Material, Obser
 import { createLightPool, loadContainer, toonifyHierarchy } from "@engine";
 import { pickLayout } from "./cryptLayouts";
 import { buildPoolGroup, buildRaisedSlabs, inCalm, paintFloor } from "./cryptDecor";
+import { buildCave } from "./cryptCave";
 import type { EnemyBounds } from "../../actors/enemies/skeleton";
 
 /**
@@ -45,7 +46,10 @@ const KH = "/assets/halloween_kit/"; // KayKit Halloween Bits (atlas proprio, me
 // PROTOTIPO camera alta (diorama): sem teto, sem as duas paredes do lado da camera, sem candelabros
 // pendentes, pilares baixos. Desliga com ?cam=terceira (volta a sala fechada de antes).
 const ALTA = typeof location === "undefined" || !/[?&]cam=terceira\b/.test(location.search);
-const CAM_DIR = { x: -0.588, z: -0.809 }; // horizontal alvo->camera (alpha = -PI/2 - PI/5)
+// Camera alta: o santuario fica DENTRO de uma caverna. As paredes viram muros baixos e estaticos
+// (nada sobe nem desce) e a rocha da caverna sobe em rampa por fora, sempre abaixo da linha de
+// visao da camera orbital, entao a camera gira livre e nada atravessa a tela.
+const PARAPET = 0.3; // fracao da altura da parede (4 m -> 1,2 m)
 const WALL_H = 4;
 const ROOM_H = WALL_H * 2; // 8: sala alta (catedral-cripta) com teto e candelabros
 
@@ -306,10 +310,8 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   let dressing = false;
   let dressN = 0;
   const dressMirror = rng(7) < 0.5 ? -1 : 1;
-  // CAMERA ALTA: a faixa de parede do lado da camera (x ou z baixos) foi removida e pecas ALTAS
-  // ali (estante, estandarte, rack) flutuariam no ar ou tapariam o heroi. `tall` marca essas
-  // pecas: se cairem no lado da camera, desfazem o espelho (voltam ao lado de la) ou somem.
-  const nearSide = (x: number, z: number): boolean => ALTA && (x < -HALFX + 3.2 || z < -HALFZ + 3.2);
+  // CAMERA ALTA: as paredes sao muros baixos, entao pecas ALTAS (estante, estandarte, placa)
+  // flutuariam no ar ou tapariam o heroi. `tall` marca essas pecas: na camera alta, somem.
   const dressVar = <T extends { x: number; z: number; rotY?: number; tall?: boolean }>(o: T): T | null => {
     let r: T = o;
     if (dressing) {
@@ -321,12 +323,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
         rotY: (o.rotY ?? 0) * dressMirror + (rng(j * 3 + 3) - 0.5) * 0.5,
       };
     }
-    if (o.tall && nearSide(r.x, r.z)) {
-      if (dressing && dressMirror < 0) {
-        r = { ...r, x: -r.x, rotY: -(r.rotY ?? 0) };
-        if (nearSide(r.x, r.z)) return null;
-      } else return null;
-    }
+    if (ALTA && o.tall) return null;
     return r;
   };
 
@@ -504,6 +501,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       if (b.spots.length === 0) continue;
       const base = propBase(P[name]!, b.cast);
       if (!base) continue;
+      if (ALTA && name === "pillar") base.scaling.y = 0.45; // coluna inteira vira meia-coluna (nao tapa o heroi)
       // CRITICO: medir o bbox de UMA peca ANTES do thinInstanceAdd. Depois de adicionar as
       // instancias, getBoundingInfo passa a abranger TODAS as instancias (ex.: todos os
       // pilares de -8 a +8) -> colisores gigantes que travavam o herao em meia sala.
@@ -599,6 +597,9 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     track(slab);
   }
 
+  // --- CAVERNA em volta do santuario (camera alta): rampa de rocha por fora dos muros baixos ---
+  if (ALTA) for (const m of buildCave(scene, { halfX: HALFX, halfZ: HALFZ, seed: def.index + 1 })) track(m);
+
   // --- Piso ladrilhado (xadrez + rotacao) + medalhao + tabuas ---
   const tilesA: { x: number; z: number; rotY: number }[] = [];
   const tilesB: { x: number; z: number; rotY: number }[] = [];
@@ -668,9 +669,9 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     const nm = new StandardMaterial("nichoMat", scene);
     nm.diffuseColor = Color3.FromHexString("#0a0d12");
     nm.specularColor = Color3.Black();
-    const recess = MeshBuilder.CreateBox("nicho", { width: 0.45, height: 2.4, depth: 2.3 }, scene);
+    const recess = MeshBuilder.CreateBox("nicho", { width: 0.45, height: ALTA ? 1.0 : 2.4, depth: 2.3 }, scene);
     recess.material = nm;
-    recess.position.set(HALFX - 0.28, 1.5, NICHE_Z);
+    recess.position.set(HALFX - 0.28, ALTA ? 0.6 : 1.5, NICHE_Z);
     recess.isPickable = false;
     recess.receiveShadows = true;
     recess.parent = roomRoot;
@@ -680,14 +681,16 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   }
 
   // --- Paredes (thin instances) + variacao quebrada (da planta) ---
-  const onNearSide = (x: number, z: number): boolean =>
-    ALTA && (Math.abs(z + HALFZ) < 0.01 || Math.abs(x + HALFX) < 0.01);
-  const wallsV = L.walls.filter((w) => !onNearSide(w.x, w.z));
-  const brokenV = L.broken.filter((w) => !onNearSide(w.x, w.z));
+  const wallsV = L.walls;
+  const brokenV = L.broken;
   const wallBase = kitBase(P.wall!, "base");
   const brokenBase = kitBase(P.wall_broken!, "base");
   if (wallBase) kitInstances(wallBase, wallsV);
   if (brokenBase && brokenV.length) kitInstances(brokenBase, brokenV);
+  if (ALTA) {
+    if (wallBase) wallBase.scaling.y = PARAPET;
+    if (brokenBase) brokenBase.scaling.y = PARAPET;
+  }
   // 2a fileira de parede (sala alta): leva a parede de 4m para 8m (ROOM_H). Na camera alta
   // a parede de fundo fica baixa (1 fileira) para nao esconder o chao.
   if (!ALTA && wallBase) kitInstances(wallBase, wallsV, WALL_H);
@@ -712,15 +715,14 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   for (const c of L.wallColliders) wallCollider(c.cx, c.cz, c.w, c.d);
   // Cantoneiras: duas fileiras (acompanham a parede dupla até ROOM_H).
   for (const c of L.corners) {
-    if (ALTA && (c.x < 0 || c.z < 0)) continue;
-    placeProp(P.wall_corner!, { x: c.x, z: c.z });
+    const corner = placeProp(P.wall_corner!, { x: c.x, z: c.z });
+    if (ALTA && corner) corner.scaling.y *= PARAPET;
     if (!ALTA) placeProp(P.wall_corner!, { x: c.x, z: c.z, y: WALL_H, cast: false });
   }
-  placeProp(P.door!, { x: 2, z: -HALFZ + 0.4 });
+  if (!ALTA) placeProp(P.door!, { x: 2, z: -HALFZ + 0.4 }); // (camera alta: o vao da porta fica aberto)
 
   // --- Pilares: coluna INTEIRA até o teto (2 cortes empilhados nos inteiros) ---
   for (const p of L.pillars) {
-    if (ALTA && p.x * CAM_DIR.x + p.z * CAM_DIR.z > 4) continue; // pilar do lado da camera some
     batch(p.broken ? "pillar_broken" : "pillar", { x: p.x, z: p.z, rotY: p.rotY, collider: true }, true);
     // Pilar inteiro vai do chão ao teto: segundo corte em cima (sem colisor extra; o de
     // baixo já barra). Os quebrados ficam baixos de propósito (ruína).
@@ -842,14 +844,20 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   };
   const torchPoolsLit: { x: number; z: number; r: number }[] = [];
   const torchPoolsDim: { x: number; z: number; r: number }[] = [];
-  const torchesV = L.torches.filter((t) => !(ALTA && (t.z < -HALFZ + 1 || t.x < -HALFX + 1)));
-  const litTorches = [...torchesV].sort((a, b) => a.z - b.z).slice(0, 2); // mais ao sul (entrada)
+  const torchesV = L.torches;
+  // As duas tochas com luz real seguem o criterio de antes (fora das paredes sul e oeste), para a
+  // iluminacao nao mudar; as demais so desenham o suporte e a chama.
+  const litTorches = L.torches
+    .filter((t) => !(ALTA && (t.z < -HALFZ + 1 || t.x < -HALFX + 1)))
+    .sort((a, b) => a.z - b.z)
+    .slice(0, 2); // mais ao sul (entrada)
+  const TORCH_Y = ALTA ? 0.45 : 2.4; // no muro baixo, o suporte fica rente ao topo
   for (const t of torchesV) {
     const ix = Math.abs(t.x) >= HALFX - 0.6 ? -Math.sign(t.x) * 0.25 : 0;
     const iz = Math.abs(t.z) >= HALFZ - 0.6 ? -Math.sign(t.z) * 0.25 : 0;
     const realLight = litTorches.includes(t);
-    batch("torch_wall", { x: t.x, z: t.z, y: 2.4, rotY: t.rotY });
-    const fl = makeFlame(new Vector3(t.x + ix, 2.75, t.z + iz), 0.7, realLight ? (ALTA ? 1.5 : 0.6) : 0, realLight);
+    batch("torch_wall", { x: t.x, z: t.z, y: TORCH_Y, rotY: t.rotY });
+    const fl = makeFlame(new Vector3(t.x + ix, TORCH_Y + 0.35, t.z + iz), 0.7, realLight ? (ALTA ? 1.5 : 0.6) : 0, realLight);
     if (ALTA) {
       // Poça quente no chão, no lado de dentro da parede (as tochas apagadas ganham halo fraco).
       const inX = Math.abs(t.x) >= HALFX - 0.6 ? -Math.sign(t.x) * 2.2 : 0;
@@ -881,7 +889,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     if (def.kind === "salao") {
       addPools([{ x: -7.5 * dressMirror, z: -3, r: 3.6 }, { x: 7 * dressMirror, z: 4, r: 3.2 }], poolCol.accent, 0.26, "warm");
     } else if (def.kind === "cisterna") {
-      addPools(floorArt.puddles.map((p) => ({ x: p.x, z: p.z, r: p.r * 1.9 })), poolCol.accent, 0.3, "cold");
+      addPools(floorArt.puddles.map((p) => ({ x: p.x, z: p.z, r: p.r * 1.9 })), poolCol.accent, 0.1, "cold");
     } else if (def.kind === "santuario") {
       addPools(floorArt.candles, poolCol.accent, 0.4, "warm");
       addPools([{ x: 0, z: zc, r: 5.6 }], "#7a6cc8", 0.16, "cold");
@@ -947,6 +955,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // planta quadrada 24x24 (HALFX=HALFZ=12, AZ=9.2) fique IDENTICA a versao anterior; nas
   // demais formas os props seguem as paredes/altar reais em vez de coordenadas fixas.
   function clusterBanners(count: number): void {
+    if (ALTA) return; // estandartes pendem de parede alta; nos muros baixos nao ha onde pendurar
     const spots: Spot[] = [
       { x: -3.8, z: HALFZ - 0.5, y: 1.4, tall: true }, { x: 3.8, z: HALFZ - 0.5, y: 1.4, tall: true },
       { x: -HALFX + 0.5, z: 2, y: 1.4, rotY: Math.PI / 2, tall: true }, { x: HALFX - 0.5, z: -6, y: 1.4, rotY: -Math.PI / 2, tall: true },
@@ -962,7 +971,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     placeProp(P.bench!, { x: -7.5, z: -4.4, rotY: 0.2, collider: true });
     batch("chair", { x: -6, z: -2.2, rotY: -1.2, collider: true }, true);
     batch("chair", { x: -8.8, z: -2, rotY: 0.6, collider: true }, true);
-    placeProp(P.weapon_rack!, { x: -2, z: -HALFZ + 0.7, collider: true, tall: true });
+    placeProp(P.weapon_rack!, { x: -2, z: -HALFZ + 0.7, collider: true });
     placeProp(P.bucket!, { x: -6.6, z: -1.2, rotY: 0.4 });
     placeProp(P.plate_food_A!, { x: -7.2, z: -3.1, cast: false });
     placeProp(P.sword_shield!, { x: -3.0, z: -6.5, rotY: -0.6, cast: false });
@@ -1010,7 +1019,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     placeProp(P.skull_candle!, { x: 1.3, z: AZ - 0.7, y: 0.9, scale: 0.9, cast: false });
     placeProp(P.shrine_candles!, { x: -5.2, z: AZ + 0.2, rotY: 0.4, collider: true });
     placeProp(P.plaque_candles!, { x: 4.0, z: HALFZ - 0.3, y: 1.6, cast: false, tall: true });
-    placeProp(P.lantern_standing!, { x: -(HALFX - 4), z: 2.6, tall: true });
+    placeProp(P.lantern_standing!, { x: -(HALFX - 4), z: 2.6 });
   }
 
   function clusterTreasure(gold: boolean): void {
@@ -1125,8 +1134,9 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     };
     const corners: [number, number][] = [[-HALFX + 1, HALFZ - 1], [HALFX - 1, HALFZ - 1], [-HALFX + 1, -HALFZ + 1], [HALFX - 1, -HALFZ + 1]];
     corners.forEach(([cx, cz], i) => {
-      if (ALTA && nearSide(cx - 3.5, cz - 3.5)) return; // canto do lado da camera
-      if (rng(i + 60) > 0.35) webAt(cx, cz, 1.6 + rng(i + 1) * 1.4, 1.6 + rng(i + 2) * 1.2, WALL_H - 1.2 + rng(i + 3), i);
+      const wy = ALTA ? WALL_H * PARAPET - 0.35 + rng(i + 3) * 0.2 : WALL_H - 1.2 + rng(i + 3);
+      const wk = ALTA ? 0.55 : 1;
+      if (rng(i + 60) > 0.35) webAt(cx, cz, (1.6 + rng(i + 1) * 1.4) * wk, (1.6 + rng(i + 2) * 1.2) * wk, wy, i);
     });
     const webMesh = webParts.length ? Mesh.MergeMeshes(webParts, true, true) : null;
     if (webMesh) { webMesh.material = decayWebMat!; webMesh.isPickable = false; webMesh.parent = roomRoot; track(webMesh); }
@@ -1137,13 +1147,12 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     for (let i = 0; i < vineN; i++) {
       const onX = rng(i + 80) > 0.5;
       const wallSign = rng(i + 81) > 0.5 ? 1 : -1;
-      if (ALTA && wallSign < 0) continue; // paredes do lado da camera nao existem mais
-      const len = ALTA ? 0.9 + rng(i + 82) * 1.5 : 1.2 + rng(i + 82) * 2.4;
+      const len = ALTA ? 0.35 + rng(i + 82) * 0.5 : 1.2 + rng(i + 82) * 2.4;
       const inset = ALTA ? 0.55 : 0.4;
       const px = onX ? wallSign * (HALFX - inset) : (rng(i + 83) - 0.5) * (HALFX * 1.6);
       const pz = onX ? (rng(i + 84) - 0.5) * (HALFZ * 1.6) : wallSign * (HALFZ - inset);
       const vine = MeshBuilder.CreateBox(`trepadeira_${i}`, { width: 0.12 + rng(i + 85) * 0.12, height: len, depth: 0.04 }, scene);
-      vine.position.set(px, ALTA ? WALL_H - 0.15 - len / 2 : WALL_H + 1 - len / 2 + rng(i + 86), pz);
+      vine.position.set(px, ALTA ? WALL_H * PARAPET - 0.1 - len / 2 : WALL_H + 1 - len / 2 + rng(i + 86), pz);
       vine.rotation.y = onX ? Math.PI / 2 : 0;
       vine.bakeCurrentTransformIntoVertices();
       vineParts.push(vine);

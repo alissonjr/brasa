@@ -262,16 +262,16 @@ export function paintFloor(scene: Scene, L: Layout, kind: RoomKind, index: numbe
         lobes.push({ x: p.x + (r() - 0.5) * p.r * 1.2, z: p.z + (r() - 0.5) * p.r * 0.9, rx: p.r * (0.45 + r() * 0.4), rz: p.r * (0.3 + r() * 0.35), a: r() * 3 });
       }
     }
-    ctx.strokeStyle = "rgba(120,170,175,0.5)";
-    ctx.lineWidth = 0.2;
-    for (const o of lobes) { ctx.beginPath(); ctx.ellipse(o.x, o.z, o.rx, o.rz, o.a, 0, Math.PI * 2); ctx.stroke(); }
-    ctx.fillStyle = "rgba(10,34,42,0.9)";
-    for (const o of lobes) { ctx.beginPath(); ctx.ellipse(o.x, o.z, o.rx, o.rz, o.a, 0, Math.PI * 2); ctx.fill(); }
-    // brilho de agua: lasca clara + gradiente em cada poça
+    // Agua rasa sobre a pedra: sem contorno duro. Primeiro um halo de pedra molhada (escuro e
+    // difuso), depois o espelho d'agua (fundo escuro com um leve azul-petroleo, bordas macias),
+    // um reflexo largo e aneis de ondulacao bem fracos. Nada de linha ciano nem de riscos claros.
+    for (const o of lobes) blob(o.x, o.z, Math.max(o.rx, o.rz) * 1.35, "6,12,16", 0.5, o.rz / o.rx, o.a);
+    for (const o of lobes) blob(o.x, o.z, Math.max(o.rx, o.rz) * 1.05, "12,30,36", 0.78, o.rz / o.rx, o.a);
     for (const p of puddles) {
-      blob(p.x + p.r * 0.15, p.z + p.r * 0.1, p.r * 0.7, "90,170,185", 0.22, 0.7, 0.4);
-      line(p.x - p.r * 0.35, p.z + p.r * 0.18, p.x + p.r * 0.1, p.z + p.r * 0.3, 0.05, "rgba(190,235,240,0.55)");
-      line(p.x - p.r * 0.1, p.z - p.r * 0.1, p.x + p.r * 0.4, p.z + p.r * 0.02, 0.04, "rgba(190,235,240,0.4)");
+      blob(p.x - p.r * 0.2, p.z - p.r * 0.15, p.r * 0.75, "70,112,124", 0.16, 0.6, 0.3); // reflexo do teto
+      ctx.strokeStyle = "rgba(120,160,170,0.12)";
+      ctx.lineWidth = 0.05;
+      for (let k = 1; k <= 2; k++) { ctx.beginPath(); ctx.ellipse(p.x + p.r * 0.1, p.z, p.r * 0.28 * k, p.r * 0.18 * k, 0.3, 0, Math.PI * 2); ctx.stroke(); }
     }
     // limo/musgo nas bordas das lajes e ralo de ferro
     for (let i = 0; i < 40; i++) {

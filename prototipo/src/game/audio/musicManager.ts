@@ -38,7 +38,7 @@ function audio(): AudioContext | null {
 }
 
 function targetMaster(): number {
-  return 0.16 * Math.max(0, Math.min(1, getVolume()));
+  return 0.07 * Math.max(0, Math.min(1, getVolume()));
 }
 
 function voices(a: AudioContext, dest: GainNode, list: Array<{ f: number; type: OscillatorType; g: number }>): void {
@@ -70,8 +70,8 @@ export function startMusic(): void {
   // Filtro grave comum (abafa, como pedra).
   const lp = a.createBiquadFilter();
   lp.type = "lowpass";
-  lp.frequency.value = 900;
-  lp.Q.value = 0.6;
+  lp.frequency.value = 420;
+  lp.Q.value = 0.4;
   lp.connect(master);
   nodes.push(lp);
 
@@ -81,22 +81,21 @@ export function startMusic(): void {
   bedGain.connect(lp);
   voices(a, bedGain, [
     { f: 55, type: "sine", g: 0.6 },
-    { f: 55 * 1.003, type: "sine", g: 0.4 },
-    { f: 82.4, type: "triangle", g: 0.22 },
+    { f: 82.4, type: "sine", g: 0.2 }, // quinta, limpa (sem batimento nem harmônicos ásperos)
   ]);
 
   tensionGain = a.createGain();
   tensionGain.gain.value = 0.0001; // sobe em combate
   tensionGain.connect(lp);
   voices(a, tensionGain, [
-    { f: 110, type: "sawtooth", g: 0.12 },
-    { f: 146.83, type: "sawtooth", g: 0.1 }, // quarta tensa
+    { f: 98, type: "sine", g: 0.16 },
+    { f: 146.83, type: "sine", g: 0.1 }, // tensão só pelo intervalo, tom puro
   ]);
-  // Tremolo na camada tensa (pulso de combate).
+  // Pulso lento e raso na camada tensa (antes: dente de serra com tremolo rápido, que zumbia).
   const lfo = a.createOscillator();
   const lfoGain = a.createGain();
-  lfo.frequency.value = 4.5;
-  lfoGain.gain.value = 0.5;
+  lfo.frequency.value = 0.9;
+  lfoGain.gain.value = 0.15;
   lfo.connect(lfoGain).connect(tensionGain.gain);
   lfo.start(t);
   nodes.push(lfo, lfoGain);
