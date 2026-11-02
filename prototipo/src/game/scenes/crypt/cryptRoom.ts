@@ -768,7 +768,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   const brokenV = L.broken;
   const wallBase = kitBase(P.wall!, "base");
   const brokenBase = kitBase(P.wall_broken!, "base");
-  if (wallBase && !/skip=muros/.test(location.search)) kitInstances(wallBase, wallsV);
+  if (wallBase) kitInstances(wallBase, wallsV);
   if (brokenBase && brokenV.length) kitInstances(brokenBase, brokenV);
   if (ALTA) {
     if (wallBase) wallBase.scaling.y = PARAPET;

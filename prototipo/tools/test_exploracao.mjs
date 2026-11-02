@@ -15,7 +15,7 @@ export * from "./src/game/run/rota.ts";
 export { pickLayout } from "./src/game/scenes/crypt/cryptLayouts.ts";
 export * from "./src/game/content/descida.ts";
 export { ExploracaoRegistry } from "./src/game/run/exploracao.ts";
-export { readGameSave, exploracaoDefaults, nichosVazios } from "./src/game/content/saveData.ts";
+export { readGameSave, exploracaoDefaults } from "./src/game/content/saveData.ts";
 `;
 // cryptLayouts usa so Vector3 do Babylon: um stub minimo evita empacotar o motor inteiro.
 const babylonStub = {
@@ -86,10 +86,15 @@ test("pickLayout: nenhuma planta tem porta lateral (Layout.doors e sideDoor sair
   }
 });
 test("pickLayout: antessala 12x12, escada longe do spawn", () => {
-  for (const index of [0, 3, 6]) {
+  for (const index of [0, 3, 5, 6]) {
     const L = M.pickLayout({ index, kind: "guarda", enemies: 0, antessala: true });
-    assert.equal(L.shape, "camara_12");
-    assert.equal(L.halfX, 6); assert.equal(L.halfZ, 6);
+    const comprida = index === 5; // A6 e 12 x 18
+    assert.equal(L.shape, comprida ? "antessala_12x18" : "antessala_12x12");
+    assert.equal(L.halfX, 6); assert.equal(L.halfZ, comprida ? 9 : 6);
+    assert.ok(L.walls.some((w) => w.z === -L.halfZ && Math.abs(w.x) < 0.01), "parede sul fechada (sem vao de entrada)");
+    assert.ok(!L.walls.some((w) => w.z === L.halfZ && Math.abs(w.x) < 0.01), "vao da porta de pedra na parede norte");
+    assert.ok(L.spawn.x < 0 && L.spawn.z < 0, "chega pelo sudoeste (boca da escada)");
+    assert.ok(Math.abs(L.exit.x) < 0.01 && L.exit.z > L.halfZ - 3, "porta de pedra no centro da parede norte");
     assert.ok(Math.hypot(L.spawn.x - L.exit.x, L.spawn.z - L.exit.z) > L.exit.radius + 2, "nao dispara da chegada");
     assert.ok(Math.abs(L.exit.x) + L.exit.radius < L.halfX && Math.abs(L.exit.z) + L.exit.radius < L.halfZ + 1, "dentro da sala");
   }
@@ -197,17 +202,18 @@ test("descida.ts: marcas da Cronica e eventos", () => {
 });
 
 // --- leitura defensiva e migração do save ---
+const LEGADO_VAZIO = Array.from({ length: 7 }, () => []);
 test("readGameSave: save antigo (sem campos novos) ganha defaults", () => {
   const g = M.readGameSave({ run: { active: false, floorIndex: 0, fagulhas: 5, pocaoVida: 1, pocaoFuria: 0, upgrades: [], seed: 9 } });
   assert.deepEqual({ ...g.run, active: undefined, cinto: undefined }, { ...M.exploracaoDefaults(), active: undefined, cinto: undefined, floorIndex: 0, fagulhas: 5, pocaoVida: 1, pocaoFuria: 0, upgrades: [], seed: 9 });
   assert.deepEqual(g.run.cinto, { vida: 1, furia: 0, unguento: 0 }, "cinto nasce dos contadores legados");
-  assert.deepEqual(g.legado, M.nichosVazios());
+  assert.deepEqual(g.legado, LEGADO_VAZIO);
 });
 test("readGameSave: blob vazio/undefined/lixo nao quebra", () => {
   for (const b of [undefined, {}, { run: null }, { run: "x" }, { run: [] }, { run: { active: true, braseiros: "x", nichos: 5, cinto: 3 }, legado: "x" }]) {
     const g = M.readGameSave(b);
-    assert.equal(g.run.braseiros.length, 7); assert.equal(g.run.nichos.length, 7); assert.equal(g.run.nichos[0].length, 4);
-    assert.deepEqual(g.run.sabedoria, [0, 0, 0]); assert.deepEqual(g.legado, M.nichosVazios());
+    assert.equal(g.run.braseiros.length, 7); assert.deepEqual(g.run.nichos, [], "sem armario salvo: o modelo semeia o conteudo inicial"); assert.deepEqual(g.run.reserva, []);
+    assert.deepEqual(g.run.sabedoria, [0, 0, 0]); assert.deepEqual(g.legado, LEGADO_VAZIO);
   }
 });
 test("readGameSave: descida antiga em andamento num andar volta a antessala dele", () => {
@@ -241,19 +247,22 @@ test("readGameSave: braseiro, cinto, nichos e legado sao higienizados", () => {
       active: true, floorIndex: 1, no: "antessala@1", pocaoVida: 2,
       braseiros: [{ aceso: true, chama: "dadiva" }, { aceso: false, chama: "bancada" }, { aceso: true, chama: "lixo" }, null, "x", { aceso: 1 }],
       cinto: { vida: 99, furia: -2, unguento: 1.9 },
-      nichos: [[{ tipo: "vida", deixado: true }, { tipo: "veneno" }, null, { tipo: "furia", deixado: "sim" }, { tipo: "unguento" }], "x", [{ tipo: "unguento", deixado: true }]],
+      nichos: Array.from({ length: 7 }, (_, a) => (a === 0 ? ["vida:marta:", "", 7, "x".repeat(40), "extra"] : "x")),
+      reserva: Array.from({ length: 7 }, (_, a) => (a === 0 ? [9, -1] : "x")),
     },
-    legado: [[{ tipo: "furia", deixado: true }]],
+    legado: [["furia", "veneno", "vida", "vida", "vida", "furia"], "x"],
   });
   assert.deepEqual(g.run.braseiros.slice(0, 6), [
     { aceso: true, chama: "dadiva" }, { aceso: false, chama: "" }, { aceso: true, chama: "" }, { aceso: false, chama: "" }, { aceso: false, chama: "" }, { aceso: false, chama: "" },
   ]);
   assert.equal(g.run.braseiros.length, 7);
   assert.deepEqual(g.run.cinto, { vida: 9, furia: 0, unguento: 1 });
-  assert.deepEqual(g.run.nichos[0], [{ tipo: "vida", deixado: true }, { tipo: "", deixado: false }, { tipo: "", deixado: false }, { tipo: "furia", deixado: false }]);
-  assert.deepEqual(g.run.nichos[1], M.nichosVazios()[1]);
-  assert.deepEqual(g.run.nichos[2][0], { tipo: "unguento", deixado: true });
-  assert.deepEqual(g.legado[0][0], { tipo: "furia", deixado: true });
+  assert.deepEqual(g.run.nichos[0], ["vida:marta:", "", "", ""], "texto curto ou lixo vira nicho vazio; sobram so 4 nichos");
+  assert.deepEqual(g.run.nichos[1], ["", "", "", ""], "andar malformado vira vazio");
+  assert.equal(g.run.nichos.length, 7);
+  assert.deepEqual(g.run.reserva[0], [9, 0]); assert.deepEqual(g.run.reserva[1], [2, 1]);
+  assert.deepEqual(g.legado[0], ["furia", "vida", "vida", "vida"], "legado: tipos conhecidos, ate 4 por antessala");
+  assert.deepEqual(g.legado[1], []);
   assert.equal(g.legado.length, 7);
   const s = M.readGameSave({ run: { active: true, floorIndex: 1, sabedoria: [99, -3, 4.7], livros: ["a", null], raiz: -4, cera: 2.9, unguento: NaN, ferida: -1, secretos: "x" } });
   assert.deepEqual(s.run.sabedoria, [9, 0, 4]); assert.deepEqual(s.run.livros, ["a"]);
@@ -283,14 +292,15 @@ test("ExploracaoRegistry: despacha eventos, carrega campos nao possuidos, snapsh
     snapshot: () => ({ ferida: 17 }),
     restore: (run) => seen.push("restore " + run.no),
   });
-  const run = M.readGameSave({ run: { active: true, floorIndex: 1, no: "", raiz: 3, ferida: 5, nichos: [[{ tipo: "vida" }]] } }).run;
+  const run = M.readGameSave({ run: { active: true, floorIndex: 1, no: "", raiz: 3, ferida: 5, secretos: ["laje_a"] } }).run;
   reg.restore(run);
   reg.onEnterFloor(1); reg.onEnterAntessala(1); reg.onFragmentTaken(); reg.onHeroDied(); reg.update(0.5);
   assert.deepEqual(seen, ["restore antessala@1", "floor1", "antessala 1", "frag", "died", "u0.5"]);
   const snap = reg.snapshot();
   assert.equal(snap.raiz, 3, "campo sem dono continua sendo gravado");
   assert.equal(snap.ferida, 17, "o dono sobrescreve");
-  assert.deepEqual(snap.nichos[0][0], { tipo: "vida", deixado: false }, "o armario atravessa o registro intacto");
+  assert.deepEqual(snap.secretos, ["laje_a"], "o que nenhum sistema possui atravessa o registro intacto");
+  assert.equal("nichos" in snap, false, "o armario e do modelo de pocoes (main.ts), nao do registro");
   reg.forget();
   assert.equal(new M.ExploracaoRegistry().snapshot().raiz, undefined);
 });
