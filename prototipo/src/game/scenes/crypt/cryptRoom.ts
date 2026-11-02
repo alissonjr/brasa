@@ -4,6 +4,7 @@ import {
   ColorCurves,
   DefaultRenderingPipeline,
   DirectionalLight,
+  DynamicTexture,
   GlowLayer,
   HemisphericLight,
   Matrix,
@@ -147,7 +148,7 @@ function kitRecolor(name: string, c0: Color3): Color3 {
   const c = new Color3(Math.pow(c0.r, 0.62), Math.pow(c0.g, 0.62), Math.pow(c0.b, 0.62));
   if (name === "Red") {
     const l = c.r * 0.3 + c.g * 0.59 + c.b * 0.11;
-    return new Color3(c.r * 0.45 + l * 0.55, c.g * 0.45 + l * 0.55, c.b * 0.45 + l * 0.55).scale(0.62);
+    return new Color3(c.r * 0.28 + l * 0.72, c.g * 0.28 + l * 0.72, c.b * 0.28 + l * 0.72).scale(0.58); // tijolo apagado: o quente da tela e o fogo
   }
   return c;
 }
@@ -325,6 +326,9 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   const HALFX = L.halfX;
   const HALFZ = L.halfZ;
   const AZ = L.altar.z; // z do altar/braseiro (fundo da sala)
+  // Texturas dinamicas criadas durante a montagem desta sala (grao da pedra, ondas, caverna, poças,
+  // particulas): a sala as descarta no dispose, senao crescem a cada andar.
+  const texturasAntes = new Set<unknown>(scene.textures);
   const roomRoot = new TransformNode("room_" + def.index, scene);
   const lights: IDisposable[] = [];
   const aggregates: PhysicsAggregate[] = [];
@@ -1560,6 +1564,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       // descartar a sala com materiais, senao o dispose os mataria e a proxima sala nasceria branca.
       for (const m of roomRoot.getChildMeshes(false)) if (isCachedToon(m.material, KIT_TOON)) m.material = null;
       roomRoot.dispose(false, true);
+      for (const t of [...scene.textures]) if (!texturasAntes.has(t) && t instanceof DynamicTexture && !t.name.startsWith("hpbar")) t.dispose();
     },
   };
 }

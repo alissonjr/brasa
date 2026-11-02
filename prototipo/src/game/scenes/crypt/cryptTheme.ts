@@ -137,7 +137,7 @@ export const FLOOR_THEMES: FloorTheme[] = [
     amb: { cold: "#9a8394", warm: "#b0916e", intensity: 0.38, warmDrop: 0.18 },
     key: { diffuse: "#a4838c", intensity: 0.56, warmDrop: 0.18 },
     pool: { torch: "#ff7a3a", accent: "#ff5a26", warm: true },
-    grade: { shadowsHue: 286, shadowsDensity: 28, shadowsSaturation: 10, highlightsHue: 22, highlightsDensity: 46, highlightsSaturation: 34, globalSaturation: 8, vignette: [0.05, 0.02, 0.04] },
+    grade: { shadowsHue: 224, shadowsDensity: 28, shadowsSaturation: 10, highlightsHue: 24, highlightsDensity: 40, highlightsSaturation: 22, globalSaturation: 8, vignette: [0.05, 0.02, 0.04] },
     particles: { kind: "brasas", rate: 0.5 },
   },
   // 4 - SANTUARIO (luto, respiro): osso e cal, claridade calma, velas votivas, duas ossadas.
@@ -153,7 +153,7 @@ export const FLOOR_THEMES: FloorTheme[] = [
     amb: { cold: "#aa9cc2", warm: "#b09878", intensity: 0.44, warmDrop: 0.18 },
     key: { diffuse: "#b4a6c6", intensity: 0.6, warmDrop: 0.16 },
     pool: { torch: "#ffc070", accent: "#ffe0a0", warm: true },
-    grade: { shadowsHue: 262, shadowsDensity: 22, shadowsSaturation: 6, highlightsHue: 42, highlightsDensity: 40, highlightsSaturation: 24, globalSaturation: 2, vignette: [0.04, 0.03, 0.06] },
+    grade: { shadowsHue: 236, shadowsDensity: 22, shadowsSaturation: 6, highlightsHue: 42, highlightsDensity: 40, highlightsSaturation: 24, globalSaturation: 2, vignette: [0.04, 0.03, 0.06] },
     particles: { kind: "cal", rate: 1 },
   },
   // 5 - CISTERNA (a verdade se monta): rocha vulcanica, veios fortes, a Brasa visivel ao fundo.
@@ -169,7 +169,7 @@ export const FLOOR_THEMES: FloorTheme[] = [
     amb: { cold: "#a8786c", warm: "#b8906c", intensity: 0.38, warmDrop: 0.16 },
     key: { diffuse: "#b4806c", intensity: 0.55, warmDrop: 0.16 },
     pool: { torch: "#ff6a30", accent: "#ff4a18", warm: true },
-    grade: { shadowsHue: 350, shadowsDensity: 38, shadowsSaturation: 14, highlightsHue: 14, highlightsDensity: 66, highlightsSaturation: 50, globalSaturation: 12, vignette: [0.06, 0.02, 0.02] },
+    grade: { shadowsHue: 220, shadowsDensity: 34, shadowsSaturation: 12, highlightsHue: 18, highlightsDensity: 52, highlightsSaturation: 36, globalSaturation: 12, vignette: [0.06, 0.02, 0.02] },
     particles: { kind: "brasas", rate: 1 },
   },
   // 6 - GUARDIAO (o confronto): obsidiana, cratera de brasa, cristas anelares, fendas radiais.
@@ -185,7 +185,7 @@ export const FLOOR_THEMES: FloorTheme[] = [
     amb: { cold: "#7a8ab0", warm: "#b08a78", intensity: 0.4, warmDrop: 0.18 },
     key: { diffuse: "#8896b8", intensity: 0.6, warmDrop: 0.2 },
     pool: { torch: "#ff6a30", accent: "#ff4a18", warm: true },
-    grade: { shadowsHue: 250, shadowsDensity: 30, shadowsSaturation: 12, highlightsHue: 24, highlightsDensity: 50, highlightsSaturation: 36, globalSaturation: 6, vignette: [0.04, 0.02, 0.06] },
+    grade: { shadowsHue: 232, shadowsDensity: 30, shadowsSaturation: 12, highlightsHue: 24, highlightsDensity: 50, highlightsSaturation: 36, globalSaturation: 6, vignette: [0.04, 0.02, 0.06] },
     particles: { kind: "centelhas", rate: 1 },
   },
 ];

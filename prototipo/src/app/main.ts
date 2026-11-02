@@ -404,7 +404,12 @@ async function main(): Promise<void> {
       window.setTimeout(r, 470);
     });
 
+  // Descidas, retry e novo jogo anunciam o andar (eco, stinger, fala do Guardiao) mesmo com a
+  // simulacao pausada na transicao; boot e restauracao de save entram em silencio.
+  let announceNext = false;
   const enterRoom = (i: number): void => {
+    const announce = gameActive || announceNext;
+    announceNext = false;
     currentRoom?.dispose();
     currentBoss = null;
     combat.clearEnemies();
@@ -444,9 +449,9 @@ async function main(): Promise<void> {
       currentBoss.bindArena(currentRoom.arena); // a arena reage à gangorra de luz da Brasa
       platform.events.emit("crypt:floor", { index: i, kind: def.kind });
       console.log(`[descida] andar ${i + 1}/${DESCENT.length} (${def.kind}): GUARDIÃO`);
-      if (gameActive) playStinger("guardiao"); // avistar o Guardião (stinger grave e ominoso)
+      if (announce) playStinger("guardiao"); // avistar o Guardião (stinger grave e ominoso)
       // Confronto encenado: a Primeira Acendedora fala antes de atacar (canon, narrativa §0).
-      if (gameActive) window.setTimeout(() => { if (combat.bossActive) showStory("Esperei tanto que esqueci meu nome. Qual é o teu?", 5000, false); }, 1400);
+      if (announce) window.setTimeout(() => { if (combat.bossActive) showStory("Esperei tanto que esqueci meu nome. Qual é o teu?", 5000, false); }, 1400);
     } else {
       const kinds = ROSTER[i] ?? ["warrior"];
       // W6/Item5: variação por run DETERMINÍSTICA. O jitter de ângulo/raio vem de um PRNG
@@ -468,7 +473,7 @@ async function main(): Promise<void> {
     floorDepth = i / Math.max(1, DESCENT.length - 1);
     startAmbience();
     setAmbience({ depth: floorDepth, danger: 0, urgency: 0 });
-    if (gameActive) {
+    if (announce) {
       if (!def.boss) playStinger("despertar"); // os mortos da câmara acordam (stinger frio)
       playStir(def.boss ? 1 : (ROSTER[i]?.length ?? 1)); // os mortos se agitam ao acordar
       showStory(ECHOES[i] ?? "", 4200, false); // eco/memória do andar
@@ -602,6 +607,7 @@ async function main(): Promise<void> {
       combatHud.flashHeal();
       healChime();
       await chooseBoon(); // gasta Fagulha numa dádiva (tela preta atrás)
+      announceNext = true;
       enterRoom(floorIndex + 1);
       void doAutosave(); // checkpoint = braseiro aceso: grava a run (andar/Fagulha/dádivas)
     }
@@ -684,6 +690,7 @@ async function main(): Promise<void> {
     defeated = false;
     combat.resetHeroDeath();
     hero.combat.revive(); // vida cheia
+    announceNext = true;
     enterRoom(floorIndex); // recomeça o ANDAR atual (inimigos restaurados; upgrades/Fagulha mantidos)
     gameActive = true;
     gameHud.setVisible(true);
@@ -993,6 +1000,7 @@ async function main(): Promise<void> {
       platform.progression.load({ chapterId: DEFAULT_CHAPTER, checkpointId: "", objectivesDone: [] });
       platform.achievements.load([]);
       resetRun(); // descida do zero
+      announceNext = true;
       enterRoom(0);
       startGame();
     },
@@ -1015,6 +1023,7 @@ async function main(): Promise<void> {
         if (g.run.active) restoreRun(g.run);
         else {
           resetRun();
+          announceNext = true;
           enterRoom(0);
         }
       }
