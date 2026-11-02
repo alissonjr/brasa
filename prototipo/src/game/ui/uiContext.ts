@@ -30,8 +30,8 @@ export interface UiContext {
 
   /** Estatísticas vivas para a tela de Perfil. */
   playtimeSec(): number;
-  /** Posição atual do jogador no mundo (para o mapa). */
-  playerPos(): { x: number; z: number };
+  /** Texto de objetivo da descida: fonte única, igual no HUD e na pausa. */
+  objective(): string;
   /** Personagem do jogador (escolhas da Nova Jornada). */
   character(): CharacterSave;
 

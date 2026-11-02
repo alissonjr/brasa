@@ -1,76 +1,83 @@
 import { el } from "@engine";
-import { LANDMARKS, type LandmarkKind } from "../content/map";
 import { icon } from "./ds/icons";
-import { T, onLanguageChange } from "./strings";
+import { F, T, onLanguageChange } from "./strings";
 
 /**
- * CAMADA JOGO. HUD de jogo (overlay sobre o canvas): chip do jogador (nome +
- * pontos, clicável -> Perfil), faixa de objetivo, e BÚSSOLA diegética leve no topo
- * (faixa de cardeais que rola conforme o herói gira + marcadores de direção dos
- * marcos; clicável -> mapa). Sem minimapa (decisão da spec-ui-hud-ux: "nunca
- * minimapa completo, no máximo bússola diegética leve no topo"). Recebe o estado
- * a cada quadro via update().
+ * CAMADA JOGO. HUD de jogo (overlay sobre o canvas), enxuto (spec-ui-hud-ux 2): o selo
+ * VERTICAL de profundidade "Câmara N/M" (uma coluna de elos; cada elo aceso é uma câmara
+ * já vencida), o ÚNICO texto de objetivo (vem de uma fonte só, `ctx.objective()`), as
+ * legendas diegéticas (eco, inscrição, fala), os toasts e o aviso de cena. Sem chip de
+ * jogador, sem pontos, sem bússola e sem mapa. Recebe o estado por update().
  */
 export interface HudState {
-  name: string;
-  points: number;
+  /** Índice do andar atual (0..total-1). */
+  floor: number;
+  total: number;
   objective: string;
-  x: number;
-  z: number;
-  yaw: number; // rotação do herói no eixo Y (frente = +Z = norte)
 }
 
-const COLORS: Record<LandmarkKind, string> = {
-  entrada: "#7c8a98",
-  camara: "#9aa6b3",
-  brasa: "#ff8a3c",
-};
+/** Que tipo de texto a legenda mostra (muda rótulo e tipografia). */
+export type CaptionKind = "eco" | "inscricao" | "voz";
 
-const HALF_FOV = Math.PI / 2; // a bússola mostra ±90° à frente
+const CAPTION_LABEL: Record<CaptionKind, () => string> = {
+  eco: () => T.legendaEco,
+  inscricao: () => T.legendaInscricao,
+  voz: () => T.legendaVoz,
+};
 
 export class GameHud {
   readonly root: HTMLElement;
-  private readonly avatarEl: HTMLElement;
-  private readonly nameEl: HTMLElement;
-  private readonly pointsEl: HTMLElement;
+  private readonly depth: HTMLElement;
+  private readonly chain: HTMLElement;
+  private readonly numEl: HTMLElement;
+  private readonly tagEl: HTMLElement;
   private readonly objectiveEl: HTMLElement;
-  private readonly canvas: HTMLCanvasElement;
-  private readonly c2d: CanvasRenderingContext2D | null;
   private readonly toastLayer: HTMLElement;
-  private readonly last = { name: "", points: -1, objective: "" };
+  private readonly caption: HTMLElement;
+  private readonly captionTag: HTMLElement;
+  private readonly captionText: HTMLElement;
+  private readonly inscription: HTMLElement;
+  private readonly inscriptionTag: HTMLElement;
+  private readonly inscriptionText: HTMLElement;
+  private readonly sceneEl: HTMLElement;
+  private captionKind: CaptionKind = "eco";
+  private captionTimer = 0;
+  private sceneTimer = 0;
+  private links: HTMLElement[] = [];
+  private last = { floor: -1, total: -1, objective: "" };
 
-  constructor(onOpenProfile: () => void, onOpenMap: () => void) {
-    this.avatarEl = el("span", { class: "chip-avatar" });
-    this.nameEl = el("span", { class: "chip-name" });
-    this.pointsEl = el("span", { class: "chip-points" });
-    const chip = el(
+  constructor() {
+    this.chain = el("ol", { class: "hud-depth__chain", "aria-hidden": "true" });
+    this.tagEl = el("span", { class: "ds-label hud-depth__tag", text: T.camara });
+    this.numEl = el("span", { class: "hud-depth__n" });
+    this.objectiveEl = el("p", { class: "hud-depth__obj" });
+    this.depth = el(
       "div",
-      { class: "hud-chip", title: T.perfil },
-      this.avatarEl,
-      el("span", { class: "chip-text" }, this.nameEl, this.pointsEl)
+      { class: "hud-depth", role: "group" },
+      this.chain,
+      el("div", { class: "hud-depth__text" }, el("div", { class: "hud-depth__head" }, this.tagEl, this.numEl), this.objectiveEl)
     );
-    chip.addEventListener("click", onOpenProfile);
 
-    this.canvas = el("canvas", { class: "compass-canvas", width: "360", height: "34" }) as HTMLCanvasElement;
-    this.c2d = this.canvas.getContext("2d");
-    const compass = el("div", { class: "compass", title: T.mapa }, this.canvas);
-    compass.addEventListener("click", onOpenMap);
+    // Legendas: eco (ao entrar), inscrição (perto do nicho) e fala. Ficam à esquerda, sob o
+    // selo, longe do centro onde está o combate.
+    this.captionTag = el("span", { class: "hud-caption__tag" });
+    this.captionText = el("p", { class: "hud-caption__text" });
+    this.caption = el("div", { class: "hud-caption", "aria-live": "polite" }, this.captionTag, this.captionText);
+    this.inscriptionTag = el("span", { class: "hud-caption__tag", text: T.legendaInscricao });
+    this.inscriptionText = el("p", { class: "hud-caption__text" });
+    this.inscription = el("div", { class: "hud-caption hud-caption--inscricao", "aria-live": "polite" }, this.inscriptionTag, this.inscriptionText);
+    const captions = el("div", { class: "hud-captions" }, this.caption, this.inscription);
 
-    this.objectiveEl = el("span", { class: "hud-obj-text" });
-    const objLabel = el("span", { class: "hud-obj-label", text: T.objetivo });
-    const objective = el("div", { class: "hud-objective" }, objLabel, this.objectiveEl);
-
+    this.sceneEl = el("div", { class: "hud-scene", "aria-live": "polite" });
     this.toastLayer = el("div", { class: "hud-toasts" });
+    this.root = el("div", { class: "hud-game" }, this.depth, captions, this.toastLayer, this.sceneEl);
 
-    this.root = el("div", { class: "hud-game" }, chip, compass, objective, this.toastLayer);
-
-    // Reage à troca de idioma: atualiza rótulos estáticos e força re-render dinâmico.
     onLanguageChange(() => {
-      objLabel.textContent = T.objetivo;
-      chip.title = T.perfil;
-      compass.title = T.mapa;
-      this.last.points = -1;
-      this.last.name = "";
+      this.tagEl.textContent = T.camara;
+      this.inscriptionTag.textContent = T.legendaInscricao;
+      this.captionTag.textContent = CAPTION_LABEL[this.captionKind]();
+      this.last.floor = -1; // refaz o rótulo acessível
+      this.last.objective = "";
     });
   }
 
@@ -78,11 +85,36 @@ export class GameHud {
     this.root.style.display = v ? "" : "none";
   }
 
+  /** Legenda transitória (eco, fala, leitura). Substitui a anterior; some sozinha. */
+  say(kind: CaptionKind, text: string, holdMs: number): void {
+    window.clearTimeout(this.captionTimer);
+    this.captionKind = kind;
+    this.caption.dataset.kind = kind;
+    this.captionTag.textContent = CAPTION_LABEL[kind]();
+    this.captionText.textContent = text;
+    this.caption.classList.toggle("on", text.length > 0);
+    this.captionTimer = window.setTimeout(() => this.caption.classList.remove("on"), holdMs);
+  }
+
+  /** Inscrição gravada na pedra: fica enquanto a Acendedora está perto do nicho. */
+  setInscription(text: string | null): void {
+    if (text) this.inscriptionText.textContent = text;
+    this.inscription.classList.toggle("on", !!text);
+  }
+
+  /** Texto de cena grande e central, só para momentos sem combate (a vitória). */
+  scene(text: string, holdMs: number): void {
+    window.clearTimeout(this.sceneTimer);
+    this.sceneEl.textContent = text;
+    this.sceneEl.classList.add("on");
+    this.sceneTimer = window.setTimeout(() => this.sceneEl.classList.remove("on"), holdMs);
+  }
+
   /** Mostra um toast transitório (ex.: conquista desbloqueada). */
   notify(title: string, subtitle: string): void {
     const toast = el(
       "div",
-      { class: "hud-toast" },
+      { class: "hud-toast", role: "status" },
       el("span", { class: "toast-label", text: T.conquistaDesbloqueada }),
       el("strong", { class: "toast-title", text: title }),
       el("span", { class: "toast-desc", text: subtitle })
@@ -93,6 +125,17 @@ export class GameHud {
       toast.classList.remove("show");
       window.setTimeout(() => toast.remove(), 400);
     }, 3600);
+  }
+
+  /** Aviso curto de jogo (pílula `ds-toast`), ex.: estilha recuperada. */
+  toast(text: string, holdMs = 3200): void {
+    const toast = el("div", { class: "ds-toast hud-codex-toast", role: "status" }, el("span", { text }));
+    this.toastLayer.appendChild(toast);
+    requestAnimationFrame(() => toast.classList.add("show"));
+    window.setTimeout(() => {
+      toast.classList.remove("show");
+      window.setTimeout(() => toast.remove(), 400);
+    }, holdMs);
   }
 
   /** Aviso "Nova página na Crônica" (pílula `ds-toast`), com os títulos do que foi liberado. */
@@ -114,76 +157,32 @@ export class GameHud {
   }
 
   update(s: HudState): void {
-    if (s.name !== this.last.name) {
-      this.nameEl.textContent = s.name;
-      this.avatarEl.textContent = (s.name.trim()[0] ?? "?").toUpperCase();
-      this.last.name = s.name;
+    if (s.total !== this.last.total) {
+      this.chain.replaceChildren();
+      this.links = [];
+      for (let i = 0; i < s.total; i++) {
+        const li = el("li", { class: "hud-link" });
+        this.chain.appendChild(li);
+        this.links.push(li);
+      }
+      this.last.total = s.total;
+      this.last.floor = -1;
     }
-    if (s.points !== this.last.points) {
-      this.pointsEl.textContent = `${s.points} ${T.pontos.toLowerCase()}`;
-      this.last.points = s.points;
+    if (s.floor !== this.last.floor) {
+      this.links.forEach((li, i) => {
+        li.classList.toggle("is-done", i < s.floor);
+        li.classList.toggle("is-current", i === s.floor);
+      });
+      // Quanto mais fundo, mais frio o tom do selo (direção de arte: andares fundos são frios).
+      this.depth.style.setProperty("--cold", `${Math.round((s.floor / Math.max(1, s.total - 1)) * 70)}%`);
+      this.numEl.innerHTML = "";
+      this.numEl.append(el("b", { text: String(s.floor + 1) }), el("i", { text: `/${s.total}` }));
+      this.depth.setAttribute("aria-label", F("camaraAria", { n: s.floor + 1, t: s.total }));
+      this.last.floor = s.floor;
     }
     if (s.objective !== this.last.objective) {
       this.objectiveEl.textContent = s.objective;
       this.last.objective = s.objective;
     }
-    this.drawCompass(s);
   }
-
-  private drawCompass(s: HudState): void {
-    const c = this.c2d;
-    if (!c) return;
-    const W = this.canvas.width;
-    const H = this.canvas.height;
-    const cx = W / 2;
-    const xFor = (rel: number) => cx + (rel / HALF_FOV) * (W / 2);
-    c.clearRect(0, 0, W, H);
-
-    // Cardeais (N, L, S, O) - frente = +Z = Norte.
-    const cards: Array<[string, number]> = [
-      ["N", 0],
-      ["L", Math.PI / 2],
-      ["S", Math.PI],
-      ["O", -Math.PI / 2],
-    ];
-    c.font = "bold 13px Cinzel, serif";
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    for (const [label, bearing] of cards) {
-      const rel = norm(bearing - s.yaw);
-      if (Math.abs(rel) > HALF_FOV) continue;
-      c.fillStyle = label === "N" ? "#f6e3b0" : "#c9a86a"; // N destacado
-      c.fillText(label, xFor(rel), H / 2 - 2);
-    }
-
-    // Marcadores de direção dos marcos (por rumo a partir do jogador).
-    for (const lm of LANDMARKS) {
-      const bearing = Math.atan2(lm.x - s.x, lm.z - s.z);
-      const rel = norm(bearing - s.yaw);
-      if (Math.abs(rel) > HALF_FOV) continue;
-      const x = xFor(rel);
-      c.fillStyle = COLORS[lm.kind];
-      c.beginPath();
-      c.moveTo(x, H - 3);
-      c.lineTo(x - 4, H - 10);
-      c.lineTo(x + 4, H - 10);
-      c.closePath();
-      c.fill();
-    }
-
-    // Indicador de direção do olhar (centro), triângulo apontando para baixo.
-    c.fillStyle = "#f6e3b0";
-    c.beginPath();
-    c.moveTo(cx, 9);
-    c.lineTo(cx - 5, 1);
-    c.lineTo(cx + 5, 1);
-    c.closePath();
-    c.fill();
-  }
-}
-
-function norm(a: number): number {
-  while (a > Math.PI) a -= 2 * Math.PI;
-  while (a < -Math.PI) a += 2 * Math.PI;
-  return a;
 }

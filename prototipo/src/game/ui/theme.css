@@ -328,118 +328,160 @@
   transform: translate(-50%, 0);
 }
 
-/* --- HUD de jogo: chip do jogador, objetivo, minimapa --- */
+/* --- HUD de jogo --- */
 .hud-game {
   position: absolute;
   inset: 0;
   pointer-events: none;
 }
 
-.hud-chip {
+/* Selo vertical de profundidade: coluna de elos (cada elo aceso é uma câmara vencida) com o
+   rótulo "Câmara N/M" e o único texto de objetivo. Quanto mais fundo, mais frio o tom. */
+.hud-depth {
+  --cold: 0%;
+  --tone: color-mix(in srgb, var(--frost-500) var(--cold), var(--gold-400));
   position: absolute;
-  top: 14px;
-  left: 16px;
+  top: 16px;
+  left: 18px;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 14px 6px 6px;
-  background: linear-gradient(180deg, rgba(40, 28, 14, 0.88), rgba(20, 14, 8, 0.88));
-  border: 1px solid var(--borda-clara);
-  border-radius: 8px;
-  box-shadow: inset 0 1px 0 rgba(246, 227, 176, 0.14), 0 2px 8px rgba(0, 0, 0, 0.45);
-  pointer-events: auto;
-  cursor: pointer;
-  transition: border-color 0.14s ease;
+  align-items: stretch;
+  gap: var(--sp-3);
+  box-sizing: border-box;
+  width: min(320px, 30vw);
+  padding: var(--sp-3) var(--sp-4) var(--sp-3) var(--sp-3);
+  background: linear-gradient(180deg, rgba(20, 25, 36, 0.9), rgba(10, 13, 19, 0.9));
+  border: var(--line) solid color-mix(in srgb, var(--tone) 38%, var(--ink-600));
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-2), inset 0 1px 0 rgba(242, 196, 109, 0.1);
+  backdrop-filter: blur(3px);
 }
-.hud-chip:hover {
-  border-color: var(--bronze-claro);
-}
-.chip-avatar {
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  font-family: "Cinzel", Georgia, serif;
-  font-weight: 700;
-  font-size: 16px;
-  color: #2a1c0c;
-  background: radial-gradient(circle at 35% 30%, var(--ouro-claro), var(--bronze-claro) 70%, #9b6a28);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.4), 0 1px 2px rgba(0, 0, 0, 0.4);
-}
-.chip-text {
+.hud-depth__chain {
   display: flex;
   flex-direction: column;
-  line-height: 1.15;
-}
-.chip-name {
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 14px;
-  letter-spacing: 0.5px;
-  color: var(--ouro-claro);
-}
-.chip-points {
-  font-size: 13px;
-  color: var(--texto-suave);
-}
-
-.hud-objective {
-  position: absolute;
-  top: 56px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
   align-items: center;
-  gap: 10px;
-  max-width: 44vw;
-  padding: 7px 18px;
-  background: rgba(20, 14, 8, 0.72);
-  border: 1px solid rgba(216, 169, 59, 0.32);
-  border-radius: 20px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  width: 16px;
+  flex: none;
 }
-.hud-obj-label {
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 11px;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--bronze-claro);
+.hud-link {
+  flex: none;
+  width: 13px;
+  height: 18px;
+  margin-top: -3px;
+  border: 2px solid var(--ink-500);
+  border-radius: 7px;
+  background: var(--ink-850);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.6);
+  transition: border-color var(--dur-base) ease, background var(--dur-base) ease, box-shadow var(--dur-base) ease;
 }
-.hud-obj-text {
-  font-size: 15px;
-  font-style: italic;
-  color: var(--texto);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.hud-link:first-child { margin-top: 0; }
+/* Elos alternados de lado, como corrente de verdade. */
+.hud-link:nth-child(even) { width: 6px; height: 15px; border-radius: 3px; }
+.hud-link.is-done {
+  border-color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 42%, var(--ink-850));
 }
+.hud-link.is-current {
+  border-color: var(--gold-100);
+  background: color-mix(in srgb, var(--tone) 75%, #fff);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--tone) 70%, transparent);
+  animation: ds-breathe-soft 2.4s ease-in-out infinite;
+}
+@keyframes ds-breathe-soft {
+  0%, 100% { box-shadow: 0 0 6px color-mix(in srgb, var(--tone) 50%, transparent); }
+  50% { box-shadow: 0 0 14px color-mix(in srgb, var(--tone) 85%, transparent); }
+}
+.hud-depth__text { display: flex; flex-direction: column; justify-content: center; gap: var(--sp-1); min-width: 0; }
+.hud-depth__head { display: flex; align-items: baseline; gap: var(--sp-2); }
+.hud-depth__tag { color: var(--tone); }
+.hud-depth__n { font-family: var(--font-display); color: var(--text-hi); letter-spacing: 0.06em; }
+.hud-depth__n b { font-size: var(--fs-xl); font-weight: 700; }
+.hud-depth__n i { font-style: normal; font-size: var(--fs-sm); color: var(--text-mid); }
+.hud-depth__obj { margin: 0; font-family: var(--font-text); font-style: italic; font-size: var(--fs-md); line-height: 1.3; color: var(--text-hi); }
 
-/* Bússola diegética leve no topo (faixa de cardeais + marcadores de rumo). */
-.compass {
+/* Legendas diegéticas (eco, inscrição, fala): sob o selo, à esquerda, nunca no centro. */
+.hud-captions {
   position: absolute;
-  top: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 360px;
-  height: 34px;
-  pointer-events: auto;
-  cursor: pointer;
-  border-radius: 6px;
-  background: linear-gradient(180deg, rgba(40, 28, 14, 0.5), rgba(20, 14, 8, 0.5));
-  border: 1px solid rgba(216, 169, 59, 0.25);
-  box-shadow: inset 0 1px 0 rgba(246, 227, 176, 0.1);
-  transition: border-color 0.14s ease, background 0.14s ease;
-  /* Esmaece nas bordas (sensação diegética). */
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 14%, #000 86%, transparent);
+  top: 178px;
+  left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  width: min(320px, 30vw);
 }
-.compass:hover {
-  border-color: var(--bronze-claro);
-  background: linear-gradient(180deg, rgba(50, 36, 18, 0.6), rgba(26, 18, 10, 0.6));
+.hud-caption {
+  display: none;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-3) var(--sp-4);
+  background: rgba(10, 13, 19, 0.78);
+  border: var(--line) solid var(--gold-800);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  transition: opacity 0.6s ease, display 0.6s allow-discrete;
 }
-.compass-canvas {
-  display: block;
+.hud-caption.on { display: flex; opacity: 1; }
+@starting-style { .hud-caption.on { opacity: 0; } }
+.hud-caption__tag {
+  align-self: flex-start;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--gold-400);
 }
+.hud-caption__tag::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--sp-2);
+  transform: rotate(45deg);
+  border: var(--line) solid var(--gold-400);
+  background: var(--gold-700);
+}
+.hud-caption__text { margin: 0; font-family: var(--font-text); font-style: italic; font-size: var(--fs-md); line-height: 1.35; color: var(--text-hi); }
+/* A inscrição é lapidar: Cinzel, caixa alta, gravada. */
+.hud-caption--inscricao .hud-caption__text { font-family: var(--font-display); font-style: normal; font-weight: 600; font-size: var(--fs-xs); letter-spacing: 0.12em; text-transform: uppercase; line-height: 1.55; color: var(--text-mid); }
+.hud-caption[data-kind="voz"] .hud-caption__tag { color: var(--frost-300); }
+.hud-caption[data-kind="voz"] .hud-caption__tag::before { border-color: var(--frost-300); background: var(--frost-500); }
 
+/* Texto de cena (só a vitória, sem combate): grande e central. */
+.hud-scene {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  max-width: min(70vw, 760px);
+  text-align: center;
+  font: 700 var(--fs-2xl) var(--font-display);
+  letter-spacing: var(--ls-title);
+  color: var(--text-hi);
+  text-shadow: 0 2px 12px #000, var(--glow-ember);
+  opacity: 0;
+  transition: opacity 1s ease;
+}
+.hud-scene.on { opacity: 1; }
+
+/* Com qualquer tela de UI aberta (pausa, Opções, Crônica, derrota, braseiro, vitória), nada do
+   jogo fica por cima: texto de história, avisos, retículo, contadores e barras somem. */
+html.ui-open .hud-game,
+html.ui-open .hud-callout,
+html.ui-open .hud-weapon,
+html.ui-open .hud-boss,
+html.ui-open .hud-reticle,
+html.ui-open .hud-channel,
+html.ui-open .hud-fagulha,
+html.ui-open .hud-potions,
+html.ui-open .brasa-bar { visibility: hidden; }
+
+/* Barra de Brasa (ultimate): canto inferior-esquerdo, sob a fagulha. */
+.ds-bar.brasa-bar { position: fixed; left: 18px; bottom: 18px; width: 260px; z-index: 35; pointer-events: none; }
 /* --- Perfil --- */
 .field-label {
   font-family: var(--font-display);
@@ -505,7 +547,7 @@
 /* --- Toasts (HUD) --- */
 .hud-toasts {
   position: absolute;
-  top: 98px;
+  top: 74px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -592,41 +634,6 @@
 .ach-text span {
   font-size: var(--fs-sm);
   color: var(--text-mid);
-}
-
-/* --- Mapa-múndi --- */
-.map-panel {
-  max-width: min(94vw, 760px);
-}
-.map-canvas {
-  display: block;
-  width: auto;
-  height: auto;
-  max-width: 100%;
-  max-height: 44vh;
-  margin: 0 auto;
-  border: var(--line) solid var(--ink-500);
-  border-radius: var(--radius-sm);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.6);
-}
-.map-legend {
-  display: flex;
-  gap: var(--sp-4);
-  justify-content: center;
-  flex-wrap: wrap;
-  font-size: var(--fs-sm);
-  color: var(--text-mid);
-}
-.map-legend > span {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-}
-.legend-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 2px;
-  display: inline-block;
 }
 
 /* --- Controles (remapeamento) --- */
@@ -744,74 +751,6 @@
   bottom: 6%;
   left: 22%;
   right: 22%;
-}
-
-/* --- Diário (objetivos; a linha vem de .ds-row) --- */
-.quest-panel {
-  max-width: min(94vw, 600px);
-}
-.quest-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-.quest-chapter {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: var(--sp-3);
-  padding: var(--sp-1) 2px;
-  border-bottom: var(--line) solid var(--ink-600);
-}
-.quest-chapter:first-child {
-  margin-top: 0;
-}
-.quest-ch-name {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: var(--fs-xs);
-  letter-spacing: var(--ls-caps);
-  text-transform: uppercase;
-  color: var(--gold-400);
-}
-.quest-chapter.active .quest-ch-name {
-  color: var(--gold-200);
-}
-.quest-ch-count {
-  font-family: var(--font-display);
-  font-size: var(--fs-xs);
-  color: var(--text-mid);
-}
-.quest-row {
-  padding: var(--sp-2) var(--sp-3);
-}
-.quest-mark {
-  width: 18px;
-  flex-shrink: 0;
-  text-align: center;
-  color: var(--gold-300);
-  font-weight: 700;
-}
-.quest-text {
-  flex: 1;
-  font-size: var(--fs-md);
-  color: var(--text-hi);
-}
-.quest-row.done {
-  background: transparent;
-}
-.quest-row.done .quest-text {
-  text-decoration: line-through;
-  text-decoration-color: var(--gold-600);
-  color: var(--text-mid);
-}
-.quest-pts {
-  font-family: var(--font-display);
-  font-size: var(--fs-xs);
-  color: var(--gold-400);
-}
-.quest-row.done .quest-pts {
-  color: var(--text-mid);
 }
 
 /* --- Nova Jornada (criação de personagem) --- */
@@ -1376,34 +1315,6 @@
 }
 
 /* --- HUD de jogo no design system: chip, bússola, objetivo, menu, avisos --- */
-.hud-chip {
-  padding: 5px 16px 5px 5px;
-  background: linear-gradient(180deg, rgba(20, 25, 36, 0.92), rgba(10, 13, 19, 0.92));
-  border: 1px solid var(--gold-700);
-  border-radius: 999px;
-  box-shadow: var(--shadow-2), inset 0 1px 0 rgba(242, 196, 109, 0.12);
-}
-.hud-chip:hover { border-color: var(--gold-300); box-shadow: var(--shadow-2), var(--glow-gold); }
-.chip-avatar { background: var(--metal-gold); color: var(--ink-950); border: 1px solid var(--gold-100); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), var(--shadow-1); }
-.chip-name { font-size: var(--fs-sm); letter-spacing: 0.14em; text-transform: uppercase; color: var(--gold-200); }
-.chip-points { font-size: var(--fs-sm); color: var(--text-lo); }
-.hud-objective {
-  top: 54px;
-  padding: 6px 22px;
-  background: rgba(10, 13, 19, 0.82);
-  border: 1px solid var(--gold-700);
-  box-shadow: var(--shadow-2);
-  backdrop-filter: blur(4px);
-}
-.hud-obj-label { font-size: var(--fs-2xs); letter-spacing: 0.3em; color: var(--gold-400); }
-.hud-obj-text { font-size: var(--fs-md); color: var(--text-hi); }
-.compass {
-  background: linear-gradient(180deg, rgba(10, 13, 19, 0.7), rgba(10, 13, 19, 0.35));
-  border: 1px solid var(--gold-800);
-  border-radius: var(--radius-sm);
-  box-shadow: none;
-}
-.compass:hover { border-color: var(--gold-600); background: linear-gradient(180deg, rgba(20, 25, 36, 0.8), rgba(10, 13, 19, 0.5)); }
 .hud-pause-btn {
   display: flex;
   align-items: center;
@@ -1538,7 +1449,7 @@
 
 
 /* ===== HUD de jogo: elementos que antes eram montados com estilo solto em main.ts ===== */
-.hud-callout, .hud-weapon, .hud-inscription {
+.hud-callout, .hud-weapon {
   position: fixed; left: 50%; transform: translateX(-50%); z-index: 35;
   padding: var(--sp-2) var(--sp-4);
   background: rgba(10, 13, 19, 0.86);
@@ -1558,7 +1469,6 @@
 .hud-callout--danger { bottom: 104px; z-index: 36; border-color: var(--blood-600); background: rgba(30, 10, 8, 0.88); color: var(--ember-200); }
 .hud-callout .ds-kbd { margin-right: var(--sp-1); }
 .hud-weapon { left: auto; right: 16px; top: 100px; bottom: auto; transform: none; opacity: 1; border-radius: 999px; color: var(--gold-200); }
-.hud-inscription { bottom: 160px; max-width: 60vw; text-align: center; font: italic 500 var(--fs-md) var(--font-text); color: var(--text-mid); background: rgba(10, 13, 19, 0.6); border-color: var(--gold-800); }
 
 .hud-channel { position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%); z-index: 35; width: 220px; height: 8px;
   background: var(--ink-900); border: var(--line) solid var(--gold-700); border-radius: 999px; overflow: hidden; opacity: 0;
@@ -1573,10 +1483,5 @@
 
 .hud-reticle { position: fixed; width: 34px; height: 34px; border: 2px solid var(--frost-300); border-radius: 50%;
   box-shadow: var(--glow-frost), inset 0 0 6px rgba(143, 214, 230, 0.4); transform: translate(-50%, -50%); z-index: 34; pointer-events: none; }
-
-.hud-story { position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%); z-index: 38; max-width: 80vw; text-align: center;
-  color: var(--text-hi); font: 600 var(--fs-xl) var(--font-display); letter-spacing: var(--ls-title);
-  text-shadow: 0 2px 10px #000, var(--glow-ember); opacity: 0; transition: opacity 1s ease; pointer-events: none; }
-.hud-story--small { font-size: var(--fs-lg); }
 
 .hud-fade { position: fixed; inset: 0; background: var(--ink-950); opacity: 0; pointer-events: none; transition: opacity 0.45s ease; z-index: var(--z-menu); }

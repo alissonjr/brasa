@@ -13,8 +13,6 @@ import {
   type SkeletonKind,
   MainMenuScreen,
   PauseScreen,
-  ProfileScreen,
-  WorldMapScreen,
   CharacterCreateScreen,
   VictoryScreen,
   DefeatScreen,
@@ -33,6 +31,8 @@ import {
   markRead,
   achievementForObjective,
   setLanguage,
+  T,
+  F,
   createAutosaveIndicator,
   createPauseButton,
   configureUiSound,
@@ -232,6 +232,7 @@ async function main(): Promise<void> {
   let floorIndex = 0;
   let descending = false;
   let descentDone = false;
+  let winShown = false; // a tela de vitória desta descida já foi aberta
   let roomCleared = false;
   let floorDepth = 0; // ESTILO (Bloco 4): profundidade do andar atual (0..1) p/ a ambiência
   let ambAcc = 0; // acumulador de throttle do setAmbience
@@ -257,6 +258,16 @@ async function main(): Promise<void> {
   // que leem gameActive. Se ficasse lá embaixo, daria TDZ ("before initialization").
   let gameActive = false; // simulação ativa (fora de menu/pausa/transição)
   const CLEAR_BONUS = 6;
+  // OBJETIVO: fonte única do texto mostrado no HUD e na pausa (guiado pelo andar atual:
+  // derrotar -> recuperar a estilha -> descer). `ctx.objective()` devolve isto.
+  const descentObjective = (): string => {
+    if (descentDone) return T.objVitoria;
+    const n = combat.enemiesAlive;
+    const last = floorIndex >= DESCENT.length - 1;
+    if (n > 0) return F("objDerrote", { n });
+    if (fragmentTaken) return last ? T.objFosso : T.objAlcapao;
+    return last ? T.objUltimaEstilha : F("objEstilha", { n: fragments });
+  };
   // Inventário de poções (cargas; comprado na banca do braseiro, usado com Digit1/Digit2).
   // Persiste na run. Começa com 1 Poção de Recuperação (ensina o recurso).
   const inv = { vida: 1, furia: 0 };
@@ -369,30 +380,15 @@ async function main(): Promise<void> {
   document.body.appendChild(reticleEl);
   const reticleWorld = new Vector3();
 
-  // Texto de cena (set-pieces): abertura, ecos por andar, reavivar. Fade in/out.
-  const storyEl = document.createElement("div");
-  storyEl.className = "hud-story";
-  document.body.appendChild(storyEl);
-  let storyTimer = 0;
-  const showStory = (text: string, holdMs: number, big = true): void => {
-    window.clearTimeout(storyTimer);
-    storyEl.textContent = text;
-    storyEl.classList.toggle("hud-story--small", !big);
-    storyEl.style.opacity = "1";
-    storyTimer = window.setTimeout(() => {
-      storyEl.style.opacity = "0";
-    }, holdMs);
-  };
+  // HUD de jogo (selo de profundidade, objetivo, legendas e toasts). Criado aqui porque o eco
+  // do andar e as falas dependem dele; entra na camada de UI mais abaixo.
+  const gameHud = new GameHud();
   // Eco (memória ouvida ao ENTRAR) e inscrição (texto GRAVADO na pedra do nicho, lido ao se
   // aproximar) de cada andar. O texto vive em content/codex.ts, junto do decalque da Crônica,
   // para o jogo e a Crônica nunca divergirem. Beats do canon fechado: povo morto -> alguém
   // desceu antes -> o custo -> luto -> a verdade se monta -> confronto (narrativa §0).
   const ECHOES = FLOOR_ECHOES;
   const INSCRIPTIONS = FLOOR_INSCRIPTIONS;
-  // Placa discreta da inscrição (estilo lapidar): aparece ao chegar perto do nicho.
-  const inscriptionEl = document.createElement("div");
-  inscriptionEl.className = "hud-inscription";
-  document.body.appendChild(inscriptionEl);
 
   // Overlay preto para o fade entre andares.
   const fadeEl = document.createElement("div");
@@ -451,7 +447,7 @@ async function main(): Promise<void> {
       console.log(`[descida] andar ${i + 1}/${DESCENT.length} (${def.kind}): GUARDIÃO`);
       if (announce) playStinger("guardiao"); // avistar o Guardião (stinger grave e ominoso)
       // Confronto encenado: a Primeira Acendedora fala antes de atacar (canon, narrativa §0).
-      if (announce) window.setTimeout(() => { if (combat.bossActive) showStory("Esperei tanto que esqueci meu nome. Qual é o teu?", 5000, false); }, 1400);
+      if (announce) window.setTimeout(() => { if (combat.bossActive) gameHud.say("voz", "Esperei tanto que esqueci meu nome. Qual é o teu?", 5000); }, 1400);
     } else {
       const kinds = ROSTER[i] ?? ["warrior"];
       // W6/Item5: variação por run DETERMINÍSTICA. O jitter de ângulo/raio vem de um PRNG
@@ -476,7 +472,7 @@ async function main(): Promise<void> {
     if (announce) {
       if (!def.boss) playStinger("despertar"); // os mortos da câmara acordam (stinger frio)
       playStir(def.boss ? 1 : (ROSTER[i]?.length ?? 1)); // os mortos se agitam ao acordar
-      showStory(ECHOES[i] ?? "", 4200, false); // eco/memória do andar
+      gameHud.say("eco", ECHOES[i] ?? "", 4200); // eco/memória do andar
       playWhisper(Math.sign(currentRoom.inscriptionPos.x) * 0.6); // o eco sussurra do nicho
     }
   };
@@ -625,7 +621,7 @@ async function main(): Promise<void> {
       if (Math.hypot(hero.position.x - rd.x, hero.position.z - rd.z) <= 2.3) { nearReadable = rd; break; }
     }
     if (nearReadable && input.isHeld("interact")) {
-      showStory(nearReadable.text, 6500, false);
+      gameHud.say("inscricao", nearReadable.text, 6500);
       readShown.add(nearReadable.text);
       markCodex(markRead(floorIndex + 1)); // inscrição lida: o decalque cai na Crônica
       nearReadable = null;
@@ -679,7 +675,7 @@ async function main(): Promise<void> {
         currentRoom.setBrazierLit(1); // lampejo do relicário ao ceder a estilha (não permanece)
         window.setTimeout(() => currentRoom?.setBrazierLit(0), 900); // e some logo (sem fogo no andar)
         playStinger("fagulha");
-        showStory(`Estilha de Brasa recuperada (${fragments}). Desça pelo alçapão.`, 3200, true);
+        gameHud.toast(F("estilhaRecuperada", { n: fragments }));
       }
     } else {
       promptEl.textContent = "Desça pelo alçapão";
@@ -751,6 +747,7 @@ async function main(): Promise<void> {
     timedRun = true; // jogada do começo nesta sessão: vale para o leaderboard
     runStartedAt = performance.now();
     descentDone = false;
+    winShown = false;
     defeated = false;
     hero.combat.resetUpgrades();
     brasaMeter = 0;
@@ -834,10 +831,6 @@ async function main(): Promise<void> {
   pauseBtn.style.display = "none";
   ui.hudLayer.appendChild(pauseBtn);
 
-  const gameHud = new GameHud(
-    () => openHudOverlay((back) => new ProfileScreen(ctx, back)),
-    () => openHudOverlay((back) => new WorldMapScreen(ctx, back))
-  );
   ui.hudLayer.appendChild(gameHud.root);
   gameHud.setVisible(false);
 
@@ -861,22 +854,6 @@ async function main(): Promise<void> {
   const damageNumbers = new DamageNumbers({ scene, engine, reducedMotion: () => platform.settings.get().reducedMotion }).bindEvents(platform.events);
 
   let pausedOpen = false;
-
-  const playerYaw = (): number => {
-    const root = hero.model.root;
-    return root.rotationQuaternion ? root.rotationQuaternion.toEulerAngles().y : root.rotation.y;
-  };
-
-  /** Abre uma tela sobre o jogo (Perfil/Mapa) pausando como um modal; Esc/Voltar retoma. */
-  function openHudOverlay(make: (back: () => void) => PauseScreen | ProfileScreen | WorldMapScreen): void {
-    if (!gameActive) return;
-    gameActive = false;
-    pausedOpen = true;
-    pauseBtn.style.display = "none";
-    gameHud.setVisible(false);
-    document.exitPointerLock();
-    ui.push(make(() => ctx.resume()));
-  }
 
   const startedAt = performance.now();
   let rev = carregado?.rev ?? 0;
@@ -954,7 +931,7 @@ async function main(): Promise<void> {
     updateFagulhaHud();
     updatePotionHud(); // semeia o HUD de poções com as cargas atuais
     combat.wake(1.0); // despertar do andar atual ao (re)entrar no jogo
-    showStory(ECHOES[floorIndex] ?? "", floorIndex === 0 ? 5200 : 4200, floorIndex === 0);
+    gameHud.say("eco", ECHOES[floorIndex] ?? "", floorIndex === 0 ? 5200 : 4200);
   }
   function pauseGame(): void {
     if (pausedOpen) return;
@@ -990,7 +967,6 @@ async function main(): Promise<void> {
     codex,
     hasAutosave: carregado !== null,
     playtimeSec: () => loadedPlaytime + Math.round((performance.now() - startedAt) / 1000),
-    playerPos: () => ({ x: hero.position.x, z: hero.position.z }),
     character: () => character,
     continueGame: () => startGame(),
     newGame: () => ui.push(new CharacterCreateScreen(ctx)),
@@ -1043,6 +1019,7 @@ async function main(): Promise<void> {
       input.clearPressed();
     },
     quitToTitle: () => quitToTitle(),
+    objective: () => descentObjective(),
     saveNow: () => doAutosave(),
     saveToSlot: (slot) => platform.save.save(slot, snapshot()),
   };
@@ -1101,20 +1078,9 @@ async function main(): Promise<void> {
   ui.replaceAll(new MainMenuScreen(ctx));
   startTitleAmbience(); // ambiente de brasa da tela-título (entra após o 1o gesto)
 
-  // Texto de objetivo ao vivo, guiado pela descida (derrotar -> alcançar o braseiro -> descer).
-  let winShown = false;
-  const descentObjective = (): string => {
-    if (descentDone) return "A Brasa foi reavivada. O frio recua.";
-    const n = combat.enemiesAlive;
-    const andar = `Andar ${floorIndex + 1}/${DESCENT.length}`;
-    const last = floorIndex >= DESCENT.length - 1;
-    if (n > 0) return `${andar}: derrote os mortos despertos (${n})`;
-    if (fragmentTaken) return last ? `${andar}: desça ao fosso e reacenda a Brasa` : `${andar}: desça pelo alçapão`;
-    return last ? `${andar}: recupere a última estilha de Brasa` : `${andar}: recupere a estilha de Brasa (${fragments})`;
-  };
-
   let acc = 0;
   let hudAcc = 0;
+  let hudAccGame = 0;
   engine.runRenderLoop(() => {
     scene.render();
     perf.update(); // gate de performance: draw calls/fps por frame + log por sala
@@ -1122,6 +1088,10 @@ async function main(): Promise<void> {
     tweens.update(dt / 1000); // ESTILO (Bloco 2): avança o juice com o dt real
     acc += dt;
     hudAcc += dt;
+    hudAccGame += dt;
+    // Qualquer tela de UI aberta (pilha do UiManager ou overlay anexado ao body: derrota,
+    // braseiro) esconde o texto de história, avisos e contadores do jogo (ver theme.css).
+    document.documentElement.classList.toggle("ui-open", ui.hasScreens || document.body.querySelector(":scope > .menu-backdrop") !== null);
     combatHud.setVisible(gameActive);
     promptEl.style.opacity = gameActive && roomCleared && !descending && !descentDone ? "1" : "0";
     fagulhaEl.style.display = gameActive && !descending ? "" : "none";
@@ -1145,11 +1115,10 @@ async function main(): Promise<void> {
     // Inscrição por proximidade: ao chegar perto do nicho, a pedra "se lê".
     if (gameActive && !descending && currentRoom &&
       Math.hypot(hero.position.x - currentRoom.inscriptionPos.x, hero.position.z - currentRoom.inscriptionPos.z) <= 3.0) {
-      inscriptionEl.textContent = INSCRIPTIONS[floorIndex] ?? "";
-      inscriptionEl.style.opacity = "1";
+      gameHud.setInscription(INSCRIPTIONS[floorIndex] ?? "");
       markCodex(markRead(floorIndex + 1)); // a pedra se lê ao chegar perto: o decalque cai na Crônica
     } else {
-      inscriptionEl.style.opacity = "0";
+      gameHud.setInscription(null);
     }
     // Retículo de lock-on: projeta o alvo travado para a tela.
     const lockPos = gameActive && !descending ? combat.getLockedPos() : null;
@@ -1202,7 +1171,12 @@ async function main(): Promise<void> {
       fpsEl.textContent = `${engine.getFps().toFixed(0)} fps`;
       acc = 0;
     }
-    if (gameActive && hudAcc > 90) {
+    if (hudAcc > 90) {
+      hudAcc = 0;
+      gameHud.update({ floor: floorIndex, total: DESCENT.length, objective: descentObjective() });
+    }
+    if (gameActive && hudAccGame > 90) {
+      hudAccGame = 0;
       checkObjectives();
       // Câmara limpa: libera a CANALIZAÇÃO do acender (a passagem só abre ao acender a Brasa).
       if (currentRoom && !roomCleared && combat.enemiesAlive === 0) {
@@ -1213,7 +1187,7 @@ async function main(): Promise<void> {
 
         // Confronto encenado: ao cair, o Guardião (a Primeira) sussurra a verdade (canon §0).
         if (DESCENT[floorIndex]?.boss) {
-          showStory("Vai. Acende a Brasa... e não a deixes sozinha, como eu fiquei.", 6500, false);
+          gameHud.say("voz", "Vai. Acende a Brasa... e não a deixes sozinha, como eu fiquei.", 6500);
           markCodex(MARK_BOSS_DOWN); // o Guardião sussurrou a verdade: a Primeira entra na Crônica
         }
       }
@@ -1223,7 +1197,7 @@ async function main(): Promise<void> {
         setMusicState("quente"); // crossfade para o tema morno (reavivar)
         playStinger("reavivar"); // a Brasa volta a arder (arpejo ascendente)
         currentRoom?.setBrazierLit(1); // a luz vira plena
-        showStory("A Brasa voltou a arder. O frio recua.", 7000, true);
+        gameHud.scene(T.brasaVoltou, 3600);
         const elapsed = (performance.now() - runStartedAt) / 1000; // tempo da descida (leaderboard)
         // Após o texto de vitória, abre o painel com o tempo + o ranking local.
         window.setTimeout(() => {
@@ -1232,15 +1206,6 @@ async function main(): Promise<void> {
           showVictory(elapsed);
         }, 3200);
       }
-      gameHud.update({
-        name: platform.profile.current().name,
-        points: platform.score.total,
-        objective: descentObjective(),
-        x: hero.position.x,
-        z: hero.position.z,
-        yaw: playerYaw(),
-      });
-      hudAcc = 0;
     }
   });
 

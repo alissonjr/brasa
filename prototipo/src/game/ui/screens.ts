@@ -13,8 +13,7 @@ import { ModelStage } from "./modelStage";
 import { TitleScene } from "./titleScene";
 import { formatTime, readLeaderboard, submitTime } from "../content/leaderboard";
 import type { UiContext } from "./uiContext";
-import { LANDMARKS, WORLD_HALF, type LandmarkKind } from "../content/map";
-import { CAMPAIGN, chapterName, currentObjective, findChapter, progressPercent } from "../content/campaign";
+import { chapterName, progressPercent } from "../content/campaign";
 import { ACHIEVEMENTS } from "../content/achievements";
 import {
   CODEX_DESCENT,
@@ -82,8 +81,6 @@ function backdrop(panelChildren: Array<Node | string>, panelClass = "", backdrop
  */
 const ICONS = {
   play: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M7 5l12 7-12 7z"/></svg>',
-  map: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2z"/><path d="M9 4v14M15 6v14"/></svg>',
-  book: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5 4h11a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H5z"/><path d="M9 8h6M9 12h5"/></svg>',
   scroll: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M7 4h9a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6a2 2 0 0 0-2-2h3"/><path d="M9 9h6M9 13h6"/></svg>',
   person: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/></svg>',
   layers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 3l8 4-8 4-8-4 8-4z"/><path d="M4 12l8 4 8-4"/><path d="M4 16.5l8 4 8-4"/></svg>',
@@ -381,7 +378,7 @@ export class SavesScreen implements Screen {
         "div",
         { class: "slot-info" },
         el("strong", { text: slotLabel(s.slot) }),
-        el("span", { text: `${s.summary || T.capitulo} · ${T.pontos}: ${s.points} · ${quando}` })
+        el("span", { text: `${s.summary || T.capitulo} · ${quando}` })
       );
       // Ações por slot como botões só-ícone (compactos; rótulo vai em title/aria-label).
       const acts: Array<Node> = [
@@ -556,12 +553,11 @@ export class PauseScreen implements Screen {
   readonly element: HTMLElement;
   constructor(ctx: UiContext) {
     // Pausa enxuta (spec-ui-hud-ux 5.2 + "less is more" soulslike): só Retomar, Crônica,
-    // Opções e Sair, com a descida como contexto no topo. Mapa e Perfil seguem no HUD;
-    // Salvar/Carregar fica na tela-título (o jogo autossalva no braseiro). Diário sai
-    // (o telão de progresso é a própria descida, 2.3), sem quest log.
+    // Opções e Sair, com o objetivo da descida no topo (o MESMO texto do HUD, `ctx.objective()`).
+    // Perfil e Salvar/Carregar ficam na tela-título (o jogo autossalva no braseiro).
     this.element = backdrop([
       el("h2", { class: "menu-title", text: T.pausado }),
-      el("p", { class: "menu-subtitle", text: currentObjective(ctx.progression.state()) }),
+      el("p", { class: "menu-subtitle", text: ctx.objective() }),
       btn(T.retomar, () => ctx.resume(), { variant: "primary", glyph: ICONS.play }),
       btn(T.cronica, () => ctx.ui.push(new CodexScreen(ctx)), { glyph: ICONS.scroll }),
       btn(T.opcoes, () => ctx.ui.push(new OptionsScreen(ctx)), { glyph: ICONS.gear }),
@@ -618,8 +614,7 @@ export class VictoryScreen implements Screen {
         el(
           "div",
           { class: "profile-stats" },
-          statRow(T.tempoDaDescida, formatTime(runSeconds)),
-          statRow(T.pontos, String(ctx.score.total))
+          statRow(T.tempoDaDescida, formatTime(runSeconds))
         ),
         el("div", { class: "opt-section", text: T.melhoresTempos }),
         board,
@@ -698,7 +693,6 @@ export class ProfileScreen implements Screen {
         { class: "profile-stats" },
         statRow(T.dificuldade, difficultyName(ch.difficulty)),
         statRow(T.dom, domName(ch.dom)),
-        statRow(T.pontos, String(ctx.score.total)),
         statRow(T.progresso, `${progressPercent(ctx.progression.state())}%`),
         statRow(T.conquistas, `${ctx.achievements.count()}/${ACHIEVEMENTS.length}`),
         statRow(T.tempoDeJogo, fmtTime(ctx.playtimeSec())),
@@ -745,145 +739,6 @@ export class AchievementsScreen implements Screen {
       list,
       btn(T.voltar, onBack),
     ]);
-  }
-}
-
-// --- Mapa da Descida (corte do poço-cripta) ---
-
-/** Cor de cada marco, como token do design system (o canvas resolve o valor ao desenhar). */
-const MAP_TOKEN: Record<LandmarkKind, string> = {
-  entrada: "--text-lo",
-  camara: "--text-mid",
-  brasa: "--ember-400",
-};
-
-/** Lê um token do design system (canvas não entende var()). */
-function token(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-}
-
-function mapMarker(c: CanvasRenderingContext2D, x: number, y: number, kind: LandmarkKind): void {
-  c.fillStyle = token(MAP_TOKEN[kind]);
-  c.strokeStyle = token("--ink-950");
-  c.lineWidth = 1.5;
-  if (kind === "camara") {
-    c.fillRect(x - 7, y - 7, 14, 14);
-    c.strokeRect(x - 7, y - 7, 14, 14);
-  } else if (kind === "entrada") {
-    c.beginPath();
-    c.arc(x, y, 7, 0, Math.PI * 2);
-    c.fill();
-    c.stroke();
-  } else {
-    // A Brasa: círculo com halo quente.
-    const halo = c.createRadialGradient(x, y, 1, x, y, 16);
-    halo.addColorStop(0, "rgba(255, 138, 44, 0.9)");
-    halo.addColorStop(1, "rgba(255, 138, 44, 0)");
-    c.fillStyle = halo;
-    c.beginPath();
-    c.arc(x, y, 16, 0, Math.PI * 2);
-    c.fill();
-    c.fillStyle = token(MAP_TOKEN.brasa);
-    c.beginPath();
-    c.arc(x, y, 6, 0, Math.PI * 2);
-    c.fill();
-    c.stroke();
-  }
-}
-
-function legendItem(colorVar: string, label: string): HTMLElement {
-  return el(
-    "span",
-    {},
-    el("span", { class: "legend-dot", style: `background:var(${colorVar})` }),
-    el("span", { text: label })
-  );
-}
-
-export class WorldMapScreen implements Screen {
-  readonly element: HTMLElement;
-  private readonly canvas: HTMLCanvasElement;
-  private readonly ctx: UiContext;
-
-  constructor(ctx: UiContext, onBack: () => void = () => ctx.ui.back()) {
-    this.ctx = ctx;
-    this.canvas = el("canvas", { class: "map-canvas", width: "680", height: "360" }) as HTMLCanvasElement;
-    this.element = backdrop(
-      [
-        el("h2", { class: "menu-title", text: T.mapaTitulo }),
-        el("p", { class: "menu-subtitle", text: currentObjective(ctx.progression.state()) }),
-        this.canvas,
-        el(
-          "div",
-          { class: "map-legend" },
-          legendItem(MAP_TOKEN.entrada, "Boca do poço"),
-          legendItem(MAP_TOKEN.camara, "Câmara"),
-          legendItem(MAP_TOKEN.brasa, "A Brasa"),
-          legendItem("--gold-200", T.voceEstaAqui)
-        ),
-        btn(T.fechar, onBack),
-      ],
-      "map-panel"
-    );
-  }
-
-  onShow(): void {
-    this.draw();
-  }
-
-  private draw(): void {
-    const c = this.canvas.getContext("2d");
-    if (!c) return;
-    const W = this.canvas.width;
-    const H = this.canvas.height;
-    const m = 40;
-    // Corte vertical do poço: profundidade = eixo Z do mundo (entrada no topo, Brasa no fundo).
-    const toY = (z: number) => m + ((z + WORLD_HALF) / (2 * WORLD_HALF)) * (H - 2 * m);
-    const shaftX = W / 2;
-
-    // Fundo do poço (do quase-preto de cima ao preto do fundo).
-    const g = c.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, token("--ink-800"));
-    g.addColorStop(1, token("--ink-950"));
-    c.fillStyle = g;
-    c.fillRect(0, 0, W, H);
-
-    // O eixo do poço (parede de pedra descendo).
-    c.strokeStyle = token("--ink-600");
-    c.lineWidth = 26;
-    c.lineCap = "round";
-    c.beginPath();
-    c.moveTo(shaftX, toY(-WORLD_HALF + 4));
-    c.lineTo(shaftX, toY(WORLD_HALF - 4));
-    c.stroke();
-
-    // Marcos da descida + rótulos.
-    c.textAlign = "left";
-    c.textBaseline = "middle";
-    for (const lm of LANDMARKS) {
-      const py = toY(lm.z);
-      mapMarker(c, shaftX, py, lm.kind);
-      c.fillStyle = token("--text-hi");
-      c.font = "17px 'EB Garamond', serif";
-      c.fillText(lm.name, shaftX + 24, py);
-    }
-
-    // A Acendedora ("Você está aqui"), pela profundidade atual.
-    const pp = this.ctx.playerPos();
-    const py = toY(pp.z);
-    c.fillStyle = token("--gold-200");
-    c.beginPath();
-    c.arc(shaftX - 22, py, 6, 0, Math.PI * 2);
-    c.fill();
-    c.strokeStyle = token("--ink-950");
-    c.lineWidth = 1.5;
-    c.stroke();
-
-    // Indicador de profundidade.
-    c.fillStyle = token("--text-mid");
-    c.font = "bold 14px Cinzel, serif";
-    c.textAlign = "center";
-    c.fillText("FUNDO", shaftX, H - m / 2);
   }
 }
 
@@ -1259,64 +1114,6 @@ class CodexEntryScreen implements Screen {
         ),
         el("div", { class: "codex-folheto__scroll" }, figure, text)
       )
-    );
-  }
-}
-
-// --- Diário (registro de objetivos da campanha) ---
-
-export class QuestLogScreen implements Screen {
-  readonly element: HTMLElement;
-
-  constructor(ctx: UiContext, onBack: () => void = () => ctx.ui.back()) {
-    const state = ctx.progression.state();
-    const done = new Set(state.objectivesDone);
-    const body = el("div", { class: "quest-body" });
-
-    // Mostra o capítulo atual com destaque e os demais como contexto.
-    const activeChapter = findChapter(state);
-    for (const chapter of CAMPAIGN) {
-      const isActive = chapter.id === activeChapter.id;
-      const total = chapter.objectives.length;
-      const doneN = chapter.objectives.filter((o) => done.has(o.id)).length;
-      body.append(
-        el(
-          "div",
-          { class: "quest-chapter" + (isActive ? " active" : "") },
-          el("span", { class: "quest-ch-name", text: chapter.name }),
-          el("span", { class: "quest-ch-count", text: `${doneN}/${total}` }),
-        ),
-      );
-      let currentMarked = false;
-      for (const obj of chapter.objectives) {
-        const isDone = done.has(obj.id);
-        let cls = "ds-row quest-row";
-        if (isDone) cls += " done";
-        else if (isActive && !currentMarked) {
-          cls += " current";
-          currentMarked = true;
-        }
-        body.append(
-          el(
-            "div",
-            { class: cls },
-            el("span", { class: "quest-mark", text: isDone ? "✓" : "" }),
-            el("span", { class: "quest-text", text: obj.text }),
-            el("span", { class: "quest-pts", text: `+${obj.points}` }),
-          ),
-        );
-      }
-    }
-
-    const objective = currentObjective(state);
-    this.element = backdrop(
-      [
-        el("h2", { class: "menu-title", text: T.diarioTitulo }),
-        el("p", { class: "menu-subtitle", text: objective }),
-        body,
-        btn(T.voltar, onBack),
-      ],
-      "quest-panel",
     );
   }
 }
