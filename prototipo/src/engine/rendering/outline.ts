@@ -17,8 +17,15 @@ import type { AbstractMesh, Node } from "@babylonjs/core";
 export interface OutlineOptions {
   /** Cor da linha (default near-black levemente frio, casa com o breu). */
   color?: Color3;
-  /** Largura em unidades de mundo (expansão ao longo da normal). Default 0.03. */
+  /** Largura LOCAL (expansão ao longo da normal, antes da escala do modelo). Default 0.03. */
   width?: number;
+  /**
+   * Largura em METROS de mundo. O OutlineRenderer expande no espaço local da malha, então a
+   * linha sai multiplicada pela escala do modelo (KayKit ~1, Quaternius muito diferente). Com
+   * `worldWidth`, a largura local é dividida pela escala absoluta da malha: a tinta fica do
+   * mesmo tamanho em todo ator. Precisa ser chamada DEPOIS de escalar/posicionar o modelo.
+   */
+  worldWidth?: number;
 }
 
 const DEFAULT_COLOR = Color3.FromHexString("#0b0e14"); // quase preto, leve azul (tom do breu)
@@ -34,7 +41,14 @@ export function addOutline(mesh: AbstractMesh, opts: OutlineOptions = {}): void 
   if (mesh.skeleton) mesh.skeleton.useTextureToStoreBoneMatrices = false;
   mesh.renderOutline = true;
   mesh.outlineColor = (opts.color ?? DEFAULT_COLOR).clone();
-  mesh.outlineWidth = opts.width ?? 0.03;
+  if (opts.worldWidth !== undefined) {
+    mesh.computeWorldMatrix(true);
+    const sc = mesh.absoluteScaling;
+    const k = Math.max(1e-4, (Math.abs(sc.x) + Math.abs(sc.y) + Math.abs(sc.z)) / 3);
+    mesh.outlineWidth = opts.worldWidth / k;
+  } else {
+    mesh.outlineWidth = opts.width ?? 0.03;
+  }
 }
 
 /** Liga o contorno em toda a hierarquia (todas as malhas filhas com geometria). */

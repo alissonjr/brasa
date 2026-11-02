@@ -35,3 +35,22 @@ export function createHdrEnvironment(scene: Scene, url: string, opts: HdrEnvOpti
   if (!skybox) throw new Error("Falha ao criar o skybox do HDRI");
   return { skybox };
 }
+
+/**
+ * Descarta os Skeleton do Babylon que nenhuma malha da cena usa mais. Dispose de um nó/malha
+ * NÃO libera o esqueleto (nem a textura de ossos dele) que instantiateModelsToScene criou; sem
+ * isto cada morto despertado deixava ~1 esqueleto + 1 textura de ossos por parte para sempre
+ * (6 para 154 esqueletos ao descer os 7 andares). Chamar depois de descartar os atores.
+ * Devolve quantos descartou.
+ */
+export function disposeOrphanSkeletons(scene: Scene): number {
+  const live = new Set<unknown>();
+  for (const m of scene.meshes) if (m.skeleton) live.add(m.skeleton);
+  let n = 0;
+  for (const sk of [...scene.skeletons]) {
+    if (live.has(sk)) continue;
+    sk.dispose();
+    n++;
+  }
+  return n;
+}

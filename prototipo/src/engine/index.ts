@@ -8,10 +8,14 @@
 export { createEngine } from "./rendering/createEngine";
 // Pipeline estilizado (toon/tinta + AO + finalização + edge-detect). Ver
 // docs/brasa/spec-estilo-visual-render.md. Genérico: o jogo decide cores/intensidades.
-export { toonifyHierarchy } from "./rendering/toon";
+export { toonifyHierarchy, toonMaterialFor, flatColorOf, isCachedToon } from "./rendering/toon";
 export type { ToonOptions } from "./rendering/toon";
 export { addOutline, outlineHierarchy, clearOutline } from "./rendering/outline";
 export type { OutlineOptions } from "./rendering/outline";
+export { getContactShadows, ContactShadows } from "./rendering/contactShadows";
+export type { ContactShadowHandle } from "./rendering/contactShadows";
+export { mergeSkinnedParts } from "./rendering/mergeSkinned";
+export type { MergeSkinnedOptions } from "./rendering/mergeSkinned";
 export { enableSsao } from "./rendering/ssao";
 export type { SsaoOptions, SsaoHandle } from "./rendering/ssao";
 export { addFinishingPass } from "./rendering/finishingPass";
@@ -40,6 +44,6 @@ export { createGradientSky } from "./world/sky";
 export type { SkyColors } from "./world/sky";
 export { createSun, createAmbient, createShadows } from "./world/lighting";
 export type { SunOptions, AmbientOptions, ShadowOptions } from "./world/lighting";
-export { loadContainer, createHdrEnvironment } from "./assets/assetService";
+export { loadContainer, createHdrEnvironment, disposeOrphanSkeletons } from "./assets/assetService";
 export type { HdrEnvOptions } from "./assets/assetService";
 export { assetUrl } from "./assets/assetUrl";
