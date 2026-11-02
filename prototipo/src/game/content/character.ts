@@ -58,7 +58,7 @@ export const DIFFICULTIES: DifficultyOption[] = [
 ];
 
 export const DEFAULT_CHARACTER: CharacterSave = {
-  name: "Acendedora",
+  name: "Cinza", // nome próprio da heroína (canon, narrativa-e-historia §0); "Acendedora" é o título
   manto: "brasa",
   dom: "luz",
   difficulty: "brasa",

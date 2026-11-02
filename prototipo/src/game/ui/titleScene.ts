@@ -22,6 +22,7 @@ import {
 } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF";
 import { assetUrl, el, loadContainer } from "@engine";
+import { loadAnimLibrary, retargetClips } from "../actors/quaterniusRig";
 
 /**
  * CAMADA JOGO (Brasa). Tela-título CINEMATOGRÁFICA DIEGÉTICA, mirando a sensação de uma
@@ -323,6 +324,14 @@ export class TitleScene {
     if (this.disposed) return;
     const top = meshes.find((m) => m.name === "__root__") ?? meshes[0];
     if (!top) return;
+    // Corpo Quaternius (heroina.glb, a mesma figura do jogo): o idle vem da biblioteca
+    // compartilhada (anim.glb) retargetado por osso; sem clipe a figura ficaria de braços abertos.
+    if (top.getChildMeshes(false).some((m) => !!m.skeleton)) {
+      void loadAnimLibrary(scene).then((lib) => {
+        if (this.disposed) return;
+        retargetClips(lib, top as unknown as TransformNode, "titulo", { idle: "Idle_Loop" }).idle?.start(true);
+      });
+    }
     const { min, max } = top.getHierarchyBoundingVectors(true);
     const h = Math.max(0.001, max.y - min.y);
     const scale = FIT_HEIGHT / h;
