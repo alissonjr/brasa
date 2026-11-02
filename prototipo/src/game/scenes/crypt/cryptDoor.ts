@@ -11,12 +11,13 @@ import type { DoorSpot } from "./cryptLayouts";
  * Cor tambem nunca e o unico canal: o icone, o nome e a forma (arco x anel) distinguem as saidas.
  */
 /** Tom da luz de uma porta. Peça reaproveitável: a fase R1 a usa como brilho da porta de pedra da antessala. */
-export type DoorTone = "estante" | "bancada" | "esquecida";
+export type DoorTone = "estante" | "bancada" | "esquecida" | "ember";
 
 export const DOOR_COLOR: Record<DoorTone, string> = {
   estante: "#f2c46d", // --gold-300
   bancada: "#7fcf8f", // --life-400
   esquecida: "#8fd6e6", // --frost-300
+  ember: "#ff8a2c", // --ember-400 (porta de pedra da antessala)
 };
 
 const VEIL_ALPHA = 0.6;
@@ -27,7 +28,21 @@ export interface SideDoorFx {
   dispose(): void;
 }
 
-export function buildSideDoor(scene: Scene, glow: GlowLayer, parent: TransformNode, spot: DoorSpot, kind: DoorTone): SideDoorFx {
+/** Onde fica o brilho de uma porta: ponto no plano da parede, normal apontando para DENTRO da sala e tamanho do vão. */
+export interface DoorFxSpec {
+  x: number;
+  z: number;
+  nx: number;
+  nz: number;
+  width?: number;
+  height?: number;
+  /** Altura do centro do véu. */
+  y?: number;
+  poolRadius?: number;
+}
+
+/** Véu e poça de luz de uma porta em qualquer parede (a lateral antiga e a porta de pedra da antessala). */
+export function buildDoorFx(scene: Scene, glow: GlowLayer, parent: TransformNode, spec: DoorFxSpec, kind: DoorTone): SideDoorFx {
   const col = DOOR_COLOR[kind];
   const veilMat = new StandardMaterial("porta_veu_mat", scene);
   veilMat.diffuseColor = Color3.Black();
@@ -36,17 +51,17 @@ export function buildSideDoor(scene: Scene, glow: GlowLayer, parent: TransformNo
   veilMat.disableLighting = true;
   veilMat.backFaceCulling = false;
   veilMat.alpha = 0;
-  const veil: Mesh = MeshBuilder.CreatePlane("porta_veu", { width: 2.6, height: 1.0 }, scene);
+  const veil: Mesh = MeshBuilder.CreatePlane("porta_veu", { width: spec.width ?? 2.6, height: spec.height ?? 1.0 }, scene);
   veil.material = veilMat;
-  veil.rotation.y = Math.PI / 2; // plano normal a X (a porta fica na parede leste)
-  veil.position.set(spot.x - 0.25, 0.62, spot.z);
+  veil.rotation.y = Math.atan2(spec.nx, spec.nz);
+  veil.position.set(spec.x + spec.nx * 0.25, spec.y ?? 0.62, spec.z + spec.nz * 0.25);
   veil.isPickable = false;
   veil.parent = parent;
   veil.setEnabled(false);
   glow.addIncludedOnlyMesh(veil);
 
-  const pool = createLightPool(scene, { radius: 3.0, color: col, alpha: 0.5, y: 0.19 });
-  pool.position.set(spot.x - 2.0, 0.19, spot.z);
+  const pool = createLightPool(scene, { radius: spec.poolRadius ?? 3.0, color: col, alpha: 0.5, y: 0.19 });
+  pool.position.set(spec.x + spec.nx * 2.0, 0.19, spec.z + spec.nz * 2.0);
   pool.parent = parent;
   pool.setEnabled(false);
 
@@ -66,4 +81,8 @@ export function buildSideDoor(scene: Scene, glow: GlowLayer, parent: TransformNo
       glow.removeIncludedOnlyMesh(veil);
     },
   };
+}
+
+export function buildSideDoor(scene: Scene, glow: GlowLayer, parent: TransformNode, spot: DoorSpot, kind: DoorTone): SideDoorFx {
+  return buildDoorFx(scene, glow, parent, { x: spot.x, z: spot.z, nx: -1, nz: 0 }, kind); // parede LESTE: o lado de dentro e -x
 }

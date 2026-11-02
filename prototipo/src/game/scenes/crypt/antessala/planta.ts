@@ -60,7 +60,7 @@ export function ancoras(index: number): Ancoras {
     spawn: { x: boca.x, z: boca.z + boca.len / 2 + 1.1 },
     braseiro: { x: 0, z: -Math.round(halfZ * 25) / 100 },
     boca,
-    armario: { x: -halfX + 1.05, z: 0.4 },
+    armario: { x: -halfX + 1.25, z: 0.4 },
     oficio,
     porta: { x: 0, z: halfZ },
     gatilho: { x: 0, z: halfZ - 1.9, radius: 1.7 },
