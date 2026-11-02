@@ -20,6 +20,10 @@ export interface AttackTuning extends AttackTiming {
   poise?: number;
   /** Raio de CLEAVE (m): >0 faz o golpe respingar nos inimigos próximos do impacto (horda). */
   cleave?: number;
+  /** Fração da RECUPERAÇÃO a partir da qual esquiva/bloqueio cancelam o golpe (ausente = sem cancelamento). */
+  cancelAt?: number;
+  /** Avanço (m) do herói para a frente durante antecipação+ativo (lunge; sem alvo ele vai até aqui, com alvo para antes). */
+  lunge?: number;
 }
 
 export const HERO = {
@@ -28,11 +32,19 @@ export const HERO = {
   staminaRegenPerSec: 40,
   staminaRegenDelaySec: 1.0,
 
+  // Janela de buffer de entrada (s): um toque dado até este tempo ANTES de a ação ser possível
+  // (fim do golpe ou ponto de cancelamento) dispara assim que ela abre. Conta em tempo de jogo
+  // (não passa durante o hit stop), então um toque durante o congelamento não se perde.
+  inputBufferSec: 0.15,
+
   // Ataque leve: snappy (responsivo), comprometido, baixo dano. Combo de até 3 (M2.2).
-  light: { startup: 0.12, active: 0.06, recovery: 0.22, damage: 10, knockback: 2, hitStopFrames: 4, poise: 10 } as AttackTuning,
+  // Feel (2026-11): o instante de contato do CLIPE (lâmina cruzando a frente) cai no começo da
+  // janela ativa (ver heroModel.ts, PLANO). Ciclo 0,38 s (antes 0,40). Dano 10 -> 9 compensa o
+  // ciclo e o hit stop mais curtos (DPS do combo de 3 ~ +/-2% do anterior).
+  light: { startup: 0.1, active: 0.05, recovery: 0.23, damage: 9, knockback: 2, hitStopFrames: 3, poise: 10, cancelAt: 0.3, lunge: 0.35 } as AttackTuning,
   // 3a do combo: empurrão (knockback forte) e mais peso (spec-combate §3 "3a com empurrão").
   // Cleave: a finalizadora respinga nos inimigos próximos (resposta de horda do moveset normal).
-  lightFinisher: { startup: 0.16, active: 0.07, recovery: 0.3, damage: 12, knockback: 6, hitStopFrames: 7, poise: 14, cleave: 2.4 } as AttackTuning,
+  lightFinisher: { startup: 0.14, active: 0.06, recovery: 0.3, damage: 11, knockback: 6, hitStopFrames: 6, poise: 14, cleave: 2.4, cancelAt: 0.4, lunge: 0.5 } as AttackTuning,
   // Janela para encadear o combo: golpear de novo até aqui após o anterior continua a cadeia.
   comboResetSec: 0.45,
 
@@ -43,7 +55,9 @@ export const HERO = {
     recovery: 0.4,
     damage: 26,
     knockback: 6,
-    hitStopFrames: 10,
+    hitStopFrames: 8, // 8 = limiar de "pesado" (quebra guarda) no CombatDirector; antes 10 (167 ms de congelamento)
+    cancelAt: 0.5,
+    lunge: 0.6,
     staminaCost: 35,
     poise: 34, // o pesado quebra a postura: cambaleia tipos médios de um golpe
     cleave: 2.8, // o pesado varre os inimigos próximos do impacto
@@ -51,9 +65,10 @@ export const HERO = {
 
   // Esquiva (M2.2): i-frames no MIOLO; vulnerável no fim (recovery).
   dodge: {
-    durationSec: 0.55, // ~30-36 frames
-    iframeStartSec: 0.1, // i-frames ~10-12 frames no miolo
+    durationSec: 0.46, // ~28 frames (antes 0,55)
+    iframeStartSec: 0.06, // i-frames ~14 frames (0,06-0,30), claros e logo no começo (antes 0,10-0,30)
     iframeEndSec: 0.3,
+    cancelSec: 0.32, // a partir daqui o fim da esquiva cancela em ataque/esquiva (buffer)
     staminaCost: 25,
   },
 
@@ -63,7 +78,7 @@ export const HERO = {
   spark: { charges: 3, regenPerSec: 1 / 6, emberCost: 1 },
   // GOLPE DE FOGO (ember): leque de fogo à frente em ARCO/ÁREA, atinge vários, ignora
   // escudo (queima), custa Fagulha (não stamina). arcCos = cos(meio-ângulo) do cone.
-  ember: { startup: 0.26, active: 0.1, recovery: 0.42, damage: 22, knockback: 5, range: 5.5, arcCos: 0.5, poise: 16 },
+  ember: { startup: 0.2, active: 0.1, recovery: 0.34, damage: 22, knockback: 5, range: 5.5, arcCos: 0.5, poise: 16, cancelAt: 0.5 },
 } as const;
 
 /**

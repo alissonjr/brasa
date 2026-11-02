@@ -18,6 +18,25 @@ import { buildSword } from "../actors/weapons";
  */
 type State = "idle" | "attacking" | "dodging" | "ember";
 
+/** Ações com buffer de entrada (toque guardado por HERO.inputBufferSec). */
+const BUFFERED = ["attack", "heavy", "dodge", "ember"] as const;
+type Buffered = (typeof BUFFERED)[number];
+
+/**
+ * Sincronia do clipe com a mecânica: o ator (Acendedora) passa isto ao HeroModel todo quadro,
+ * que posiciona o clipe pelo estado do golpe (e não por um relógio próprio). `progress` 0..1 na
+ * fase; `sec` = duração da fase. Assim o instante de contato do clipe cai na janela ativa e o
+ * clipe congela junto com o hit stop.
+ */
+export interface ClipSync {
+  kind: "light" | "finisher" | "heavy" | "ember" | "dodge";
+  phase: "startup" | "active" | "recovery" | "dodge";
+  progress: number;
+  sec: number;
+  /** Contador que muda a cada golpe/esquiva novo (reinicia o clipe numa cadeia leve-leve). */
+  seq: number;
+}
+
 // Ângulos do swing (rad), em torno do eixo X do pivô na "mão".
 const REST = 0.5;
 const WINDUP = -1.2;
@@ -49,8 +68,15 @@ export class HeroCombat {
   // Combo de leves.
   private comboStep = 0; // 0,1 = leve; 2 = finalizadora
   private comboQueued = false;
+  private comboLive = false; // o último golpe foi um leve (não a finalizadora): o próximo toque continua o combo
   private isLightChain = false;
   private idleTime = 0;
+  private seq = 0; // novo golpe/esquiva/fogo: reinicia o clipe
+  // Buffer de entrada (s restantes, em tempo de jogo) por ação.
+  private readonly buf: Record<Buffered, number> = { attack: 0, heavy: 0, dodge: 0, ember: 0 };
+  // Se um passo grande (hitch) atravessou a janela ativa inteira, o acerto vale neste quadro.
+  private skippedActive_ = false;
+  private skippedEmber_ = false;
 
   // Stamina.
   private stamina: number = HERO.maxStamina;
@@ -148,7 +174,7 @@ export class HeroCombat {
 
   /** Janela ativa do golpe de fogo: o CombatDirector resolve a área UMA vez. */
   get canEmber(): boolean {
-    return this.state === "ember" && this.attack.isActive && !this.emberConsumed;
+    return this.state === "ember" && (this.attack.isActive || this.skippedEmber_) && !this.emberConsumed;
   }
 
   get emberTuning(): typeof HERO.ember {
@@ -187,7 +213,40 @@ export class HeroCombat {
 
   /** Janela em que o golpe causa dano e ainda não acertou neste swing. */
   get canHit(): boolean {
-    return this.state === "attacking" && this.attack.isActive && !this.hitConsumed;
+    return ((this.state === "attacking" && this.attack.isActive) || this.skippedActive_) && !this.hitConsumed;
+  }
+
+  /** Dados para o ator sincronizar o clipe com a mecânica (null fora de golpe/esquiva/fogo). */
+  get clipSync(): ClipSync | null {
+    if (this.state === "dodging") {
+      const d = HERO.dodge.durationSec;
+      return { kind: "dodge", phase: "dodge", progress: Math.min(1, this.dodgeElapsed / d), sec: d, seq: this.seq };
+    }
+    if (this.state !== "attacking" && this.state !== "ember") return null;
+    const ph = this.attack.current;
+    if (ph === "idle") return null;
+    const t = this.state === "ember" ? HERO.ember : this.activeTuning;
+    const kind = this.state === "ember" ? "ember" : this.activeTuning === HERO.heavy ? "heavy" : this.comboStep >= 2 && this.isLightChain ? "finisher" : "light";
+    return { kind, phase: ph, progress: this.attack.phaseProgress, sec: t[ph], seq: this.seq };
+  }
+
+  /**
+   * Velocidade de avanço (m/s, ao longo do que o herói encara) do lunge do golpe corrente: do
+   * meio da antecipação até o fim da janela ativa. O ator limita pela distância ao alvo.
+   */
+  get lungeSpeed(): number {
+    if (this.state !== "attacking") return 0;
+    const t = this.activeTuning;
+    if (!t.lunge) return 0;
+    const ph = this.attack.current;
+    const early = ph === "startup" && this.attack.phaseProgress >= 0.3;
+    if (!early && ph !== "active") return 0;
+    return t.lunge / (t.startup * 0.7 + t.active);
+  }
+
+  /** Distância total do lunge do golpe corrente (m). */
+  get lungeDistance(): number {
+    return this.state === "attacking" ? (this.activeTuning.lunge ?? 0) : 0;
   }
 
   get strikeTuning(): AttackTuning {
@@ -389,6 +448,7 @@ export class HeroCombat {
     this.guardBreakTimer = GUARD_BREAK_SEC;
     this.blocking = false;
     this.comboStep = 0;
+    this.comboLive = false;
     this.state = "idle";
   }
 
@@ -424,6 +484,9 @@ export class HeroCombat {
   // --- loop ---
 
   update(deltaSeconds: number, input: CombatInputSource): void {
+    this.skippedActive_ = false;
+    this.skippedEmber_ = false;
+    this.pollInput(deltaSeconds, input);
     this.regenStamina(deltaSeconds);
     this.regenSpark(deltaSeconds);
     if (this.buffTimer > 0) this.buffTimer = Math.max(0, this.buffTimer - deltaSeconds);
@@ -432,6 +495,7 @@ export class HeroCombat {
     // não aceita inputs de combate por um instante (pode andar). A guarda fica caída.
     if (this.guardBreakTimer > 0) {
       this.guardBreakTimer = Math.max(0, this.guardBreakTimer - deltaSeconds);
+      for (const a of BUFFERED) this.buf[a] = 0;
       this.blocking = false;
       this.state = "idle";
       this.poseWeapon();
@@ -447,13 +511,13 @@ export class HeroCombat {
 
     switch (this.state) {
       case "dodging":
-        this.updateDodge(deltaSeconds);
+        this.updateDodge(deltaSeconds, input);
         break;
       case "attacking":
         this.updateAttacking(deltaSeconds, input);
         break;
       case "ember":
-        this.updateEmber(deltaSeconds);
+        this.updateEmber(deltaSeconds, input);
         break;
       default:
         this.updateIdle(deltaSeconds, input);
@@ -462,9 +526,101 @@ export class HeroCombat {
     this.poseWeapon();
   }
 
+  /**
+   * Lê os toques do quadro para o buffer de entrada (HERO.inputBufferSec). Roda em TODOS os
+   * estados: um toque dado durante o golpe/esquiva fica guardado e dispara quando a ação abre
+   * (fim do golpe ou ponto de cancelamento), sem latência extra e sem vazar para depois.
+   */
+  private pollInput(dt: number, input: CombatInputSource): void {
+    for (const a of BUFFERED) {
+      if (input.consumePressed(a)) {
+        this.buf[a] = HERO.inputBufferSec;
+        // Qualquer toque de ataque durante um leve enfileira o próximo elo (como antes).
+        if (a === "attack" && this.state === "attacking" && this.isLightChain) this.comboQueued = true;
+      } else if (this.buf[a] > 0) {
+        this.buf[a] = Math.max(0, this.buf[a] - dt);
+      }
+    }
+  }
+
+  private anyBuffered(): boolean {
+    return this.buf.attack > 0 || this.buf.heavy > 0 || this.buf.dodge > 0 || this.buf.ember > 0;
+  }
+
+  /** Dispara a ação guardada de maior prioridade (esquiva > pesado > fogo > leve). Falta de recurso descarta o toque. */
+  private tryBuffered(input: CombatInputSource): boolean {
+    if (this.buf.dodge > 0) {
+      this.buf.dodge = 0;
+      if (this.spend(HERO.dodge.staminaCost)) {
+        this.startDodge(input);
+        return true;
+      }
+    }
+    if (this.buf.heavy > 0) {
+      this.buf.heavy = 0;
+      if (this.spend(HERO.heavy.staminaCost ?? 0)) {
+        this.isLightChain = false;
+        this.comboLive = false;
+        this.beginAttack(HERO.heavy);
+        return true;
+      }
+    }
+    if (this.buf.ember > 0) {
+      this.buf.ember = 0;
+      if (this.spark >= HERO.spark.emberCost) {
+        this.beginEmber();
+        return true;
+      }
+    }
+    if (this.buf.attack > 0) {
+      this.buf.attack = 0;
+      // Toque dentro da janela do combo continua a cadeia (leve -> leve -> finalizadora).
+      if (this.comboLive && this.comboStep < 2 && this.idleTime <= HERO.comboResetSec) this.comboStep += 1;
+      else this.comboStep = 0;
+      this.isLightChain = true;
+      this.beginAttack(this.comboStep >= 2 ? HERO.lightFinisher : HERO.light);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Cancelamento da RECUPERAÇÃO (golpe/fogo): a partir de `cancelAt` da recuperação, esquiva
+   * guardada ou bloqueio segurado interrompem o golpe. O comprometimento (antecipação e ativo)
+   * continua intacto. Retorna true se cancelou.
+   */
+  private tryRecoveryCancel(input: CombatInputSource, cancelAt: number | undefined): boolean {
+    if (cancelAt === undefined || this.attack.current !== "recovery" || this.attack.phaseProgress < cancelAt) return false;
+    if (this.buf.dodge > 0) {
+      this.buf.dodge = 0;
+      if (this.spend(HERO.dodge.staminaCost)) {
+        this.attack.cancel();
+        this.startDodge(input);
+        return true;
+      }
+    }
+    if (input.isHeld("block")) {
+      this.attack.cancel();
+      this.endAction(input);
+      return true;
+    }
+    return false;
+  }
+
+  /** Volta a idle e já processa o que estiver guardado/segurado (sem esperar o próximo quadro). */
+  private endAction(input: CombatInputSource): void {
+    this.state = "idle";
+    this.idleTime = 0;
+    this.isLightChain = false;
+    this.updateIdle(0, input);
+  }
+
   private updateIdle(dt: number, input: CombatInputSource): void {
     this.idleTime += dt;
-    if (this.idleTime > HERO.comboResetSec) this.comboStep = 0;
+    if (this.idleTime > HERO.comboResetSec) {
+      this.comboStep = 0;
+      this.comboLive = false;
+    }
     this.blocking = input.isHeld("block");
     // Tier 3: segurar a guarda DRENA stamina; ao esvaziar, GUARD BREAK (cambaleia).
     if (this.blocking) {
@@ -472,53 +628,38 @@ export class HeroCombat {
       this.regenDelay = HERO.staminaRegenDelaySec;
       if (this.stamina <= 0) this.beginGuardBreak();
     }
-
-    if (input.consumePressed("dodge") && this.spend(HERO.dodge.staminaCost)) {
-      this.startDodge(input);
-      return;
-    }
-    if (input.consumePressed("heavy") && this.spend(HERO.heavy.staminaCost ?? 0)) {
-      this.isLightChain = false;
-      this.beginAttack(HERO.heavy);
-      return;
-    }
-    if (input.consumePressed("ember") && this.spark >= HERO.spark.emberCost) {
-      this.beginEmber();
-      return;
-    }
-    if (input.consumePressed("attack")) {
-      this.comboStep = 0;
-      this.isLightChain = true;
-      this.beginAttack(HERO.light);
-    }
+    this.tryBuffered(input);
   }
 
   private updateAttacking(dt: number, input: CombatInputSource): void {
-    // Buffer de combo: golpear durante o ataque encadeia a próxima leve.
-    if (this.isLightChain && input.consumePressed("attack")) this.comboQueued = true;
-
     const wasBusy = this.attack.isBusy;
+    const before = this.attack.current;
     this.attack.advance(dt);
+    // Um passo grande pode atravessar a janela ativa inteira (hitch): o acerto vale neste quadro.
+    if (before === "startup" && this.attack.current !== "startup" && this.attack.current !== "active") this.skippedActive_ = true;
 
     if (wasBusy && !this.attack.isBusy) {
-      // Golpe terminou: encadeia ou volta a idle.
+      // Golpe terminou: encadeia ou volta a idle (já consumindo o buffer neste quadro).
       if (this.isLightChain && this.comboQueued && this.comboStep < 2) {
         this.comboStep += 1;
         this.beginAttack(this.comboStep >= 2 ? HERO.lightFinisher : HERO.light);
       } else {
-        this.state = "idle";
-        this.idleTime = 0;
-        this.isLightChain = false;
-        this.comboStep = 0;
+        // Terminou um leve (não a finalizadora): o combo continua vivo por comboResetSec.
+        this.comboLive = this.isLightChain && this.comboStep < 2;
+        this.endAction(input);
       }
+      return;
     }
+    this.tryRecoveryCancel(input, this.activeTuning.cancelAt);
   }
 
-  private updateDodge(dt: number): void {
+  private updateDodge(dt: number, input: CombatInputSource): void {
     this.dodgeElapsed += dt;
     if (this.dodgeElapsed >= HERO.dodge.durationSec) {
-      this.state = "idle";
-      this.idleTime = 0;
+      this.endAction(input);
+    } else if (this.dodgeElapsed >= HERO.dodge.cancelSec && this.anyBuffered()) {
+      // Fim da esquiva já passou dos i-frames: ataque/esquiva guardados cancelam o resto do rolamento.
+      this.endAction(input);
     }
   }
 
@@ -527,17 +668,22 @@ export class HeroCombat {
     this.emberConsumed = false;
     this.blocking = false;
     this.comboStep = 0;
+    this.comboLive = false;
+    this.seq++;
     this.state = "ember";
     this.attack.start(HERO.ember);
   }
 
-  private updateEmber(dt: number): void {
+  private updateEmber(dt: number, input: CombatInputSource): void {
     const wasBusy = this.attack.isBusy;
+    const before = this.attack.current;
     this.attack.advance(dt);
+    if (before === "startup" && this.attack.current !== "startup" && this.attack.current !== "active") this.skippedEmber_ = true;
     if (wasBusy && !this.attack.isBusy) {
-      this.state = "idle";
-      this.idleTime = 0;
+      this.endAction(input);
+      return;
     }
+    this.tryRecoveryCancel(input, HERO.ember.cancelAt);
   }
 
   private regenSpark(dt: number): void {
@@ -551,6 +697,7 @@ export class HeroCombat {
     this.hitConsumed = false;
     this.comboQueued = false;
     this.blocking = false;
+    this.seq++;
     this.state = "attacking";
     this.attack.start(tuning);
   }
@@ -566,6 +713,8 @@ export class HeroCombat {
     this.perfectConsumed_ = false; // novo rolamento: rearma a esquiva perfeita
     this.blocking = false;
     this.comboStep = 0;
+    this.comboLive = false;
+    this.seq++;
     this.state = "dodging";
   }
 
