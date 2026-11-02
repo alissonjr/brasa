@@ -1,7 +1,8 @@
 import { TransformNode, Vector3 } from "@babylonjs/core";
 import type { Scene } from "@babylonjs/core";
 import { AttackState, Health, type CombatInputSource, type InputSource } from "@engine";
-import { HERO, type AttackTuning } from "./tuning";
+import { DRINK, HERO, type AttackTuning, type PotionKind } from "./tuning";
+import type { EmberTuning, WeaponDef } from "./armas/tipos";
 import { buildSword } from "../actors/weapons";
 
 /**
@@ -16,7 +17,7 @@ import { buildSword } from "../actors/weapons";
  * Detecção de acerto fica no CombatDirector (lê canHit/weaponHitPoint/strikeTuning).
  * Visual GRAYBOX: "arma" caixa que faz o swing por rotação (sem rig/animação final).
  */
-type State = "idle" | "attacking" | "dodging" | "ember";
+type State = "idle" | "attacking" | "dodging" | "ember" | "drinking";
 
 /** Ações com buffer de entrada (toque guardado por HERO.inputBufferSec). */
 const BUFFERED = ["attack", "heavy", "dodge", "ember"] as const;
@@ -35,6 +36,30 @@ export interface ClipSync {
   sec: number;
   /** Contador que muda a cada golpe/esquiva novo (reinicia o clipe numa cadeia leve-leve). */
   seq: number;
+}
+
+/** Estado do gole para o ator/modelo (pose do braço, frasco) e para o HUD. */
+export interface DrinkInfo {
+  kind: PotionKind;
+  /** Segundos desde o começo do gesto (tempo de combate: congela no hit stop). */
+  elapsed: number;
+  sec: number;
+  commitSec: number;
+  /** A carga já foi gasta e o efeito aplicado (a partir de commitSec). */
+  committed: boolean;
+}
+
+/** Por que o gole terminou antes do fim (o que não gastou a carga é "dodge", "reset", "death" e "gate"). */
+export type DrinkCancel = "dodge" | "reset" | "death" | "gate";
+
+/**
+ * Ganchos do gole, ligados pelo app (o inventário e os efeitos moram lá). `commit` roda UMA vez em
+ * DRINK.commitSec e devolve false se o efeito não pôde ser aplicado (a carga NÃO é gasta e o gole acaba).
+ */
+export interface DrinkHandlers {
+  start?: (kind: PotionKind) => void;
+  commit: (kind: PotionKind) => boolean;
+  cancel?: (kind: PotionKind, reason: DrinkCancel) => void;
 }
 
 // Ângulos do swing (rad), em torno do eixo X do pivô na "mão".
@@ -59,6 +84,8 @@ export class HeroCombat {
   private readonly hitNode: TransformNode; // ponto de acerto à frente, na altura do torso
 
   private state: State = "idle";
+  // Arma capturada na mão (null = espada de bronze): traz os golpes completos (spec-armas-capturadas, F0).
+  private weapon: WeaponDef | null = null;
   private activeTuning: AttackTuning = HERO.light;
   private hitConsumed = false;
   private blocking = false;
@@ -77,6 +104,14 @@ export class HeroCombat {
   // Se um passo grande (hitch) atravessou a janela ativa inteira, o acerto vale neste quadro.
   private skippedActive_ = false;
   private skippedEmber_ = false;
+
+  // Gole (poção): pedido guardado no buffer, estado do gesto e ganchos do app.
+  private bufDrink = 0;
+  private bufDrinkKind: PotionKind = "vida";
+  private drinkKind: PotionKind = "vida";
+  private drinkElapsed = 0;
+  private drinkCommitted = false;
+  private drinkHandlers: DrinkHandlers | null = null;
 
   // Stamina.
   private stamina: number = HERO.maxStamina;
@@ -177,8 +212,27 @@ export class HeroCombat {
     return this.state === "ember" && (this.attack.isActive || this.skippedEmber_) && !this.emberConsumed;
   }
 
-  get emberTuning(): typeof HERO.ember {
-    return HERO.ember;
+  get emberTuning(): EmberTuning {
+    return this.weapon?.ember ?? HERO.ember;
+  }
+
+  // --- Arma capturada: os golpes efetivos (leve, finalizadora, pesado) vêm da arma na mão, senão da espada de bronze. ---
+  private get tLight(): AttackTuning {
+    return this.weapon?.light ?? HERO.light;
+  }
+  private get tFinisher(): AttackTuning {
+    return this.weapon?.finisher ?? HERO.lightFinisher;
+  }
+  private get tHeavy(): AttackTuning {
+    return this.weapon?.heavy ?? HERO.heavy;
+  }
+
+  /** Arma capturada na mão (null = espada de bronze). Trocar de arma reinicia o combo; um golpe em curso termina com o que começou. */
+  setWeapon(def: WeaponDef | null): void {
+    this.weapon = def;
+    this.comboStep = 0;
+    this.comboLive = false;
+    this.comboQueued = false;
   }
 
   markEmber(): void {
@@ -230,8 +284,8 @@ export class HeroCombat {
     if (this.state !== "attacking" && this.state !== "ember") return null;
     const ph = this.attack.current;
     if (ph === "idle") return null;
-    const t = this.state === "ember" ? HERO.ember : this.activeTuning;
-    const kind = this.state === "ember" ? "ember" : this.activeTuning === HERO.heavy ? "heavy" : this.comboStep >= 2 && this.isLightChain ? "finisher" : "light";
+    const t = this.state === "ember" ? this.emberTuning : this.activeTuning;
+    const kind = this.state === "ember" ? "ember" : this.activeTuning.kind === "heavy" ? "heavy" : this.activeTuning.kind === "finisher" ? "finisher" : "light";
     return { kind, phase: ph, progress: this.attack.phaseProgress, sec: t[ph], seq: this.seq };
   }
 
@@ -260,7 +314,7 @@ export class HeroCombat {
 
   /** O golpe em andamento é o pesado? (o ator escolhe a animação certa). */
   get heavyAttack(): boolean {
-    return this.activeTuning === HERO.heavy;
+    return this.activeTuning.kind === "heavy";
   }
 
   /** i-frames: invulnerável no MIOLO do rolamento (vulnerável no início e no fim). */
@@ -332,6 +386,47 @@ export class HeroCombat {
   /** Pode beber poção agora? (fora de golpe/conjuração; idle ou aproximação). */
   get canDrink(): boolean {
     return this.state === "idle";
+  }
+  /** Liga os ganchos do gole (o app aplica o efeito e gasta a carga em `commit`). */
+  setDrinkHandlers(h: DrinkHandlers): void {
+    this.drinkHandlers = h;
+  }
+  /**
+   * Pede um gole. Fica no buffer de entrada (HERO.inputBufferSec) e começa quando o herói abre a ação
+   * (fim do golpe, ponto de cancelamento). Ignorado durante outro gole, na guarda quebrada e morto.
+   * Quem chama já validou carga e vida (o app); a carga só é gasta no `commit`.
+   */
+  requestDrink(kind: PotionKind): boolean {
+    if (this.state === "drinking" || this.guardBreakTimer > 0 || this.health.current <= 0) return false;
+    this.bufDrink = HERO.inputBufferSec;
+    this.bufDrinkKind = kind;
+    return true;
+  }
+  /** Bebendo agora (janela vulnerável de DRINK.durationSec). NÃO trava a locomoção: ver `moveScale`. */
+  get drinking(): boolean {
+    return this.state === "drinking";
+  }
+  /** Dados do gole em andamento (null fora dele). */
+  get drinkInfo(): DrinkInfo | null {
+    if (this.state !== "drinking") return null;
+    return { kind: this.drinkKind, elapsed: this.drinkElapsed, sec: DRINK.durationSec, commitSec: DRINK.commitSec, committed: this.drinkCommitted };
+  }
+  /** Fração da velocidade de locomoção permitida agora (lentidão do gole). */
+  get moveScale(): number {
+    return this.state === "drinking" ? DRINK.moveMul : 1;
+  }
+  /** O Elixir de Fúria está ativo? (a arma brilha e o slot do HUD pulsa). */
+  get buffActive(): boolean {
+    return this.buffTimer > 0;
+  }
+  /** Aborta o gole sem gastar a carga (se ainda não foi gasta): troca de sala, morte, reset. */
+  cancelDrink(reason: DrinkCancel): void {
+    this.bufDrink = 0;
+    if (this.state !== "drinking") return;
+    const kind = this.drinkKind;
+    const committed = this.drinkCommitted;
+    this.state = "idle";
+    if (!committed) this.drinkHandlers?.cancel?.(kind, reason);
   }
   /** Ressonância: a dádiva está ativa? (para o HUD mostrar o streak). */
   get resonanceActive(): boolean {
@@ -450,6 +545,7 @@ export class HeroCombat {
 
   /** GUARD BREAK: stamina zerou bloqueando. O herói cambaleia (não age) por um instante. */
   private beginGuardBreak(): void {
+    this.cancelDrink("reset");
     this.guardBreakTimer = GUARD_BREAK_SEC;
     this.blocking = false;
     this.comboStep = 0;
@@ -459,6 +555,7 @@ export class HeroCombat {
 
   /** Revive o herói com vida cheia (M2.3 graybox: respawn após morrer, sem GameOver ainda). */
   revive(): void {
+    this.cancelDrink("reset");
     this.health.reset();
     this.state = "idle";
     this.stamina = this.maxStamina_;
@@ -468,6 +565,7 @@ export class HeroCombat {
 
   /** Zera todos os upgrades/dádivas (jogo novo): volta o herói ao estado-base. */
   resetUpgrades(): void {
+    this.cancelDrink("reset");
     this.dmgMul = 1;
     this.extraReach_ = 0;
     this.lifesteal_ = 0;
@@ -524,6 +622,9 @@ export class HeroCombat {
       case "ember":
         this.updateEmber(deltaSeconds, input);
         break;
+      case "drinking":
+        this.updateDrink(deltaSeconds, input);
+        break;
       default:
         this.updateIdle(deltaSeconds, input);
     }
@@ -546,6 +647,7 @@ export class HeroCombat {
         this.buf[a] = Math.max(0, this.buf[a] - dt);
       }
     }
+    if (this.bufDrink > 0) this.bufDrink = Math.max(0, this.bufDrink - dt);
   }
 
   private anyBuffered(): boolean {
@@ -561,12 +663,17 @@ export class HeroCombat {
         return true;
       }
     }
+    if (this.bufDrink > 0) {
+      this.bufDrink = 0;
+      this.beginDrink(this.bufDrinkKind);
+      return true;
+    }
     if (this.buf.heavy > 0) {
       this.buf.heavy = 0;
-      if (this.spend(HERO.heavy.staminaCost ?? 0)) {
+      if (this.spend(this.tHeavy.staminaCost ?? 0)) {
         this.isLightChain = false;
         this.comboLive = false;
-        this.beginAttack(HERO.heavy);
+        this.beginAttack(this.tHeavy);
         return true;
       }
     }
@@ -583,7 +690,7 @@ export class HeroCombat {
       if (this.comboLive && this.comboStep < 2 && this.idleTime <= HERO.comboResetSec) this.comboStep += 1;
       else this.comboStep = 0;
       this.isLightChain = true;
-      this.beginAttack(this.comboStep >= 2 ? HERO.lightFinisher : HERO.light);
+      this.beginAttack(this.comboStep >= 2 ? this.tFinisher : this.tLight);
       return true;
     }
     return false;
@@ -647,7 +754,7 @@ export class HeroCombat {
       // Golpe terminou: encadeia ou volta a idle (já consumindo o buffer neste quadro).
       if (this.isLightChain && this.comboQueued && this.comboStep < 2) {
         this.comboStep += 1;
-        this.beginAttack(this.comboStep >= 2 ? HERO.lightFinisher : HERO.light);
+        this.beginAttack(this.comboStep >= 2 ? this.tFinisher : this.tLight);
       } else {
         // Terminou um leve (não a finalizadora): o combo continua vivo por comboResetSec.
         this.comboLive = this.isLightChain && this.comboStep < 2;
@@ -676,7 +783,7 @@ export class HeroCombat {
     this.comboLive = false;
     this.seq++;
     this.state = "ember";
-    this.attack.start(HERO.ember);
+    this.attack.start(this.emberTuning);
   }
 
   private updateEmber(dt: number, input: CombatInputSource): void {
@@ -688,7 +795,53 @@ export class HeroCombat {
       this.endAction(input);
       return;
     }
-    this.tryRecoveryCancel(input, HERO.ember.cancelAt);
+    this.tryRecoveryCancel(input, this.emberTuning.cancelAt);
+  }
+
+  private beginDrink(kind: PotionKind): void {
+    this.drinkKind = kind;
+    this.drinkElapsed = 0;
+    this.drinkCommitted = false;
+    this.blocking = false;
+    this.comboStep = 0;
+    this.comboLive = false;
+    this.isLightChain = false;
+    this.seq++;
+    this.state = "drinking";
+    this.drinkHandlers?.start?.(kind);
+  }
+
+  /**
+   * Gole: janela vulnerável. Leve, pesado, fogo e bloqueio ficam fora (o buffer segue valendo e dispara no
+   * fim); só a esquiva cancela (antes de DRINK.commitSec sem gastar a carga). A carga e o efeito saem em commitSec.
+   */
+  private updateDrink(dt: number, input: CombatInputSource): void {
+    if (this.health.current <= 0) {
+      this.cancelDrink("death");
+      return;
+    }
+    this.drinkElapsed += dt;
+    this.blocking = false;
+    if (this.buf.dodge > 0) {
+      this.buf.dodge = 0;
+      if (this.spend(HERO.dodge.staminaCost)) {
+        const early = !this.drinkCommitted;
+        const kind = this.drinkKind;
+        this.state = "idle"; // o startDodge assume o estado; a carga só foi gasta se já passou do commit
+        if (early) this.drinkHandlers?.cancel?.(kind, "dodge");
+        this.startDodge(input);
+        return;
+      }
+    }
+    if (!this.drinkCommitted && this.drinkElapsed >= DRINK.commitSec) {
+      this.drinkCommitted = true;
+      if (this.drinkHandlers && !this.drinkHandlers.commit(this.drinkKind)) {
+        this.drinkCommitted = false; // não aplicou: nada foi gasto
+        this.cancelDrink("gate");
+        return;
+      }
+    }
+    if (this.drinkElapsed >= DRINK.durationSec) this.endAction(input);
   }
 
   private regenSpark(dt: number): void {

@@ -48,6 +48,9 @@ import {
   configureCombatSound,
   healChime,
   denyBlip,
+  playDrink,
+  DrinkFx,
+  type PotionKind,
   configureTitleAmbience,
   startTitleAmbience,
   stopTitleAmbience,
@@ -223,6 +226,7 @@ async function main(): Promise<void> {
   input.attach(window);
 
   const combat = new CombatDirector(scene, camera, hero, platform.events, tweens);
+  let devTimeScale = 1; // DEV: câmera lenta do combate para capturas em sequência (sempre 1 em produção)
   // DEV: gancho de depuracao (so em dev) para inspecionar/afinar a cena ao vivo no playtest.
   if (import.meta.env.DEV) {
     (window as unknown as { __brasa?: unknown }).__brasa = {
@@ -236,6 +240,12 @@ async function main(): Promise<void> {
       enemiesAlive: () => combat.enemiesAlive,
       tp: (x: number, z: number, y = 1.5) => hero.teleport(new Vector3(x, y, z)),
       heal: () => hero.combat.health.heal(9999),
+      hurt: (n: number) => hero.combat.takeDamage(n),
+      drink: (kind: PotionKind = "vida") => hero.combat.requestDrink(kind), // DEV: pede o gole sem gastar o teclado
+      slow: (k: number) => { devTimeScale = k; }, // DEV: câmera lenta do combate (0,1 = 10x mais devagar)
+      inv: () => ({ ...inv }),
+      giveInv: (vida: number, furia: number) => { inv.vida = vida; inv.furia = furia; updatePotionHud(); },
+      drinkInfo: () => hero.combat.drinkInfo,
       enterRoom: (i: number) => enterRoom(i), // DEV: pula para o andar i (medição de perf / capturas)
       room: () => (currentRoom ? { brazier: { x: currentRoom.brazier.x, z: currentRoom.brazier.z }, exit: currentRoom.exit } : null),
       enterAntessala: (i: number) => enterAntessala(i, true), // DEV: vai direto à antessala do andar i
@@ -352,11 +362,22 @@ async function main(): Promise<void> {
   potionsEl.className = "hud-potions";
   potionsEl.style.display = "none";
   document.body.appendChild(potionsEl);
+  // Feedback do gole no slot (redesenho 4.1): o frasco inclina enquanto bebe, esvazia ao gastar a carga,
+  // treme se o gole foi cancelado e a Fúria pulsa em brasa enquanto dura. Estado volátil, repintado por updatePotionHud.
+  const potFx = { drinking: null as PotionKind | null, drank: null as PotionKind | null, denied: null as PotionKind | null, furia: false };
   const updatePotionHud = (): void => {
-    const pot = (key: string, label: string, n: number): string =>
-      `<span class="hud-pot${n > 0 ? "" : " off"}"><span class="ds-kbd">${key}</span>${label} ×${n}</span>`;
-    potionsEl.innerHTML = pot("1", T.potRecuperacao, pocoes.quantos("vida")) + pot("2", T.potFuria, pocoes.quantos("furia"));
+    const pot = (kind: "vida" | "furia", key: string, label: string, n: number): string => {
+      const cls = ["hud-pot", n > 0 ? "" : "off", potFx.drinking === kind ? "drinking" : "", potFx.drank === kind ? "drank" : "",
+        potFx.denied === kind ? "denied" : "", kind === "furia" && potFx.furia ? "on" : ""].filter(Boolean).join(" ");
+      return `<span class="${cls}" data-k="${kind}"><i class="hud-fl hud-fl--${kind}"></i><span class="ds-kbd">${key}</span>${label} ×${n}</span>`;
+    };
+    potionsEl.innerHTML = pot("vida", "1", T.potRecuperacao, pocoes.quantos("vida")) + pot("furia", "2", T.potFuria, pocoes.quantos("furia"));
     potionsEl.style.display = gameActive ? "" : "none";
+  };
+  const potPulse = (field: "drank" | "denied", kind: PotionKind, ms: number): void => {
+    potFx[field] = kind;
+    updatePotionHud();
+    window.setTimeout(() => { if (potFx[field] === kind) { potFx[field] = null; updatePotionHud(); } }, ms);
   };
 
   // Barra de BRASA (ultimate "Erupção", modelo God Gauge do Hades): enche causando E sofrendo
@@ -1092,27 +1113,54 @@ async function main(): Promise<void> {
   if (gameSave?.run.active) restoreRun(gameSave.run, gameSave.legado);
   else enterAntessala(0, true);
 
-  // Beber poção (Digit1 = Recuperação, Digit2 = Fúria). Consome o toque sempre; só aplica
-  // o efeito se houver carga e o herói puder beber (fora de golpe/conjuração).
-  const tryPotions = (): void => {
-    if (input.consumePressed("potion1") && inv.vida > 0 && hero.combat.canDrink) {
-      if (hero.combat.healthFraction >= 0.999) {
-        // Guarda contra desperdício: com a vida cheia a carga NÃO é gasta (negativo curto + aviso).
-        gameHud.toast(T.potVidaCheia, 1400);
-        denyBlip();
-      } else {
+  // Beber poção (Digit1 = Recuperação, Digit2 = Fúria). O toque vira um PEDIDO de gole (HeroCombat.requestDrink,
+  // com o mesmo buffer de entrada do combate); a carga só é gasta, e o efeito aplicado, no commit do gesto (0,30 s).
+  const drinkFx = new DrinkFx(scene, () => platform.settings.get().reducedMotion);
+  hero.combat.setDrinkHandlers({
+    start: (kind) => {
+      potFx.drinking = kind;
+      updatePotionHud();
+      playDrink(kind, "cork");
+    },
+    commit: (kind) => {
+      if (kind === "vida") {
+        // Guarda de desperdício também no commit: se a vida encheu no meio do gesto, a carga NÃO é gasta.
+        if (inv.vida <= 0 || hero.combat.healthFraction >= 0.999) return false;
         inv.vida -= 1;
         hero.combat.heal(hero.combat.maxHealth * POTIONS.vida.healFrac);
         combatHud.flashHeal();
-        healChime();
-        updatePotionHud();
+      } else if (kind === "furia") {
+        if (inv.furia <= 0) return false;
+        inv.furia -= 1;
+        hero.combat.applyDamageBuff(POTIONS.furia.dmgBonus, POTIONS.furia.durationSec);
+      } else {
+        return false; // Unguento: só existe com a Ferida (redesenho 4.3)
+      }
+      potFx.drinking = null;
+      potPulse("drank", kind, 650);
+      playDrink(kind, "sip");
+      drinkFx.play(kind);
+      return true;
+    },
+    cancel: (kind, reason) => {
+      potFx.drinking = null;
+      if (reason === "dodge" || reason === "gate") {
+        denyBlip();
+        potPulse("denied", kind, 400);
+      } else updatePotionHud();
+    },
+  });
+  const tryPotions = (): void => {
+    if (input.consumePressed("potion1") && inv.vida > 0) {
+      if (hero.combat.healthFraction >= 0.999) {
+        // Guarda contra desperdício: com a vida cheia o gole nem começa (negativo curto + aviso).
+        gameHud.toast(T.potVidaCheia, 1400);
+        denyBlip();
+      } else {
+        hero.combat.requestDrink("vida");
       }
     }
-    if (input.consumePressed("potion2") && inv.furia > 0 && hero.combat.canDrink) {
-      inv.furia -= 1;
-      hero.combat.applyDamageBuff(POTIONS.furia.dmgBonus, POTIONS.furia.durationSec);
-      updatePotionHud();
-    }
+    if (input.consumePressed("potion2") && inv.furia > 0) hero.combat.requestDrink("furia");
     // Execução (F): mata o inimigo em vacilo (vida baixa) ao alcance, com cura + Fagulha + VFX.
     if (input.consumePressed("execute")) combat.executeNearest();
     // Ultimate (X): só com a barra de Brasa cheia. Limpa a arena (chuva de fogo).
@@ -1133,8 +1181,10 @@ async function main(): Promise<void> {
     tryPotions();
     updateAntessala(dt); // antes do herói ler o input: [E] perto do armário abre o armário, não dispara o golpe de fogo
     // O diretor avança hit stop + alvos e devolve o dt de combate (0 no freeze) do herói.
-    const combatDt = combat.update(dt);
+    const combatDt = combat.update(dt * devTimeScale);
     hero.update(combatDt, input, camera);
+    drinkFx.update(dt, hero.position);
+    if (hero.combat.buffActive !== potFx.furia) { potFx.furia = hero.combat.buffActive; updatePotionHud(); }
     explor.update(combatDt); // sistemas de exploração (livros, poções, cenário) avançam com o dt de combate
   });
   scene.onBeforeRenderObservable.add(() => {

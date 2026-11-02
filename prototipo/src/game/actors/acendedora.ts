@@ -45,6 +45,7 @@ export class Acendedora {
   private hitT = 0; // tempo restante da reação de dano (clipe Hit_Chest ~0,33 s)
   // Lunge (avanço do golpe): input sintético ao longo do que ela encara, parando diante do alvo.
   private readonly lungeInput = { forward: 0, strafe: 0, running: true, consumeJump: () => false };
+  private readonly slowInput = { forward: 0, strafe: 0, running: true, consumeJump: (): boolean => false };
   private lungeLeft = 0; // metros que ainda pode avançar neste golpe
   private landLock = 0; // s de perda de controle da locomoção após uma queda longa (só andar; combate segue livre)
   private readonly lungeFacing = new Vector3();
@@ -82,6 +83,7 @@ export class Acendedora {
 
   /** Reposiciona a heroína (ao descer para o próximo andar). */
   teleport(pos: Vector3): void {
+    this.combat_.cancelDrink("reset");
     this.controller.teleport(pos);
     this.model.resetAir();
   }
@@ -147,6 +149,17 @@ export class Acendedora {
     return this.lungeInput;
   }
 
+  /** Gole: anda a DRINK.moveMul da velocidade (a mesma direção; o pulo e a corrida seguem do input real). */
+  private slowed(input: InputSource): InputSource {
+    const k = this.combat_.moveScale;
+    const s = this.slowInput;
+    s.forward = input.forward * k;
+    s.strafe = input.strafe * k;
+    s.running = input.running;
+    s.consumeJump = () => input.consumeJump();
+    return s;
+  }
+
   /** Chamar de scene.onAfterPhysicsObservable. */
   update(deltaSeconds: number, input: CombatInputSource, camera: ThirdPersonCamera): void {
     if (!this.sparkOnHand && this.model.emberNode) {
@@ -179,12 +192,16 @@ export class Acendedora {
               : "light"
             : this.hitT > 0
               ? "hit"
-              : "idle";
+              : this.combat_.drinking
+                ? "drink"
+                : "idle";
     const withSync = action === "light" || action === "heavy" || action === "ember" || action === "dodge";
     // Escala de tempo do combate neste quadro (0 = hit stop, <1 = cauda do hit stop): o clipe acompanha.
     const real = this.scene.getEngine().getDeltaTime() / 1000;
     const timeScale = deltaSeconds <= 0 ? 0 : real > 0 ? Math.min(1, deltaSeconds / real) : 1;
     this.model.setAction(action, withSync ? this.combat_.clipSync : null, timeScale);
+    this.model.setDrink(this.combat_.drinkInfo);
+    this.model.setFury(this.combat_.buffActive);
     // Durante a ANTECIPAÇÃO do golpe, encara para onde a câmera olha (a mira). Parado, o
     // controller só gira o modelo na direção do movimento, então a hitbox (à frente do
     // modelo) apontaria para a última direção andada e o golpe de frente erraria. Re-mira a
@@ -217,7 +234,7 @@ export class Acendedora {
     // Queda longa: o corpo ainda absorve o impacto (0,10 a 0,15 s sem andar). Só a locomoção: o combate
     // (golpe, esquiva, bloqueio) usa o input real acima e a esquiva (moveOverride) passa na frente.
     this.landLock = Math.max(0, this.landLock - deltaSeconds);
-    const moveInput: InputSource = this.combat_.moveOverride ?? (this.combat_.busy ? this.lungeOrFrozen(deltaSeconds, camera) : this.landLock > 0 ? FROZEN_INPUT : input);
+    const moveInput: InputSource = this.combat_.moveOverride ?? (this.combat_.busy ? this.lungeOrFrozen(deltaSeconds, camera) : this.landLock > 0 ? FROZEN_INPUT : this.combat_.drinking ? this.slowed(input) : input);
     this.controller.update(deltaSeconds, moveInput, camera);
   }
 }

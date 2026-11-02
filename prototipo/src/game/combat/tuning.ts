@@ -1,4 +1,5 @@
 import type { AttackTiming } from "@engine";
+import type { HitShape } from "./armas/tipos";
 
 /**
  * CAMADA JOGO. Fonte única dos números de combate (spec-combate §6). Iterar o feel =
@@ -24,6 +25,18 @@ export interface AttackTuning extends AttackTiming {
   cancelAt?: number;
   /** Avanço (m) do herói para a frente durante antecipação+ativo (lunge; sem alvo ele vai até aqui, com alvo para antes). */
   lunge?: number;
+  /** Marcador do golpe (armas capturadas, spec-armas-capturadas §1): o diretor e a animação leem isto, não a identidade do objeto. */
+  kind?: "light" | "finisher" | "heavy";
+  /** Forma do acerto; ausente = a esfera padrão à frente do herói (um alvo por golpe mais o `cleave`). */
+  shape?: HitShape;
+  /** Fração do dano do golpe que o RESPINGO (cleave) causa nos vizinhos; ausente = 0,55. */
+  cleaveDmg?: number;
+  /** Fração do poise do golpe que o respingo causa nos vizinhos; ausente = 0,5. */
+  cleavePoise?: number;
+  /** Atordoa (cambaleia por `sec`) quem tem poise base de `maxPoise` ou menos, alvo e vizinhos do respingo. */
+  stun?: { sec: number; maxPoise: number };
+  /** Fio gasto quando o golpe acerta (armas capturadas); ausente = 1, e 2 no pesado. */
+  fioCost?: number;
 }
 
 export const HERO = {
@@ -42,15 +55,16 @@ export const HERO = {
   // janela ativa (ver heroModel.ts, PLANO). Ciclo 0,38 s (antes 0,40). Dano 10 -> 9 compensa o
   // ciclo e o hit stop mais curtos (DPS do combo de 3 ~ -1,5% do anterior); poise 10 -> 9 e 14 -> 13
   // mantêm o poise por segundo.
-  light: { startup: 0.1, active: 0.05, recovery: 0.23, damage: 9, knockback: 2, hitStopFrames: 3, poise: 9, cancelAt: 0.3, lunge: 0.35 } as AttackTuning,
+  light: { kind: "light", startup: 0.1, active: 0.05, recovery: 0.23, damage: 9, knockback: 2, hitStopFrames: 3, poise: 9, cancelAt: 0.3, lunge: 0.35 } as AttackTuning,
   // 3a do combo: empurrão (knockback forte) e mais peso (spec-combate §3 "3a com empurrão").
   // Cleave: a finalizadora respinga nos inimigos próximos (resposta de horda do moveset normal).
-  lightFinisher: { startup: 0.14, active: 0.06, recovery: 0.3, damage: 11, knockback: 6, hitStopFrames: 6, poise: 13, cleave: 2.4, cancelAt: 0.4, lunge: 0.5 } as AttackTuning,
+  lightFinisher: { kind: "finisher", startup: 0.14, active: 0.06, recovery: 0.3, damage: 11, knockback: 6, hitStopFrames: 6, poise: 13, cleave: 2.4, cancelAt: 0.4, lunge: 0.5 } as AttackTuning,
   // Janela para encadear o combo: golpear de novo até aqui após o anterior continua a cadeia.
   comboResetSec: 0.45,
 
   // Ataque pesado: antecipação longa, knockback forte, hit stop alto, custa stamina.
   heavy: {
+    kind: "heavy",
     startup: 0.32,
     active: 0.08,
     recovery: 0.4,
@@ -105,6 +119,16 @@ export const POTIONS = {
   vida: { healFrac: 0.45, cost: 4, cap: 3 }, // Poção de Recuperação
   furia: { dmgBonus: 0.6, durationSec: 8, cost: 6, cap: 2 }, // Elixir de Fúria
 } as const;
+
+/** Tipos de poção que o gole sabe levar à boca (o Unguento aplica no peito; só existe com a Ferida). */
+export type PotionKind = "vida" | "furia" | "unguento";
+
+/**
+ * O GOLE (docs/brasa/redesenho-da-descida.md 4.1). Beber é um gesto de `durationSec` com janela
+ * vulnerável: sem leve, pesado, bloqueio nem fogo; anda a `moveMul` da velocidade; a carga é gasta e
+ * o efeito aplica em `commitSec`. Só a esquiva cancela; antes de `commitSec` não gasta a carga.
+ */
+export const DRINK = { durationSec: 0.6, commitSec: 0.3, moveMul: 0.6 } as const;
 
 /**
  * QUEIMADURA (status do fogo). Aplicada pelo Golpe de Fogo (ember). Dano por segundo ao
