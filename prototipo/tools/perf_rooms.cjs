@@ -43,7 +43,7 @@ const WAIT = Number(process.argv[3] || 9000);
     }
   }
   console.log("andar | tipo       | draw calls (limite normativo: 60)");
-  for (const k of Object.keys(rows).sort((a, b) => Number(a) - Number(b))) console.log(`${k.padStart(5)} | ${rows[k].kind.padEnd(10)} | ${rows[k].draws}${Number(k) > 10 ? "   (antessala A" + (Number(k) - 10 + 1) + ")" : ""}`);
+  for (const k of Object.keys(rows).sort((a, b) => Number(a) - Number(b))) console.log(`${k.padStart(5)} | ${rows[k].kind.padEnd(10)} | ${rows[k].draws}${Number(k) > 10 ? "   (antessala A" + (Number(k) - 11 + 1) + ")" : ""}`);
   console.log(errs.length ? errs.join("\n") : "SEM PAGEERROR");
   await b.close();
 })().catch((e) => { console.error("FAIL", e.message); process.exit(1); });

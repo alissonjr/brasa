@@ -1,5 +1,7 @@
 import { Vector3 } from "@babylonjs/core";
 import type { RoomDef, RoomKind } from "./cryptRoom";
+import { ANTESSALAS } from "../../content/descida";
+import { plantaAntessala } from "./antessala/planta";
 
 /**
  * CAMADA JOGO (Brasa). PLANTAS de sala. Antes existia uma unica planta (caixa 24x24)
@@ -18,7 +20,7 @@ import type { RoomDef, RoomKind } from "./cryptRoom";
  * Logo as dimensoes totais sao multiplas de 12 (halfX/halfZ multiplos de 6 e PARES).
  */
 
-export interface WallSeg { x: number; z: number; rotY?: number; }
+export interface WallSeg { x: number; z: number; rotY?: number; /** escala no comprimento da peça (1 = 4 m) */ sx?: number; }
 export interface PillarSpot { x: number; z: number; broken?: boolean; rotY?: number; }
 export interface TorchSpot { x: number; z: number; rotY: number; }
 export interface BoxCol { cx: number; cz: number; w: number; d: number; }
@@ -186,12 +188,10 @@ function pillarsForest(_halfX: number, halfZ: number): PillarSpot[] {
  * CONSECUTIVOS nunca repetem a forma. O kind define o tema do dressing (cryptRoom).
  */
 export function pickLayout(def: RoomDef): Layout {
-  // ANTESSALA: 12x12, sem pilares nem altar. A escada fica no fundo, longe do ponto de chegada
-  // (a sala-padrão a poria a 3 m do spawn). A fase R1 a mobília; por ora é a ponte vazia entre câmaras.
+  // ANTESSALA (12x12; A6 12x18): a planta e a disposicao das pecas vivem em antessala/planta.ts.
   if (def.antessala) {
-    const l = rect(def.kind, "camara_12", { halfX: 6, halfZ: 6, pillars: [] });
-    l.exit = { x: 0, z: 2.6, radius: 2.0 };
-    return l;
+    const d = ANTESSALAS[Math.max(0, Math.min(ANTESSALAS.length - 1, def.index))]!;
+    return plantaAntessala(rect(def.kind, "antessala", { halfX: d.planta.largura / 2, halfZ: d.planta.profundidade / 2, pillars: [] }), def.index);
   }
   switch (def.index) {
     case 0: // abertura: salao quadrado classico (tutorial)
