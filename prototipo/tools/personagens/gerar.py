@@ -329,7 +329,7 @@ def guardia():
 def anim():
     CL = ("Idle_Loop,Walk_Loop,Jog_Fwd_Loop,Sprint_Loop,Sword_Idle,Sword_Regular_A,Sword_Regular_B,Melee_Hook,"
           "Sword_Block,Roll,Hit_Chest,Hit_Knockback,Death01,Spell_Simple_Shoot,Spell_Simple_Idle_Loop,Zombie_Idle_Loop,"
-          "Zombie_Walk_Fwd_Loop,Zombie_Scratch,Punch_Jab,Punch_Cross,OverhandThrow,LayToIdle")
+          "Zombie_Walk_Fwd_Loop,Zombie_Scratch,Punch_Jab,Punch_Cross,OverhandThrow,LayToIdle,Jump_Start,Jump_Loop,Jump_Land")
     bruto = os.path.join(TMP, "anim_bruto.glb")
     subprocess.run([BLENDER, "--background", "--factory-startup", "--disable-autoexec", "--python", os.path.join(AQUI, "anim.py"), "--",
                     os.path.join(PACOTES, "quaternius-ual1", "Unreal-Godot", "UAL1_Standard.glb"),

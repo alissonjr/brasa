@@ -70,6 +70,8 @@ export class CombatDirector {
     private readonly tweens: Tweens // ESTILO (Bloco 2): juice de spawn/coleta
   ) {
     this.fx = new ImpactFx(scene);
+    // Poeira da aterrissagem pesada: a mesma rajada de partículas dos golpes (nenhum sistema novo, nenhum draw call novo).
+    hero.model.onLand((e) => { if (e.dust > 0) this.fx.burst(new Vector3(e.x, e.y + 0.08, e.z), e.dust); });
   }
 
   /** ESTILO (Bloco 2, §4.2b): pop-in de escala (0 -> 1) num mesh recém-criado. */

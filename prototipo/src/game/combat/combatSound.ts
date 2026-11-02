@@ -122,6 +122,21 @@ export function tellSound(profile: TellProfile): void {
   }
 }
 
+/**
+ * Aterrissagem da heroína: baque surdo na bota + um sopro de areia. `intensity` 0..1 vem da altura
+ * da queda (queda curta = passo leve e quase mudo; queda longa = baque grave e mais longo).
+ */
+export function landThud(intensity: number): void {
+  const vol = getVolume();
+  if (vol <= 0) return;
+  const a = audio();
+  if (!a) return;
+  const k = Math.min(1, Math.max(0, intensity));
+  const t = a.currentTime;
+  tone(a, t, 135 - 55 * k, 52, 0.06 + 0.1 * k, (0.04 + 0.16 * k) * vol);
+  noiseBurst(a, t, 0.035 + 0.06 * k, (0.03 + 0.08 * k) * vol, 1500 - 700 * k);
+}
+
 /** Clank metálico de escudo (golpe do herói amortecido pela guarda do inimigo). */
 export function shieldClank(): void {
   const vol = getVolume();
