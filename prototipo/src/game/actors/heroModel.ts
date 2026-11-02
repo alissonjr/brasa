@@ -225,11 +225,24 @@ export class HeroModel implements CharacterVisual {
     this.applyMantle(); // aplica a variante de manto se já escolhida quando o modelo terminou
   }
 
+  /** Espada de bronze da mão direita e o osso da mão (para encaixar a arma capturada no lugar dela). */
+  private swordNode: TransformNode | null = null;
+  private handRNode: TransformNode | null = null;
+  get weaponHand(): TransformNode | null {
+    return this.handRNode;
+  }
+  /** Guarda (some) ou saca (volta) a espada de bronze: a arma capturada a substitui enquanto durar. */
+  setBaseSwordVisible(visible: boolean): void {
+    this.swordNode?.setEnabled(visible);
+  }
+
   /** Lâmina (weapons.ts) em hand_r e brasa em hand_l. Offsets ajustados contra o osso do rig Quaternius. */
   private attachProps(nos: Map<string, TransformNode>): void {
     const handR = nos.get("hand_r");
     if (handR) {
       const sword = buildSword(this.scene);
+      this.swordNode = sword;
+      this.handRNode = handR;
       sword.parent = handR;
       // No osso da mão do rig UE (medido): +X local sobe pelo antebraço, +Z local é a frente da
       // palma e -X aponta para os dedos. A lâmina (+Y do weapons.ts) deita para a frente (+Z).
