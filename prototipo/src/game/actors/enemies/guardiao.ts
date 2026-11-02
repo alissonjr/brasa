@@ -96,6 +96,7 @@ export class Guardiao implements CombatTarget {
   private rootNode: TransformNode | null = null;
   private mats: StandardMaterial[] = [];
   private animGroups: AnimationGroup[] = [];
+  private skeletons: { dispose(): void }[] = [];
   private anims: Record<string, AnimationGroup | undefined> = {};
   private currentAnim: AnimationGroup | null = null;
 
@@ -219,7 +220,8 @@ export class Guardiao implements CombatTarget {
     if (!cache) cache = loadContainer(this.scene, MODEL);
     const container = await cache;
     if (this.disposed) return;
-    const entries = container.instantiateModelsToScene(undefined, false);
+    const entries = container.instantiateModelsToScene(undefined, true); // materiais por instancia (flash/estado nao vazam)
+    this.skeletons = entries.skeletons;
     const model = entries.rootNodes[0] as TransformNode | undefined;
     if (!model) return;
     this.animGroups = entries.animationGroups;
@@ -491,7 +493,12 @@ export class Guardiao implements CombatTarget {
     for (const g of this.animGroups) g.dispose();
     this.animGroups = [];
     this.aoeRing?.dispose();
-    this.rootNode?.dispose(false, true);
+    // Nao derruba os materiais/texturas do container em cache; libera o esqueleto desta instancia.
+    for (const m of this.mats) m.dispose(false, false);
+    this.mats = [];
+    this.rootNode?.dispose(false, false);
+    for (const sk of this.skeletons) sk.dispose();
+    this.skeletons = [];
     this.rootNode = null;
   }
 }
