@@ -105,7 +105,7 @@ export class HeroModel implements CharacterVisual {
     semContornoNosOlhos(this.root);
     // ESTILO (Bloco 1, spec-estilo-visual-render §4.1b): contorno de tinta na heroína.
     top.computeWorldMatrix(true);
-    outlineHierarchy(this.root, { worldWidth: OUTLINE_WORLD });
+    outlineHierarchy(this.root, { worldWidth: OUTLINE_WORLD, depthGuard: true }); // guarda de profundidade: a poca de luz dela nao tinge o corpo (ver outline.ts)
     // LEITURA DO ALTO: luz de aro quente só nos atores (não entra no orçamento de luzes do
     // cenário) e orçamento de luzes do PBR acima do padrão (4), para a luz de aro e a
     // fagulha nunca serem descartadas por uma tocha distante.

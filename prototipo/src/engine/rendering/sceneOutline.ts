@@ -1,6 +1,6 @@
 import { Effect, PostProcess } from "@babylonjs/core";
 import { Color3 } from "@babylonjs/core";
-import type { Camera } from "@babylonjs/core";
+import type { Camera, RenderTargetTexture } from "@babylonjs/core";
 
 /**
  * CAMADA ENGINE (genérica). Contorno de tinta de CENA via edge-detect full-screen sobre a
@@ -13,6 +13,9 @@ import type { Camera } from "@babylonjs/core";
  * MRT do GeometryBufferRenderer (que disparava "missing fragment shader outputs" com o
  * CellMaterial/outline e custava caro). Silhueta por profundidade + hull dos atores já entrega
  * a leitura inkada; vincos internos ficam por conta do toon/AO.
+ *
+ * Se um addFinishingPass vier depois na mesma câmera, ele ABSORVE este passe (a linha é desenhada
+ * no mesmo shader do posterize/papel: 1 passe full-screen a menos); este PostProcess é descartado.
  *
  * Política WebGPU x WebGL2 (§2.3): shader GLSL. Em WebGPU é pulado com aviso (fica o hull); o
  * resto da pilha segue valendo. Verificável em WebGL2 (?renderer=webgl).
@@ -64,6 +67,25 @@ export interface SceneOutlineHandle {
 
 const DEFAULT_COLOR = Color3.FromHexString("#0a0d14");
 
+/** Configuração do edge-detect de uma câmera, para o passe de finalização absorvê-lo (1 passe a menos). */
+export interface SceneOutlineConfig {
+  depthMap: RenderTargetTexture;
+  depthThreshold: number;
+  thickness: number;
+  color: Color3;
+  strength: number;
+  /** Passe próprio do edge-detect (o finishing o descarta ao absorver a linha no seu shader). */
+  postProcess: PostProcess;
+}
+const CONFIGS = new WeakMap<Camera, SceneOutlineConfig>();
+/** Config do edge-detect desta câmera (se houver). Usado por addFinishingPass. */
+export function getSceneOutlineConfig(camera: Camera): SceneOutlineConfig | undefined {
+  return CONFIGS.get(camera);
+}
+export function clearSceneOutlineConfig(camera: Camera): void {
+  CONFIGS.delete(camera);
+}
+
 export function addSceneOutline(camera: Camera, opts: SceneOutlineOptions = {}): SceneOutlineHandle | null {
   const scene = camera.getScene();
   const engine = scene.getEngine();
@@ -100,9 +122,11 @@ export function addSceneOutline(camera: Camera, opts: SceneOutlineOptions = {}):
     effect.setFloat("lineStrength", strength);
   };
 
+  CONFIGS.set(camera, { depthMap, depthThreshold, thickness, color, strength, postProcess: pp });
   return {
     postProcess: pp,
     dispose(): void {
+      CONFIGS.delete(camera);
       pp.dispose(camera);
       scene.disableDepthRenderer(camera);
     },

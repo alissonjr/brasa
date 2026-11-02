@@ -3,14 +3,15 @@ import type { AbstractEngine, Scene } from "@babylonjs/core";
 
 /**
  * CAMADA DEV (Brasa). Instrumentacao de PERFORMANCE para o gate normativo do projeto
- * (projeto-brasa.md secao 4.1: < 60 draw calls por sala; 60 fps desktop / 30 fps mobile).
+ * (projeto-brasa.md secao 4.1: <= 90 draw calls por sala, medidos COM atores e HUD; 60 fps desktop / 30 fps mobile).
  * Mede draw calls + frame time via SceneInstrumentation do Babylon e:
  *  - LOGA no console a contagem de draw calls ao ENTRAR em cada sala (sempre; barato), com
- *    aviso se estourar o teto de 60.
+ *    aviso se passar do teto de 90 (ver docs/brasa/orcamento-de-desempenho.md).
  *  - mostra um OVERLAY ao vivo (draw calls / fps / frame time) sob flag (querystring ?perf
  *    ou toggle por tecla), para nao poluir o jogo normal.
  */
-const DRAW_CALL_BUDGET = 60;
+/** Teto normativo por sala (era 60; passou a 90 em 2026-11, com atores em cena e HUD ativo). Estoura ao passar de 90. */
+const DRAW_CALL_BUDGET = 90;
 
 export class PerfHud {
   private readonly instr: SceneInstrumentation;
@@ -56,7 +57,7 @@ export class PerfHud {
       if (this.pending.frames <= 0) {
         const { index, kind } = this.pending;
         this.pending = null;
-        const over = draws >= DRAW_CALL_BUDGET;
+        const over = draws > DRAW_CALL_BUDGET;
         const tag = over ? "ESTOUROU o teto de" : "dentro do teto de";
         console.log(`[perf] sala ${index + 1} (${kind}): ${draws} draw calls (${tag} ${DRAW_CALL_BUDGET})`);
         if (over) console.warn(`[perf] sala ${index + 1} (${kind}) acima de ${DRAW_CALL_BUDGET} draw calls: cortar um cluster ou converter clones em batch.`);
@@ -65,7 +66,7 @@ export class PerfHud {
     if (!this.visible) return;
     const ft = this.instr.frameTimeCounter.lastSecAverage; // ms (PrecisionDate)
     const fps = this.engine.getFps();
-    const flag = draws >= DRAW_CALL_BUDGET ? " !>=60" : "";
+    const flag = draws > DRAW_CALL_BUDGET ? ` !>${DRAW_CALL_BUDGET}` : "";
     this.el.textContent = `draw calls: ${draws}${flag}\nfps: ${fps.toFixed(0)}\nframe: ${ft.toFixed(2)} ms`;
   }
 
