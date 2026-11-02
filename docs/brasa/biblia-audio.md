@@ -721,7 +721,7 @@ título, descida, mixes).
 ### D. Teste de regressão
 
 - `node tools/audio/render.mjs [--only texto] [--png] [--list]` (a partir de `prototipo/`): empacota
-  `src/game/audio/*` com esbuild, renderiza 44 casos offline no Chromium (Playwright; `PLAYWRIGHT_DIR`
+  `src/game/audio/*` com esbuild, renderiza 40 casos offline no Chromium (Playwright; `PLAYWRIGHT_DIR`
   se não resolver), grava WAV float32 em `tools/audio/out/`, mede (pico, RMS, crista, clipping,
   LUFS I/M/S, faixas, pares em batimento, % acima de 150 Hz, ducking, vazamento) e sai com código 1 se
   algum dos 185 critérios falhar. `--png` chama `spectro.py` (numpy, scipy, matplotlib) e confere LUFS em scipy.
