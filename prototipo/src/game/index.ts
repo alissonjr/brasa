@@ -41,6 +41,13 @@ export { configureTitleAmbience, startTitleAmbience, stopTitleAmbience } from ".
 export { configureMusic, startMusic, stopMusic, setMusicState } from "./audio/musicManager";
 export { configureStingers, playStinger } from "./audio/stingers";
 export { configureAmbience, startAmbience, setAmbience, updateAmbience, playWhisper, playStir, stopAmbience } from "./audio/adaptiveAmbience";
+export {
+  playFootstep, playJump, playLand, playSwing, playHit, playBlock, playDodge, playHeroHurt, playPickup,
+  playDoor, playBrazierLit, playStairs, playEnemyDeath, playGuardianVoice, playGuardianPulse, surfaceForFloor,
+} from "./audio/sfx";
+export type { Surface, HitMaterial } from "./audio/sfx";
+export { bindGameAudio, updateFootsteps, resetFootsteps } from "./audio/gameAudioEvents";
+export { setCombatWeight, duckPulse, audioStats } from "./audio/audioBus";
 export { GameHud } from "./ui/hud";
 export type { HudState } from "./ui/hud";
 export type { UiContext } from "./ui/uiContext";

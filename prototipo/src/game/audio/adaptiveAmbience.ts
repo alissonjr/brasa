@@ -1,207 +1,153 @@
 /**
- * CAMADA JOGO (Brasa). PROFUNDIDADE DE SISTEMAS (Bloco 4, spec-estilo-visual-render §4.4a/b):
- * ambiência ADAPTATIVA por WebAudio (sem assets, mesmo padrão de stingers/musicManager).
- * Três camadas contínuas que reagem ao estado do jogo, mais dois cues pontuais de PRESENÇA:
- *  - cama ambiente (drone) que adensa com a PROFUNDIDADE do andar;
- *  - camada de PERIGO que sobe com inimigos despertos / fase do chefe (crossfade suave);
- *  - batida da BRASA (pulso grave) cuja CADÊNCIA acelera com a urgência (Brasa quase morta);
- *  - cue de SUSSURRO (eco espacial, panorâmico) e de AGITAÇÃO dos mortos (pré-combate).
+ * CAMADA JOGO (Brasa). AMBIÊNCIA ADAPTATIVA. O fundo sonoro de cada andar vem de uma
+ * AmbienceScene (vento fundo, respiração do poço, gotas, estalos de brasa, rangidos; ver
+ * floorAudio.ts) escolhida pelo tema do andar. Ao trocar de andar a cena nova entra com fade
+ * de 3 s e a antiga sai e é desmontada (nenhum nó vaza). Além disso:
+ *  - camada de PERIGO: sopro grave que sobe com inimigos despertos / fase do chefe, e DUCKING
+ *    sustentado da música e da ambiência conforme o peso do combate (audioBus.setCombatWeight);
+ *  - batida da BRASA (pulso grave) cuja cadência acelera com a urgência (Brasa quase morta);
+ *  - cues pontuais de PRESENÇA: sussurro do eco e agitação dos mortos.
  *
- * Gated pelo volume de MÚSICA (é textura musical). AudioContext próprio e preguiçoso (autoplay).
+ * Gated pelo volume de MÚSICA (grupo "ambience" do barramento). Contexto preguiçoso (autoplay).
  */
+import { audioContext, groupOut, groupVolume, onAudioTick, rr, setCombatWeight, setGroupVolume, rand } from "./audioBus";
+import { AmbienceScene } from "./ambienceScene";
+import { AMBIENCE_PROFILES, FLOOR_COUNT, currentFloor, currentMood, onFloorChange, onMoodChange, setFloorAudio } from "./floorAudio";
+import { noise, noiseLoop, tone } from "./synth";
 
-let ctx: AudioContext | null = null;
-let getVolume: () => number = () => 0;
-
-// Nós persistentes das camadas contínuas (criados em start()).
-let master: GainNode | null = null;
-let droneGain: GainNode | null = null;
+let scene: AmbienceScene | null = null;
 let dangerGain: GainNode | null = null;
+let stopDanger: ((t: number) => void) | null = null;
+let unsubs: Array<() => void> = [];
 let started = false;
-
-// Estado-alvo (0..1), suavizado pelas rampas do WebAudio.
 let heartTimer = 0; // acumulador para a batida da Brasa
 let urgency01 = 0; // 0 calmo, 1 Brasa quase morta -> batida rápida
 let danger01 = 0;
+let depth01 = 0;
 
 export function configureAmbience(volume: () => number): void {
-  getVolume = volume;
+  setGroupVolume("ambience", volume);
 }
 
-function audio(): AudioContext | null {
-  if (typeof window === "undefined") return null;
-  if (!ctx) {
-    const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AC) return null;
-    ctx = new AC();
+function buildScene(fadeIn: number): void {
+  try {
+    scene = new AmbienceScene(AMBIENCE_PROFILES[currentFloor()]!, fadeIn);
+    scene.setMood(currentMood());
+  } catch {
+    scene = null;
   }
-  if (ctx.state === "suspended") void ctx.resume();
-  return ctx;
-}
-
-function vol(): number {
-  return Math.max(0, Math.min(1, getVolume()));
 }
 
 /** Constrói as camadas contínuas (idempotente). Chamar ao entrar no jogo. */
 export function startAmbience(): void {
   if (started) return;
-  const a = audio();
-  if (!a) return;
+  const a = audioContext();
+  const out = groupOut("ambience");
+  if (!a || !out) return;
   started = true;
-
-  master = a.createGain();
-  master.gain.value = 0.0001;
-  master.connect(a.destination);
-
-  // Cama ambiente: dois osciladores graves levemente desafinados + lowpass (drone frio).
-  droneGain = a.createGain();
-  droneGain.gain.value = 0.0001;
-  const lp = a.createBiquadFilter();
-  lp.type = "lowpass";
-  lp.frequency.value = 220;
-  const d1 = a.createOscillator();
-  d1.type = "sine";
-  d1.frequency.value = 55;
-  const d2 = a.createOscillator();
-  d2.type = "sine";
-  d2.frequency.value = 55 * 1.002; // batimento quase imperceptível (vivo, sem zumbido)
-  d1.connect(lp);
-  d2.connect(lp);
-  lp.connect(droneGain).connect(master);
-  d1.start();
-  d2.start();
-
-  // Camada de perigo: trítono dissonante por bandpass (tensão que sobe com o perigo).
-  dangerGain = a.createGain();
-  dangerGain.gain.value = 0.0001;
-  const bp = a.createBiquadFilter();
-  bp.type = "bandpass";
-  bp.frequency.value = 160;
-  bp.Q.value = 0.6;
-  const x1 = a.createOscillator();
-  x1.type = "sine";
-  x1.frequency.value = 73.4; // ~D2
-  const x2 = a.createOscillator();
-  x2.type = "sine";
-  x2.frequency.value = 103.8; // ~G#2 (trítono: tensão, em tom puro)
-  x1.connect(bp);
-  x2.connect(bp);
-  bp.connect(dangerGain).connect(master);
-  x1.start();
-  x2.start();
+  buildScene(3);
+  // Perigo: sopro grave de ruído (nada de tons: o trítono sustentado antigo zumbia).
+  const d = noiseLoop(a, out, "pink", [
+    { type: "lowpass", f: 360, q: 0.5 },
+    { type: "highpass", f: 70, q: 0.5 },
+  ], 0.0001);
+  dangerGain = d.gain;
+  stopDanger = d.stop;
+  unsubs = [
+    onAudioTick(() => scene?.tick()),
+    onFloorChange(() => {
+      const old = scene;
+      buildScene(3);
+      old?.dispose(3);
+    }),
+    onMoodChange((m) => scene?.setMood(m)),
+  ];
 }
 
-/** Atualiza os alvos das camadas. depth/danger/urgency em 0..1. */
-export function setAmbience(s: { depth?: number; danger?: number; urgency?: number }): void {
-  const a = audio();
-  if (!a || !master || !droneGain || !dangerGain) return;
-  const v = vol();
-  const t = a.currentTime;
-  const depth = clamp01(s.depth ?? 0);
+/** Atualiza os alvos. depth/danger/urgency em 0..1; `floor` (índice do tema) tem prioridade sobre depth. */
+export function setAmbience(s: { depth?: number; danger?: number; urgency?: number; floor?: number }): void {
+  depth01 = clamp01(s.depth ?? 0);
   danger01 = clamp01(s.danger ?? 0);
   urgency01 = clamp01(s.urgency ?? 0);
-
-  // Mestre segue o volume de música; rampa curta evita clique.
-  master.gain.linearRampToValueAtTime(Math.max(0.0001, 0.3 * v), t + 0.4);
-  // Drone adensa com a profundidade.
-  droneGain.gain.linearRampToValueAtTime(Math.max(0.0001, (0.14 + 0.18 * depth) * v), t + 0.8);
-  // Perigo entra/sai com crossfade.
-  dangerGain.gain.linearRampToValueAtTime(Math.max(0.0001, 0.16 * danger01 * v), t + 0.6);
+  setFloorAudio(s.floor ?? depth01 * (FLOOR_COUNT - 1));
+  const a = audioContext();
+  if (!a || !started) return;
+  setCombatWeight(danger01);
+  dangerGain?.gain.setTargetAtTime(Math.max(0.0001, 0.035 * danger01), a.currentTime, 0.5);
 }
 
 /** Avança a batida da Brasa. dtSec em segundos. Cadência acelera com urgência/perigo. */
 export function updateAmbience(dtSec: number): void {
   if (!started || dtSec <= 0) return;
-  const a = audio();
-  if (!a || !master) return;
-  const v = vol();
-  if (v <= 0) return;
-  // Intervalo: ~2,4 s calmo -> ~0,55 s no auge (Brasa quase morta ou muita pressão).
+  if (groupVolume("ambience") <= 0) return;
+  const a = audioContext();
+  const out = groupOut("ambience");
+  if (!a || !out) return;
+  // Intervalo: ~3,4 s calmo -> ~0,55 s no auge (Brasa quase morta ou muita pressão).
   const beat = Math.max(urgency01, danger01 * 0.7);
-  const interval = 2.4 - 1.85 * beat;
+  const interval = 3.4 - 2.85 * beat;
   heartTimer += dtSec;
   if (heartTimer >= interval) {
     heartTimer = 0;
-    heartbeat(a, 0.12 * v * (0.5 + 0.5 * beat), beat);
+    heartbeat(a, out, (0.035 + 0.05 * depth01 + 0.06 * beat) * (0.8 + 0.2 * rand()), beat);
   }
 }
 
 /** Um "tum" grave (a Brasa pulsando). Mais agudo/curto quando a urgência é alta. */
-function heartbeat(a: AudioContext, gain: number, beat: number): void {
-  const t = a.currentTime;
-  const f = 46 + 14 * beat;
-  const osc = a.createOscillator();
-  const g = a.createGain();
-  osc.type = "sine";
-  osc.frequency.setValueAtTime(f, t);
-  osc.frequency.exponentialRampToValueAtTime(f * 0.6, t + 0.18);
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t + 0.015);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
-  osc.connect(g).connect(master ?? a.destination);
-  osc.start(t);
-  osc.stop(t + 0.34);
+function heartbeat(a: BaseAudioContext, out: AudioNode, gain: number, beat: number): void {
+  const t = a.currentTime + 0.005;
+  const f = 54 + 14 * beat;
+  tone(a, out, t, { f, f1: f * 0.62, dur: 0.3, gain, attack: 0.015 });
+  noise(a, out, t, { dur: 0.08, gain: gain * 0.2, kind: "brown", filters: [{ type: "lowpass", f: 240 }] });
 }
 
-/** PRESENÇA: sussurro do eco (ruído filtrado + tom frio), panorâmico (pan -1..1 = lado do nicho). */
+/** PRESENÇA: sussurro do eco (ruído filtrado), panorâmico (pan -1..1 = lado do nicho). */
 export function playWhisper(pan = 0): void {
-  const a = audio();
-  if (!a) return;
-  const v = vol();
-  if (v <= 0) return;
-  const t = a.currentTime;
-  const len = Math.floor(a.sampleRate * 1.3);
-  const buf = a.createBuffer(1, len, a.sampleRate);
-  const data = buf.getChannelData(0);
-  for (let i = 0; i < len; i++) {
-    const env = Math.sin((i / len) * Math.PI); // sobe e desce (um sopro)
-    data[i] = (Math.random() * 2 - 1) * env;
-  }
-  const src = a.createBufferSource();
-  src.buffer = buf;
-  const bp = a.createBiquadFilter();
-  bp.type = "bandpass";
-  bp.frequency.value = 1400;
-  bp.Q.value = 2.5;
-  const g = a.createGain();
-  g.gain.value = 0.025 * v;
-  const panner = a.createStereoPanner();
-  panner.pan.value = Math.max(-1, Math.min(1, pan));
-  src.connect(bp).connect(g).connect(panner).connect(a.destination);
-  src.start(t);
+  if (groupVolume("ambience") <= 0) return;
+  const a = audioContext();
+  const out = groupOut("ambience");
+  if (!a || !out) return;
+  const t = a.currentTime + 0.01;
+  noise(a, out, t, {
+    dur: 1.3,
+    gain: 0.03,
+    kind: "pink",
+    attack: 0.6,
+    filters: [{ type: "bandpass", f: 1400, q: 2.5 }],
+    pan: Math.max(-1, Math.min(1, pan)),
+  });
 }
 
 /** PRESENÇA: agitação dos mortos pré-combate (chocalho de ossos curto, escala com a contagem). */
 export function playStir(count: number): void {
-  const a = audio();
-  if (!a) return;
-  const v = vol();
-  if (v <= 0 || count <= 0) return;
-  const t = a.currentTime;
+  if (groupVolume("ambience") <= 0 || count <= 0) return;
+  const a = audioContext();
+  const out = groupOut("ambience");
+  if (!a || !out) return;
+  const t = a.currentTime + 0.01;
   const n = Math.min(6, count);
   for (let k = 0; k < n; k++) {
-    const dt = (Math.sin((k + 1) * 12.9898) * 43758.5453) % 1;
-    const at = t + Math.abs(dt) * 0.5; // espalha no tempo (não uníssono)
-    const len = Math.floor(a.sampleRate * 0.12);
-    const buf = a.createBuffer(1, len, a.sampleRate);
-    const data = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
-    const src = a.createBufferSource();
-    src.buffer = buf;
-    const hp = a.createBiquadFilter();
-    hp.type = "highpass";
-    hp.frequency.value = 2200; // chocalho seco (osso)
-    const g = a.createGain();
-    g.gain.value = 0.02 * v;
-    src.connect(hp).connect(g).connect(a.destination);
-    src.start(at);
+    noise(a, out, t + rr(0, 0.5), { dur: 0.12, gain: 0.03, filters: [{ type: "bandpass", f: rr(2200, 3600), q: 2 }], pan: rr(-0.6, 0.6) });
   }
 }
 
+/** Desmonta a ambiência (fade) e permite um novo startAmbience. */
 export function stopAmbience(): void {
-  const a = audio();
-  if (a && master) master.gain.linearRampToValueAtTime(0.0001, a.currentTime + 0.5);
+  if (!started) return;
+  started = false;
+  for (const u of unsubs) u();
+  unsubs = [];
+  scene?.dispose(1.5);
+  scene = null;
+  const a = audioContext();
+  if (a && dangerGain) {
+    dangerGain.gain.cancelScheduledValues(a.currentTime);
+    dangerGain.gain.setTargetAtTime(0.0001, a.currentTime, 0.3);
+    stopDanger?.(a.currentTime + 1.5);
+  }
+  dangerGain = null;
+  stopDanger = null;
+  setCombatWeight(0);
 }
 
 function clamp01(v: number): number {

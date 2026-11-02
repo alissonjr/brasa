@@ -5,44 +5,20 @@
  * (política de autoplay dos navegadores), então o primeiro hover pode sair mudo.
  */
 
-type Ctx = AudioContext;
-
-let ctx: Ctx | null = null;
-let getVolume: () => number = () => 0; // master x sfx; 0 até ser configurado
+import { audioContext, groupOut, groupVolume, setGroupVolume, jit } from "../audio/audioBus";
+import { tone } from "../audio/synth";
 
 /** Liga o volume vivo (lido das opções a cada som). Chamado no boot do app. */
 export function configureUiSound(volume: () => number): void {
-  getVolume = volume;
-}
-
-function audio(): Ctx | null {
-  if (typeof window === "undefined") return null;
-  if (!ctx) {
-    const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AC) return null;
-    ctx = new AC();
-  }
-  if (ctx.state === "suspended") void ctx.resume();
-  return ctx;
+  setGroupVolume("ui", volume);
 }
 
 function blip(freq: number, dur: number, gain: number, type: OscillatorType): void {
-  const vol = getVolume();
-  if (vol <= 0) return;
-  const a = audio();
-  if (!a) return;
-  const t = a.currentTime;
-  const osc = a.createOscillator();
-  const g = a.createGain();
-  osc.type = type;
-  osc.frequency.setValueAtTime(freq, t);
-  const peak = Math.max(0.0002, gain * vol);
-  g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(peak, t + 0.008);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  osc.connect(g).connect(a.destination);
-  osc.start(t);
-  osc.stop(t + dur + 0.02);
+  if (groupVolume("ui") <= 0) return;
+  const a = audioContext();
+  const out = groupOut("ui");
+  if (!a || !out) return;
+  tone(a, out, a.currentTime + 0.005, { f: freq * jit(0.015), dur, gain, type, attack: 0.008 });
 }
 
 /** Tick discreto ao passar o mouse sobre um controle. */

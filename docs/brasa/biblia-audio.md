@@ -347,7 +347,7 @@ de combate cedem a hero SFX (despertar, fagulha, porta). Limitar instâncias de 
 `[NORMATIVO]` Formato web leve: webm (Opus) com fallback mp3 para música/ambiente/voz; SFX
 em wav no dev, ogg/webm (Opus) em produção. Entregar arrays de fontes e deixar a engine
 escolher (Chrome só aceita Opus via WebAudio em `audio/webm; codecs=opus`, não em .ogg/
-Opus). Loudness padronizado em -16 LUFS; mono para SFX espacializados e voz, estéreo só
+Opus). Loudness padronizado em -16 LUFS (vale para a futura pipeline com samples; o áudio sintetizado atual segue os alvos da seção "ATUALIZAÇÃO ÁUDIO 2026-11-02" no fim deste arquivo); mono para SFX espacializados e voz, estéreo só
 para beds de música/ambiente. Nomeação por estado/evento para o music manager e por
 personagem/linha para futura localização.
 
@@ -602,3 +602,137 @@ Estilo:
   braseiro).
 - **Sons novos de combate:** `healChime` (cura: dois tons consonantes), `perfectDodgeChime`
   (esquiva perfeita: assobio agudo cristalino).
+
+---
+
+## ATUALIZAÇÃO ÁUDIO (2026-11-02) - barramento único, ambiência por andar, efeitos e medições
+
+`[CÓDIGO]` `[NORMATIVO]` Tudo sintetizado via WebAudio (sem assets). Nada aqui foi OUVIDO por quem
+implementou: as medições abaixo vêm de render offline (OfflineAudioContext do Chromium) e de análise
+numérica. A avaliação de gosto é do jogador no Chrome dele (ver "O que ainda precisa de ouvido").
+
+### A. Arquitetura (`src/game/audio/`)
+
+- `audioBus.ts`: UM AudioContext (antes eram seis). Grupos `music`, `ambience`, `stinger`, `sfx`, `ui`,
+  cada um com ganho de volume (opções x mudo) e ganho de ducking, mais envio de reverberação de pedra.
+  Cadeia: grupos -> premix -> compressor leve (-22 dB, 2,2:1) -> limitador (-6 dB, 20:1, 2 ms) -> teto
+  suave em -3,1 dBFS (waveshaper, sem oversample) -> mestre -> destino. Mudo (tecla M, `settings.muted`)
+  ou volumes zerados cortam o mestre a zero (inclui a cauda da reverberação).
+- Volumes: música, ambiência e stinger seguem `master x música x mudo`; sfx e ui seguem `master x sfx x
+  mudo` (as funções `configureX(volume)` do `main.ts` continuam as mesmas). Calibragem relativa em
+  `GROUP_TRIM` (música 0,7; ambiência 1,4; stinger 1; sfx 1,4; ui 1) e `trim` por andar.
+- Ducking: `setCombatWeight(0..1)` abaixa música até -4 dB e ambiência até -6 dB (alimentado pelo
+  `danger` do `setAmbience`); `duckPulse()` abaixa -2,5/-2 dB por ~0,3 s em golpe pesado, rugido, morte.
+- `floorAudio.ts`: perfis por andar (ambiência e música, 7 temas na ordem de `FLOOR_THEMES`) e estado
+  (frio | combate | quente). O andar vem de `setAmbience` (`depth * 6`, ou `floor` explícito).
+- `ambienceScene.ts`: cena de ambiência (vento fundo, respiração do poço, gotas, estalos de brasa,
+  rangido de ferro). Trocar de andar cria a cena nova (fade-in 3 s) e desmonta a antiga.
+- `musicEngine.ts`: música mínima modal (pad de senoides com baixo pedal na tônica, melodia esparsa de
+  sino, pulso grave lento em combate, acorde maior em estado quente). Crossfades de 2 s (estado) e 3 s
+  (andar). Regras anti-besouro: sem dente de serra, sem tremolo, vozes a menos de 3 semitons nunca
+  soam juntas abaixo de MIDI 72, notas que saem terminam antes de as vizinhas entrarem.
+- `sfx.ts`: biblioteca de efeitos; `combatSound.ts`, `stingers.ts`, `uiSound.ts` e `titleAmbience.ts`
+  agora usam o barramento (assinaturas públicas preservadas).
+- `gameAudioEvents.ts`: `bindGameAudio(platform.events)` (morte de inimigo) e `updateFootsteps`.
+
+| Andar | Tema | Modo (raiz) | Ambiência (assinatura) |
+|---|---|---|---|
+| 0 | arenito frio | ré dórico | vento de poeira, gota rara |
+| 1 | basalto | mi frígio | ar pesado, cinza, uma brasa distante |
+| 2 | calcário e gelo | fá# lídio | gotejamento constante, ar frio e arejado |
+| 3 | ferro | sol eólio | grades que rangem, primeiras brasas |
+| 4 | osso e cal | lá eólio | respiração do poço à frente, vento fino |
+| 5 | vulcânico | ré frígio dominante | rumor grave, brasas estalando |
+| 6 | obsidiana | dó frígio | poço respirando fundo, brasas lentas |
+
+### B. Ligações no jogo
+
+- `main.ts` (mudança mínima, só ligação): `bindGameAudio`, passos pela velocidade do herói
+  (`updateFootsteps`), `playDrink(kind, "cork"|"sip")` no gole (redesenho 4.1: rolha no início, goles + vidro + brilho no commit; Fúria e Unguento têm sons próprios), `playPickup` ao pegar arma (G), `playDoor("alcapao")` ao ceder a estilha, `playStairs` na descida pelo alçapão (`playBrazierLit` pronto, sem chamador desde que a antessala do `main` tirou o braseiro da transição), `playGuardianVoice("rugido")` ao avistar o Guardião.
+- Aterrissagem: o agente `salto` já chama `landThud(intensity)` (combatSound.ts, em `heroModel.ts`); agora
+  ele só delega a `playLand(intensity)` (audio/sfx.ts), então há um único som de queda (abaixo de 0,05 não soa; a queda curta do heroModel, 0,15, sai a ~45% do nível cheio). PENDENTE: chamar
+  `playJump()` no início do pulo (hoje ninguém chama). Superfície dos passos: `surfaceForFloor(andar, molhado)`.
+- Funções ainda sem chamador (prontas): `playGuardianPulse`, `playDodge`, `playSwing`/`playHit` com
+  material (`hitThunk(heavy, "osso"|"carne"|"armadura")` já aceita o segundo parâmetro).
+
+### C. Alvos de loudness e resultados
+
+Método: 48 kHz estéreo, volumes nominais 1,0, LUFS por BS.1770-4 (filtro K, gate -70/-10), calculado em
+JS e conferido em scipy (divergência < 0,01 dB). LUFS integrada só faz sentido para camadas contínuas;
+para efeitos curtos usa-se LUFS momentânea máxima (400 ms) e pico. Pico de TODO render <= -3,1 dBFS.
+
+Alvos (critérios em `tools/audio/criteria.mjs`):
+
+| Camada | Alvo | Medido |
+|---|---|---|
+| Ambiência (frio) | -31 LUFS-I (faixa -34 a -28) | -31,0 a -32,0 nos 7 andares |
+| Música (cada estado) | -26 LUFS-I (faixa -29 a -22) | -24,5 a -28,4 |
+| Efeitos de impacto | LUFS-M -22 a -18 | -17,7 a -21,7 (acertos -20,8 a -19,9) |
+| Passos | LUFS-M -34 a -29 | -32,4 a -33,1 |
+| Mix de jogo (andar 2, explorando/combate/quente) | -28 a -20 LUFS-I | -25,1 / -25,5 / -25,0 |
+| Pior caso (chefe, 5 golpes, mortes, stingers, porta em 50 ms) | pico <= -3 dBFS | -3,1 dBFS, sem clipping |
+| Ducking de combate pesado | queda de 2,5 a 7 dB | 4,0 dB |
+
+Desvio declarado em relação ao pedido (-16 a -20 LUFS integrados): os EFEITOS ficam na janela (LUFS-M
+-18 a -21), mas a cama (música -26, ambiência -31) e o mix de jogo (-25) ficam 5 a 10 dB abaixo. Motivos:
+a queixa original foi de som de fundo alto; os efeitos têm crista de 22 a 28 dB e o teto de -3 dBFS
+impede subir o mix inteiro sem esmagar os golpes; e a cama precisa ficar abaixo dos efeitos. Botão único: `GROUP_TRIM` (e `trim` dos andares) x1,4 (+3 dB). MEDIDO: mix de jogo -25,1 -> -22,5
+LUFS-I, pior caso -22,7 -> -21,1, pico segue em -3,1 dBFS (o limitador absorve), ao custo de mais ação
+nos golpes pesados (crista de 23 -> 21 dB).
+
+Espectro (% da energia por faixa; 60-150 Hz é onde vive o pedal grave):
+
+| Camada | <60 | 60-150 | 150-300 | 300-1k | 1k-3k | >3k |
+|---|---|---|---|---|---|---|
+| Ambiência andares 0-6 | 12-23 | 22-40 | 26-32 | 6-32 | 0-6 | 0 |
+| Música frio (andares 0-6) | 0 | 40-65 | 0-14 | 28-41 | 1-18 | 0 |
+| Passos laje/água/cinza | 1-2 | 19-51 | 6-75 | 2-24 | 2-17 | 1-27 |
+| Acertos osso/carne/armadura | 0-1 | 4-38 | 31-74 | 1-37 | 0-12 | 2-14 |
+
+Efeitos de leitura têm de ter >= 35% da energia acima de 150 Hz (alto-falante de notebook não
+reproduz graves); porta de pedra, braseiro, Guardião, alçapão e stingers são graves de propósito.
+
+Por que sumiu o "besouro" (áudio ANTIGO do commit 836036e, medido com `tools/audio/baseline_antes.mjs`):
+
+| Camada (antes) | LUFS-I | Quadros com pares em batimento | Energia < 60 Hz |
+|---|---|---|---|
+| Ambiência (drone 55/55,11 Hz + trítono) | -24,7 (calmo), -24,2 (perigo) | 1 (calmo), 43 (perigo) | 99% e 83% |
+| Música frio / combate / quente | -31,7 / -35,1 / -30,8 | 28 / 50 / 0 | 89% / 68% / 44% |
+| Título | -24,0 | 0 | 87% |
+
+A ambiência antiga era quase só um rumor abaixo de 60 Hz (inaudível como tom em notebook, vira
+trepidação) mais pares de tons a 6 a 17 Hz um do outro, que é exatamente o batimento áspero. Agora:
+zero quadros com pares em batimento em todos os casos (ambiência, música, título).
+
+Metodologia do "besouro": em quadros de 0,34 s, picos espectrais estreitos (>= 18 dB acima da mediana
+local) entre 20 e 300 Hz, sustentados por 3 quadros, com os dois a menos de 20 dB um do outro e 5 a 22
+Hz de distância. Detector validado com sintético: dois senos a 110 e 128 Hz acusam 21 quadros; seno
+sozinho, quinta (110/165) e batimento lento (0,5 Hz) acusam 0 a 1.
+
+Vazamento de nós: render offline de 7 andares trocando de andar e de estado: fontes vivas 12, 13, 15,
+12, 12, 12, 12 (um por andar) e 0 após `stopMusic`/`stopAmbience`. No jogo real (Chromium com GPU, 7
+`enterRoom`, última rodada): 31 vivas no começo, 17 no andar 2 e 16 no andar 7, sem crescimento; mudo deixa a saída
+em -120 dB e desmudo volta a -28 dB RMS.
+
+Espectrogramas (PNG pequenos) em `prototipo/mocks/audio/`: um por caso (efeitos, 7 ambiências, 7 músicas,
+título, descida, mixes).
+
+### D. Teste de regressão
+
+- `node tools/audio/render.mjs [--only texto] [--png] [--list]` (a partir de `prototipo/`): empacota
+  `src/game/audio/*` com esbuild, renderiza 40 casos offline no Chromium (Playwright; `PLAYWRIGHT_DIR`
+  se não resolver), grava WAV float32 em `tools/audio/out/`, mede (pico, RMS, crista, clipping,
+  LUFS I/M/S, faixas, pares em batimento, % acima de 150 Hz, ducking, vazamento) e sai com código 1 se
+  algum dos 185 critérios falhar. `--png` chama `spectro.py` (numpy, scipy, matplotlib) e confere LUFS em scipy.
+- `node tools/audio/play_audio_check.cjs <porta>`: integração no jogo real (Vite dev + Chromium com GPU):
+  contexto rodando, nível de saída, mudo/desmudo, 7 andares sem vazar fontes, sem pageerror.
+- `node tools/audio/baseline_antes.mjs`: mede o áudio antigo para comparação.
+
+### E. O que ainda precisa de ouvido (Chrome do jogador)
+
+Nada foi ouvido. Avaliar: (1) se a cama (música -26, ambiência -31) está agradável e não cansa; (2)
+se os 7 modos soam distintos sem virar melodia chata (frases de 3 a 5 notas a cada 7 a 16 s); (3) a voz
+do Guardião (síntese aditiva com formantes), o rangido de ferro, o rolar de ossos na morte, o gole da
+poção; (4) o equilíbrio golpe x música x passos; (5) se o pulso de combate (tum, tum) incomoda; (6) o
+quanto o ducking de combate se nota. Os botões de ajuste: `GROUP_TRIM` (audioBus.ts), `trim` por andar
+(floorAudio.ts) e os ganhos de cada função em sfx.ts.
