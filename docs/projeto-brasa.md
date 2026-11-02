@@ -131,8 +131,13 @@ sala-a-sala, que é mais folgado que mundo aberto.
 ### 4.1 Quadro e draw calls
 
 - `[NORMATIVO]` 60 fps em desktop médio; 30 fps em mobile médio.
-- `[NORMATIVO]` **< 60 draw calls por sala** carregada (mais folgado que o teto de 100
-  do mundo aberto porque só uma sala existe por vez; a meta é folga, não estouro).
+- `[NORMATIVO]` **<= 90 draw calls por sala** carregada, medidos COM os atores em cena e o HUD
+  ativo (o contador do Babylon soma todos os passes: principal, profundidade, contorno, glow,
+  sombra e os passes full-screen do pós-processo). Era "< 60" até 2026-11: esse número foi
+  fixado sem contar o custo dos atores nem dos passes de pós-processo (o salão de 5 inimigos
+  media 144). A decisão, o orçamento por categoria e a medição por andar estão em
+  [`brasa/orcamento-de-desempenho.md`](brasa/orcamento-de-desempenho.md). Onde outras specs
+  citam "< 60 draw calls (canon 4.1)", vale o teto atual desta seção.
 - `[NORMATIVO]` No máximo UMA sala de jogo carregada por vez. A sala anterior é
   descartada (malhas, materiais, texturas instanciadas, corpos de física) ao cruzar a
   porta. Isto é o coração da leveza e o que o `worldStreaming.ts` atual NÃO faz (ele só
@@ -281,7 +286,7 @@ remover num passe de limpeza:
    animação, dirigida pelo `characterController` e `heroCombat` atuais. Cena de teste
    numa sala única graybox.
 3. **Uma sala de verdade.** Montar uma `Câmara de guarda` com o Dungeon Kit (após
-   baixá-lo): paredes/piso/porta/braseiro modulares, < 60 draw calls, luz fria -> quente
+   baixá-lo): paredes/piso/porta/braseiro modulares, <= 90 draw calls, luz fria -> quente
    ao acender.
 4. **Inimigo esqueleto.** Trocar `defender.ts` pela malha KayKit Skeleton na FSM atual;
    validar o laço limpar-sala -> acender braseiro -> abrir porta.
@@ -301,7 +306,7 @@ remover num passe de limpeza:
 - [ ] `[A DEFINIR]` da seção 3.2 e 5 resolvidos (nº de salas, geração, pasta/asset).
 - [ ] Acendedora jogável com modelo KayKit + animações compartilhadas, no motor atual.
 - [ ] Pelo menos uma sala montada 100% com kit modular CC0 (zero primitiva representando
-      arquitetura/props), dentro de < 60 draw calls.
+      arquitetura/props), dentro de 90 draw calls.
 - [ ] Inimigo esqueleto rigado (KayKit) na FSM existente, com combate funcional.
 - [ ] Gerenciador de salas mantém no máximo UMA sala carregada; a anterior é descartada
       (malhas, materiais, física) ao avançar - verificável no inspetor de cena.

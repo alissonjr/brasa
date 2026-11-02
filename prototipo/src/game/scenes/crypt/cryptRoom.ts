@@ -21,7 +21,7 @@ import {
   Vector3,
 } from "@babylonjs/core";
 import type { AbstractMesh, AssetContainer, Camera, IDisposable, Material, Node as BNode, Observer, Scene } from "@babylonjs/core";
-import { createDepthProxy, createLightPoolBatch, flatColorOf, installDepthPass, isCachedToon, loadContainer, setFinishingGrain, toonifyHierarchy, toonMaterialFor } from "@engine";
+import { createDepthProxy, createLightPoolBatch, drawSkinnedLast, flatColorOf, installDepthPass, isCachedToon, loadContainer, setFinishingGrain, toonifyHierarchy, toonMaterialFor } from "@engine";
 import type { DepthProxyHandle, LightPoolSpec } from "@engine";
 import { CellMaterial } from "@babylonjs/materials/cell";
 import { mergeStaticByMaterial } from "./staticMerge";
@@ -223,6 +223,7 @@ async function ensurePieces(scene: Scene): Promise<Record<string, AssetContainer
 export function setupCryptScene(scene: Scene, camera: Camera): CryptCtx {
   scene.clearColor = Color3.FromHexString("#05070b").toColor4(1);
   scene.collisionsEnabled = true;
+  drawSkinnedLast(scene); // atores depois do cenario na fila opaca (ver renderOrder.ts)
 
   scene.fogMode = 2; // EXP2
   scene.fogColor = Color3.FromHexString("#1a2636");
@@ -233,6 +234,14 @@ export function setupCryptScene(scene: Scene, camera: Camera): CryptCtx {
   // (que lavava a tela toda, intermitente) fica DESLIGADO; o drama vem daqui.
   const glow = new GlowLayer("glow", scene, { blurKernelSize: 40 });
   glow.intensity = 0.85;
+  // Os olhos dos mortos (e o orbe da mao) pedem glow via addIncludedOnlyMesh, e cada malha incluida custa 1
+  // draw call por ator no passe do glow. O halo de um olho de poucos pixels, visto da camera alta, nao
+  // compensa: os olhos seguem emissivos no passe principal (pontos ciano), so sem o halo.
+  const addGlowMesh = glow.addIncludedOnlyMesh.bind(glow);
+  glow.addIncludedOnlyMesh = (mesh) => {
+    if (/olhos/i.test(mesh.name)) return;
+    addGlowMesh(mesh);
+  };
 
   const ambient = new HemisphericLight("luz_fria", new Vector3(0, 1, 0), scene);
   // Camera alta: ambiente mais baixo e azulado (a sala nasce fria e escura) para que o fogo
@@ -356,10 +365,11 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // (fim da montagem); quebrar um deles zera so os vertices dele (em vez de 1 malha e 1 draw call cada).
   let bankSeq = 0;
   let bankRemove: (id: number) => void = () => {};
+  let bankToggle: (id: number, visible: boolean) => void = () => {};
   const strikeProps: StrikeProp[] = []; // vasos/potes (quebram) e cadeiras (tombam) por golpe
   // MAPA DE SOMBRA ESTATICO: so o cenario projeta sombra (os atores usam a sombra de contato), entao
-  // o mapa e desenhado UMA vez por sala (-6 a -7 chamadas por quadro). Quando uma cadeira tomba ele
-  // volta a atualizar por um instante, ate a queda assentar.
+  // o mapa e desenhado UMA vez por sala (-6 a -7 chamadas por quadro). Quando uma cadeira tomba, o
+  // mapa e redesenhado UMA vez, depois que a queda assenta (nao a cada quadro da animacao).
   const shadowMap = ctx.shadow.getShadowMap();
   let shadowLiveTimer: ReturnType<typeof setTimeout> | null = null;
   const shadowStatic = (): void => {
@@ -368,8 +378,6 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     shadowMap.resetRefreshCounter();
   };
   const shadowLive = (ms: number): void => {
-    if (!shadowMap) return;
-    shadowMap.refreshRate = 1;
     if (shadowLiveTimer) clearTimeout(shadowLiveTimer);
     shadowLiveTimer = setTimeout(() => { shadowLiveTimer = null; shadowStatic(); }, ms);
   };
@@ -527,7 +535,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
         Animation.CreateAndStartAnimation("tomba_rot", live, "rotation.x", 60, 16, live.rotation.x, Math.sin(dir) * 1.5, 0);
         Animation.CreateAndStartAnimation("tomba_rotz", live, "rotation.z", 60, 16, live.rotation.z, Math.cos(dir) * 1.5, 0);
         Animation.CreateAndStartAnimation("tomba_y", live, "position.y", 60, 16, live.position.y, live.position.y + 0.1, 0);
-        shadowLive(600); // a sombra da cadeira acompanha a queda (16 quadros a 60 fps)
+        shadowLive(350); // a queda dura 16 quadros a 60 fps (~270 ms): redesenha a sombra uma vez, ja assentada
       },
     });
   }
@@ -874,8 +882,9 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     track(bar);
   }
   // Alcapao (tampa) por cima do buraco: visivel enquanto ha inimigos; ABRE (some) ao limpar.
-  const hatch = placeProp(P.trapdoor!, { x: EX, z: EZ, y: 0.05, scale: HOLE / 2.2, cast: false, dyn: true });
-  let hatchNode: TransformNode | null = hatch; // depois da fusao, o no que liga/desliga a tampa
+  // O alcapao tambem vai para o banco fundido (mostra/esconde zerando e restaurando os vertices dele).
+  const hatchBank = bankSeq++;
+  placeProp(P.trapdoor!, { x: EX, z: EZ, y: 0.05, scale: HOLE / 2.2, cast: false, dyn: true, bank: hatchBank });
   const beamMat = new StandardMaterial("feixe", scene);
   beamMat.emissiveColor = Color3.FromHexString("#ffd089");
   beamMat.diffuseColor = Color3.Black();
@@ -1284,16 +1293,6 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       casts: (m) => casterSet.has(m),
       shadowProxy: true, // 1 malha por material; as pecas que projetam sombra vao para uma malha-sombra invisivel
     });
-    // ALCAPAO: as duas primitivas (pedra + madeira) viram UMA malha sob um no que liga/desliga ao abrir.
-    // A cor nao leva a tinta do andar (como antes, quando ele usava o CellMaterial persistente do kit).
-    if (hatch) {
-      const holder = new TransformNode("alcapao", scene);
-      holder.parent = roomRoot;
-      holder.metadata = { dyn: true };
-      mergeStaticByMaterial(scene, hatch, { parent: holder, eligible: () => true, resolve: resolveFor(false), casts: () => false });
-      hatch.dispose();
-      hatchNode = holder;
-    }
     // QUEBRAVEIS: uma malha por material; cada item vira uma faixa de vertices que strike() zera.
     const bankOf = (m: AbstractMesh): number | undefined => {
       for (let n: BNode | null = m; n && n !== roomRoot; n = n.parent) {
@@ -1310,19 +1309,29 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       tag: (m) => String(bankOf(m)),
     });
     const bankPos = new Map<Mesh, Float32Array>();
+    const bankOrig = new Map<Mesh, Float32Array>();
     for (const mm of bankRes.merged) {
       mm.mesh.metadata = { bank: true }; // fora do proxy de profundidade: muda quando algo quebra
-      bankPos.set(mm.mesh, Float32Array.from(mm.mesh.getVerticesData("position") ?? []));
+      const orig = Float32Array.from(mm.mesh.getVerticesData("position") ?? []);
+      bankOrig.set(mm.mesh, orig);
+      bankPos.set(mm.mesh, Float32Array.from(orig));
     }
-    bankRemove = (id: number): void => {
+    const bankSet = (id: number, visible: boolean): void => {
       for (const mm of bankRes.merged) {
         const list = mm.ranges?.get(String(id));
         const pos = bankPos.get(mm.mesh);
-        if (!list || !pos) continue;
-        for (const r of list) pos.fill(0, r.start * 3, (r.start + r.count) * 3);
+        const orig = bankOrig.get(mm.mesh);
+        if (!list || !pos || !orig) continue;
+        for (const r of list) {
+          const a = r.start * 3, b = (r.start + r.count) * 3;
+          if (visible) pos.set(orig.subarray(a, b), a);
+          else pos.fill(0, a, b);
+        }
         mm.mesh.updateVerticesData("position", pos);
       }
     };
+    bankRemove = (id: number): void => bankSet(id, false);
+    bankToggle = bankSet;
     for (const r of res.removed) {
       if (casterSet.has(r)) {
         ctx.shadow.removeShadowCaster(r);
@@ -1640,7 +1649,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     maxZ: AZ - 3.4,
   };
 
-  return {
+  const room: Room = {
     def,
     strikeProps,
     readables,
@@ -1662,7 +1671,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
         beam.setEnabled(false);
       }
       // ALCAPAO: aberto = some a tampa (revela a escada/poço); selado = tampa visível.
-      hatchNode?.setEnabled(!open);
+      bankToggle(hatchBank, !open);
     },
     arena,
     dispose(): void {
@@ -1682,6 +1691,9 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       for (const t of [...scene.textures]) if (!texturasAntes.has(t) && t instanceof DynamicTexture && !t.name.startsWith("hpbar")) t.dispose();
     },
   };
+  // DEV: gancho para medicoes/testes (window.__brasaRoom = a sala atual); fora do build de producao.
+  if (import.meta.env.DEV) (globalThis as unknown as { __brasaRoom?: Room }).__brasaRoom = room;
+  return room;
 }
 
 /** Garante que as pecas do kit estao carregadas (chamar uma vez no boot). */

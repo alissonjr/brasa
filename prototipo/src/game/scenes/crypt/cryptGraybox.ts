@@ -20,7 +20,7 @@ import type { Scene } from "@babylonjs/core";
  * docs/brasa/biblia-ambientes.md e docs/brasa/spec-vertical-slice-cripta.md).
  *
  * Orçamento: poucas malhas, 1 luz quente dinâmica (braseiro, sem sombra) + 1 ambiente
- * fria fraca. Coerente com o teto de < 60 draw calls por sala.
+ * fria fraca. Coerente com o teto de 90 draw calls por sala.
  */
 
 const ROOM = 16; // lado da sala (m)

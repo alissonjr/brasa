@@ -16,6 +16,7 @@ export { getContactShadows, ContactShadows } from "./rendering/contactShadows";
 export type { ContactShadowHandle } from "./rendering/contactShadows";
 export { installDepthPass, createDepthProxy } from "./rendering/depthPass";
 export type { DepthPassOptions, DepthProxyHandle } from "./rendering/depthPass";
+export { drawSkinnedLast } from "./rendering/renderOrder";
 export { mergeSkinnedParts } from "./rendering/mergeSkinned";
 export type { MergeSkinnedOptions } from "./rendering/mergeSkinned";
 export { enableSsao } from "./rendering/ssao";

@@ -26,6 +26,12 @@ export interface OutlineOptions {
    * mesmo tamanho em todo ator. Precisa ser chamada DEPOIS de escalar/posicionar o modelo.
    */
   worldWidth?: number;
+  /**
+   * Mantém o "passo 2" nativo (redesenho só-profundidade do casco) nesta malha. Os atores comuns
+   * dispensam; a heroina precisa: sem ele a poça de luz dela (aditiva, desenhada depois) tinge o
+   * corpo de laranja (medido no andar 6). Custa 1 draw call por malha com contorno.
+   */
+  depthGuard?: boolean;
 }
 
 const DEFAULT_COLOR = Color3.FromHexString("#0b0e14"); // quase preto, leve azul (tom do breu)
@@ -49,7 +55,7 @@ function slimOutlineRenderer(scene: Scene): void {
   const renderer = scene.getOutlineRenderer() as unknown as OutlineInternals;
   const orig = renderer._afterRenderingMesh.bind(renderer);
   const slim = (mesh: AbstractMesh, subMesh: unknown, batch: unknown): void => {
-    if (!mesh.renderOutline) return orig(mesh, subMesh, batch);
+    if (!mesh.renderOutline || (mesh.metadata as { outlineDepthGuard?: boolean } | null)?.outlineDepthGuard) return orig(mesh, subMesh, batch);
     const saved = renderer._savedDepthWrite;
     renderer._savedDepthWrite = false;
     orig(mesh, subMesh, batch);
@@ -100,6 +106,7 @@ export function addOutline(mesh: AbstractMesh, opts: OutlineOptions = {}): void 
     }
     mesh.skeleton.useTextureToStoreBoneMatrices = false;
   }
+  if (opts.depthGuard) mesh.metadata = { ...(mesh.metadata as object | null), outlineDepthGuard: true };
   mesh.renderOutline = true;
   mesh.outlineColor = (opts.color ?? DEFAULT_COLOR).clone();
   if (opts.worldWidth !== undefined) {

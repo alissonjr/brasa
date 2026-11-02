@@ -103,7 +103,7 @@ export class HeroModel implements CharacterVisual {
     semContornoNosOlhos(this.root);
     // ESTILO (Bloco 1, spec-estilo-visual-render §4.1b): contorno de tinta na heroína.
     top.computeWorldMatrix(true);
-    outlineHierarchy(this.root, { worldWidth: OUTLINE_WORLD });
+    outlineHierarchy(this.root, { worldWidth: OUTLINE_WORLD, depthGuard: true }); // guarda de profundidade: a poca de luz dela nao tinge o corpo (ver outline.ts)
 
     this.setupAnimations(retargetClips(lib, top as TransformNode, this.root.name, CLIPES));
     this.loaded = true;
