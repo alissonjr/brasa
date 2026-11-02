@@ -5,6 +5,8 @@
  * mínimo, o "som em camadas" do feel de combate (spec-combate §1); a sonoplastia final
  * (samples) é trabalho do trilho de áudio. AudioContext preguiçoso (política de autoplay).
  */
+import type { PotionKind } from "./tuning";
+
 let ctx: AudioContext | null = null;
 let getVolume: () => number = () => 0;
 
@@ -194,5 +196,74 @@ export function heroHurt(blocked = false): void {
   } else {
     tone(a, t, 120, 50, 0.2, 0.2 * vol);
     noiseBurst(a, t, 0.08, 0.12 * vol, 900); // thud no corpo
+  }
+}
+
+/** Ruído com envelope (sobe em `att`, cai exponencial) por um filtro passa-baixa/alta/faixa. Base dos sons do gole. */
+function shapedNoise(a: AudioContext, t: number, dur: number, gain: number, type: BiquadFilterType, freq: number, att = 0.01): void {
+  const len = Math.max(1, Math.floor(a.sampleRate * dur));
+  const buf = a.createBuffer(1, len, a.sampleRate);
+  const data = buf.getChannelData(0);
+  let b0 = 0;
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    b0 = type === "lowpass" ? 0.97 * b0 + 0.03 * w : w; // lowpass: ruído "rosado" (mais grave) antes do filtro
+    data[i] = type === "lowpass" ? b0 * 6 : w;
+  }
+  const src = a.createBufferSource();
+  src.buffer = buf;
+  const f = a.createBiquadFilter();
+  f.type = type;
+  f.frequency.value = freq;
+  f.Q.value = type === "bandpass" ? 1.2 : 0.7;
+  const g = a.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(Math.max(0.0002, gain), t + att);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(f).connect(g).connect(a.destination);
+  src.start(t);
+}
+
+/**
+ * SOM DO GOLE (redesenho 4.1). Sintetizado, sem sample, respeita o volume de efeitos (`configureCombatSound`,
+ * que já carrega o mudo global). Duas partes, porque o gesto tem duas pontas:
+ *  - "cork": no INÍCIO do gesto (o frasco aparece na mão): rolha (clique de 8 ms), pop grave do unguento.
+ *  - "sip": no COMMIT aos 0,30 s (a carga foi gasta): Recuperação = 3 goles (ruído rosa abaixo de 300 Hz, 90 ms cada)
+ *    + `healChime`; Fúria = 1 gole + sibilo (ruído branco acima de 2 kHz, 150 ms) + "whoomp" (60 Hz, decai 0,4 s);
+ *    Unguento = esfregar (ruído 200 ms) + crepitar leve. O cancelamento NÃO chama isto (usa `denyBlip`).
+ * Os goles cabem em ~0,35 s depois do commit, para o som acabar com o gesto (0,6 s).
+ */
+export function playDrink(kind: PotionKind, part: "cork" | "sip" = "sip"): void {
+  const vol = getVolume();
+  if (vol <= 0) return;
+  const a = audio();
+  if (!a) return;
+  const t = a.currentTime;
+  const gulp = (at: number, g: number): void => {
+    shapedNoise(a, at, 0.09, 0.5 * g * vol, "lowpass", 300, 0.025);
+    tone(a, at, 190, 120, 0.09, 0.05 * g * vol);
+  };
+  if (part === "cork") {
+    if (kind === "unguento") {
+      tone(a, t, 150, 85, 0.1, 0.1 * vol); // destampar: pop grave
+    } else {
+      shapedNoise(a, t, 0.008, 0.2 * vol, "bandpass", 2600, 0.001); // rolha: clique de 8 ms
+      tone(a, t, 900, 380, 0.03, 0.05 * vol);
+    }
+    return;
+  }
+  if (kind === "vida") {
+    gulp(t + 0.03, 1);
+    gulp(t + 0.14, 0.9);
+    gulp(t + 0.25, 0.8);
+    tone(a, t + 0.32, 520, 540, 0.18, 0.07 * vol); // healChime, deslocado para depois do último gole
+    tone(a, t + 0.38, 780, 800, 0.22, 0.06 * vol);
+  } else if (kind === "furia") {
+    gulp(t + 0.03, 1);
+    shapedNoise(a, t + 0.14, 0.15, 0.16 * vol, "highpass", 2000, 0.02); // sibilo
+    tone(a, t + 0.14, 60, 42, 0.4, 0.22 * vol); // whoomp
+  } else {
+    shapedNoise(a, t, 0.2, 0.2 * vol, "bandpass", 1400, 0.04); // esfregar
+    for (let i = 0; i < 3; i++) shapedNoise(a, t + 0.12 + i * 0.06 + Math.random() * 0.02, 0.012, 0.09 * vol, "bandpass", 3200 + i * 500, 0.002); // crepitar
   }
 }
