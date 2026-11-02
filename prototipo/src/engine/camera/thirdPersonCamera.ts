@@ -153,10 +153,10 @@ export class ThirdPersonCamera {
         this.smoothedTarget.y + (Math.random() * 2 - 1) * a,
         this.smoothedTarget.z + (Math.random() * 2 - 1) * a
       );
-      this.camera.setTarget(this._shakeTarget);
+      this.camera.setTarget(this._shakeTarget, false, true, this.alta);
     } else {
       this.shakeAmp = 0;
-      this.camera.setTarget(this.smoothedTarget);
+      this.camera.setTarget(this.smoothedTarget, false, true, this.alta);
     }
   }
 
@@ -171,8 +171,9 @@ export class ThirdPersonCamera {
     this.smoothedTarget.y += this.targetHeight;
     this.shakeAmp = 0;
     if (this.alta) {
-      // Mantém o ângulo que o jogador escolheu ao trocar de sala (nada de a câmera brigar com ele);
-      // só o zoom volta ao padrão.
+      // Mantém o ângulo horizontal que o jogador escolheu ao trocar de sala (nada de a câmera
+      // brigar com ele); a inclinação e o zoom voltam ao enquadramento padrão da sala.
+      this.camera.beta = this.altaBeta;
       this.camera.radius = this.altaRadius;
       this.desiredRadius = this.altaRadius;
     } else if (faceInto) {
@@ -182,7 +183,10 @@ export class ThirdPersonCamera {
       this.camera.radius = this.defaultRadius; // reseta o zoom: view consistente a cada andar
       this.desiredRadius = this.defaultRadius; // a colisão manual parte do raio padrão
     }
-    this.camera.setTarget(this.smoothedTarget);
+    // Na câmera alta os ângulos são do jogador/enquadramento: o alvo muda, os ângulos ficam
+    // (sem isso o Babylon os recalcula a partir da posição ANTIGA e o teleporte entre salas
+    // deixava a câmera colada e baixa no herói em vez de enquadrar a sala).
+    this.camera.setTarget(this.smoothedTarget, false, true, this.alta);
   }
 
   /**
