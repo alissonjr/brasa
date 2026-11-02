@@ -352,6 +352,10 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   let decayWebMat: StandardMaterial | null = null; // teia de aranha (reuso por sala)
   let decayMossMat: StandardMaterial | null = null; // musgo/trepadeira (reuso por sala)
   let critterMat: StandardMaterial | null = null; // material escuro dos bichos (sem textura)
+  // BANCO DE QUEBRAVEIS: vasos, garrafas e bichos que um golpe esmaga entram numa malha por material
+  // (fim da montagem); quebrar um deles zera so os vertices dele (em vez de 1 malha e 1 draw call cada).
+  let bankSeq = 0;
+  let bankRemove: (id: number) => void = () => {};
   const strikeProps: StrikeProp[] = []; // vasos/potes (quebram) e cadeiras (tombam) por golpe
   // MAPA DE SOMBRA ESTATICO: so o cenario projeta sombra (os atores usam a sombra de contato), entao
   // o mapa e desenhado UMA vez por sala (-6 a -7 chamadas por quadro). Quando uma cadeira tomba ele
@@ -449,7 +453,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
 
   function placeProp(
     container: AssetContainer,
-    oIn: { x: number; z: number; y?: number; rotY?: number; scale?: number; targetH?: number; collider?: boolean; cast?: boolean; tall?: boolean; dyn?: boolean }
+    oIn: { x: number; z: number; y?: number; rotY?: number; scale?: number; targetH?: number; collider?: boolean; cast?: boolean; tall?: boolean; dyn?: boolean; bank?: number }
   ): TransformNode | null {
     const o = dressVar(oIn); // espelho/jitter por andar (no-op fora do dressing)
     if (!o) return null; // peca alta no lado da camera: descartada
@@ -478,7 +482,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     root.position.set(o.x - cx, (o.y ?? 0) - b.min.y, o.z - cz);
     root.parent = roomRoot;
     // dyn: a peca se mexe/some depois (alcapao, vaso, cadeira, bicho): fica FORA da fusao estatica.
-    if (oIn.dyn) root.metadata = { dyn: true };
+    if (oIn.dyn) root.metadata = { dyn: true, bank: oIn.bank };
     if (o.collider) colliderBox(root, 0.65); // pegada enxuta: mais espaço de caminhada entre props
     if (o.cast !== false) for (const m of root.getChildMeshes(false)) { ctx.shadow.addShadowCaster(m as AbstractMesh); casters.push(m as AbstractMesh); }
     return root;
@@ -487,20 +491,24 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // VASO/POTE QUEBRAVEL: ao ser atingido pela arma, some + estilhaca (o burst/som vem do
   // CombatDirector). Registra um StrikeProp; sem colisor (atravessavel) p/ leitura limpa.
   function placeBreakable(container: AssetContainer, o: { x: number; z: number; rotY?: number; scale?: number }): void {
-    const root = placeProp(container, { x: o.x, z: o.z, rotY: o.rotY, scale: o.scale, cast: false, dyn: true });
+    const bank = bankSeq++;
+    const root = placeProp(container, { x: o.x, z: o.z, rotY: o.rotY, scale: o.scale, cast: false, dyn: true, bank });
     if (!root) return;
     strikeProps.push({
       pos: new Vector3(o.x, 0.6, o.z),
       r: 0.95,
       kind: "break",
-      strike: () => root.dispose(),
+      strike: () => { bankRemove(bank); root.dispose(); },
     });
   }
 
   // CADEIRA CHUTAVEL: ao ser atingida/empurrada, TOMBA (anima a queda) e fica caida. Mantem o
   // colisor enquanto em pe; ao tombar, vira deco (sem colisor novo). Um StrikeProp por cadeira.
   function placeKickable(container: AssetContainer, o: { x: number; z: number; rotY?: number }): void {
-    const root = placeProp(container, { x: o.x, z: o.z, rotY: o.rotY, collider: true, cast: true, dyn: true });
+    // A cadeira em pe entra no BANCO (fundida com os quebraveis: 0 draw calls proprios, sem sombra propria).
+    // Ao tombar, ela some do banco e nasce uma copia independente no mesmo lugar, que cai animada e projeta sombra.
+    const bank = bankSeq++;
+    const root = placeProp(container, { x: o.x, z: o.z, rotY: o.rotY, collider: true, cast: false, dyn: true, bank });
     if (!root) return;
     let down = false;
     strikeProps.push({
@@ -510,11 +518,15 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       strike: () => {
         if (down) return;
         down = true;
+        bankRemove(bank);
+        const live = placeProp(container, { x: o.x, z: o.z, rotY: o.rotY, cast: true, dyn: true });
+        if (!live) return;
+        toonifyHierarchy(live, toonOpts); // a copia nasce depois do toon da sala: materiais persistentes do kit
         const dir = (o.rotY ?? 0) + Math.PI / 2;
         // tomba: gira ~85 graus em torno de um eixo horizontal e afunda um tico (assenta no chao)
-        Animation.CreateAndStartAnimation("tomba_rot", root, "rotation.x", 60, 16, root.rotation.x, Math.sin(dir) * 1.5, 0);
-        Animation.CreateAndStartAnimation("tomba_rotz", root, "rotation.z", 60, 16, root.rotation.z, Math.cos(dir) * 1.5, 0);
-        Animation.CreateAndStartAnimation("tomba_y", root, "position.y", 60, 16, root.position.y, root.position.y + 0.1, 0);
+        Animation.CreateAndStartAnimation("tomba_rot", live, "rotation.x", 60, 16, live.rotation.x, Math.sin(dir) * 1.5, 0);
+        Animation.CreateAndStartAnimation("tomba_rotz", live, "rotation.z", 60, 16, live.rotation.z, Math.cos(dir) * 1.5, 0);
+        Animation.CreateAndStartAnimation("tomba_y", live, "position.y", 60, 16, live.position.y, live.position.y + 0.1, 0);
         shadowLive(600); // a sombra da cadeira acompanha a queda (16 quadros a 60 fps)
       },
     });
@@ -1095,6 +1107,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       cm.emissiveColor = Color3.FromHexString("#0c0a08");
       cm.specularColor = Color3.Black();
       critterMat = cm;
+      roomFlatMats.add(cm);
     }
     const n = 3 + Math.round(rng(120) * 5);
     for (let i = 0; i < n; i++) {
@@ -1105,11 +1118,12 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       const z = onX ? (rng(i + 135) - 0.5) * (HALFZ * 1.5) : wallSign * (HALFZ - 1.0 - rng(i + 136) * 1.5);
       // Tripo gera ~1-2u; bicho e pequeno. Normaliza pela altura-alvo (placeProp aterra os pes).
       const targetH = k === "spider" ? 0.35 : k === "roach" ? 0.22 : 0.45; // m
-      const root = placeProp(cache![k]!, { x, z, rotY: rng(i + 137) * Math.PI * 2, targetH, cast: false, dyn: true });
+      const bank = bankSeq++;
+      const root = placeProp(cache![k]!, { x, z, rotY: rng(i + 137) * Math.PI * 2, targetH, cast: false, dyn: true, bank });
       if (!root) continue;
       for (const m of root.getChildMeshes(false)) (m as AbstractMesh).material = critterMat;
       // BICHO MATAVEL: um golpe o esmaga (some + estilhaco), reusando o sistema de StrikeProp.
-      strikeProps.push({ pos: new Vector3(x, 0.25, z), r: 0.7, kind: "break", strike: () => root.dispose() });
+      strikeProps.push({ pos: new Vector3(x, 0.25, z), r: 0.7, kind: "break", strike: () => { bankRemove(bank); root.dispose(); } });
     }
   }
 
@@ -1268,6 +1282,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       eligible: (m) => !isDyn(m),
       resolve: resolveFor(true),
       casts: (m) => casterSet.has(m),
+      shadowProxy: true, // 1 malha por material; as pecas que projetam sombra vao para uma malha-sombra invisivel
     });
     // ALCAPAO: as duas primitivas (pedra + madeira) viram UMA malha sob um no que liga/desliga ao abrir.
     // A cor nao leva a tinta do andar (como antes, quando ele usava o CellMaterial persistente do kit).
@@ -1279,6 +1294,35 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       hatch.dispose();
       hatchNode = holder;
     }
+    // QUEBRAVEIS: uma malha por material; cada item vira uma faixa de vertices que strike() zera.
+    const bankOf = (m: AbstractMesh): number | undefined => {
+      for (let n: BNode | null = m; n && n !== roomRoot; n = n.parent) {
+        const b = (n.metadata as { bank?: number } | null)?.bank;
+        if (b !== undefined) return b;
+      }
+      return undefined;
+    };
+    const bankRes = mergeStaticByMaterial(scene, roomRoot, {
+      parent: roomRoot,
+      eligible: (m) => bankOf(m) !== undefined,
+      resolve: resolveFor(false),
+      casts: () => false,
+      tag: (m) => String(bankOf(m)),
+    });
+    const bankPos = new Map<Mesh, Float32Array>();
+    for (const mm of bankRes.merged) {
+      mm.mesh.metadata = { bank: true }; // fora do proxy de profundidade: muda quando algo quebra
+      bankPos.set(mm.mesh, Float32Array.from(mm.mesh.getVerticesData("position") ?? []));
+    }
+    bankRemove = (id: number): void => {
+      for (const mm of bankRes.merged) {
+        const list = mm.ranges?.get(String(id));
+        const pos = bankPos.get(mm.mesh);
+        if (!list || !pos) continue;
+        for (const r of list) pos.fill(0, r.start * 3, (r.start + r.count) * 3);
+        mm.mesh.updateVerticesData("position", pos);
+      }
+    };
     for (const r of res.removed) {
       if (casterSet.has(r)) {
         ctx.shadow.removeShadowCaster(r);
@@ -1287,6 +1331,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       }
     }
     for (const mm of res.merged) if (mm.casts) { ctx.shadow.addShadowCaster(mm.mesh); casters.push(mm.mesh); }
+    if (res.shadowProxy) { ctx.shadow.addShadowCaster(res.shadowProxy); casters.push(res.shadowProxy); }
   }
   for (const mt of roomFlatMats) if (mt.getBindedMeshes().length === 0) mt.dispose(); // fundidos: a cor foi para os vertices
   toonifyHierarchy(roomRoot, toonOpts); // kit que ficou independente (alcapao, vasos, cadeiras): materiais persistentes
@@ -1300,7 +1345,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     const src: Mesh[] = [];
     for (const m of roomRoot.getChildMeshes(false)) {
       if (!(m instanceof Mesh) || !m.isEnabled() || !m.isVisible || m.getTotalVertices() <= 0 || m.skeleton || !m.material) continue;
-      if (isDyn(m) || (m.metadata as { noDepth?: boolean } | null)?.noDepth) continue;
+      if (isDyn(m) || (m.metadata as { noDepth?: boolean; bank?: boolean } | null)?.noDepth || (m.metadata as { bank?: boolean } | null)?.bank) continue;
       if (m.material.needAlphaBlendingForMesh(m) || m.material.needAlphaTestingForMesh(m)) continue;
       src.push(m);
     }
