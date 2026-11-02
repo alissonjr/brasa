@@ -30,6 +30,7 @@ import {
   type MuralNext,
 } from "./ds/illustrations";
 import { CODEX_DESCENT, romanNumeral } from "../content/codex";
+import { CAMARAS, type PerigoId } from "../content/descida";
 import { F, T, onLanguageChange, type StringKey } from "./strings";
 
 // --- Dados ---
@@ -45,45 +46,39 @@ export interface MuralData {
   inscricao: string;
 }
 
+const PERIGO: Record<PerigoId, HazardKind> = {
+  chao_cede: "chao",
+  colunas_moveis: "colunas",
+  agua: "agua",
+  fissura_quente: "fissura",
+  arena_encolhe: "arena",
+  grades_quentes: "grade",
+  tumulo_arrombado: "tumulo",
+};
+
 /**
- * "O que vem" dos sete murais (redesenho 5.3). Confere com o `ROSTER` de main.ts (andares 1 a 6):
- * A1 minion; A2 minion x2 + demonio; A3 warrior, arqueiro, espreitador, minion; A4 warrior,
- * conjurador, antigo, espreitador, minion; A5 brutamonte, arqueiro, rogue, demonio; A6 sentinela,
- * espreitador, arqueiro, warrior, rogue (em duas ondas); A7 a Guardiã. As emboscadas (olho)
- * seguem a seção 3: Demônio em C2, Espreitador em C4.
+ * "O que vem" gerado da composição REAL da câmara seguinte (`CAMARAS[index]` de `content/descida.ts`):
+ * honesto por construção, o mural muda junto com a formação. Os grupos da onda 2 viram o segundo grupo
+ * (as duas cristas entre eles); o olho marca o grupo emboscado; a vela, a Vigília; a Guardiã (C7, que é o
+ * chefe e não um `SkeletonKind`) entra como busto próprio.
  */
-const VEM: MuralNext[] = [
-  { grupos: [[{ kind: "minion", n: 1 }]], perigos: ["tumulo"] },
-  { grupos: [[{ kind: "minion", n: 2 }, { kind: "demonio", n: 1, emboscada: true }]], perigos: [] },
-  {
-    grupos: [[{ kind: "warrior", n: 1 }, { kind: "minion", n: 1 }, { kind: "arqueiro", n: 1 }, { kind: "espreitador", n: 1 }]],
-    perigos: ["chao", "agua"],
-  },
-  {
-    grupos: [
-      [
-        { kind: "conjurador", n: 1 },
-        { kind: "antigo", n: 1 },
-        { kind: "warrior", n: 1 },
-        { kind: "minion", n: 1 },
-        { kind: "espreitador", n: 1, emboscada: true },
-      ],
-    ],
-    perigos: ["colunas"],
-  },
-  {
-    grupos: [[{ kind: "brutamonte", n: 1 }, { kind: "arqueiro", n: 1 }, { kind: "rogue", n: 1 }, { kind: "demonio", n: 1 }]],
-    perigos: ["vigilia"],
-  },
-  {
-    grupos: [
-      [{ kind: "warrior", n: 1 }, { kind: "rogue", n: 1 }, { kind: "arqueiro", n: 1 }],
-      [{ kind: "sentinela", n: 1, manto: true }, { kind: "espreitador", n: 1 }],
-    ],
-    perigos: [],
-  },
-  { grupos: [[{ kind: "guardia", n: 1 }]], perigos: ["arena"] },
-];
+export function vemDaCamara(index: number): MuralNext {
+  const cam = CAMARAS[Math.min(CAMARAS.length - 1, Math.max(0, index))]!;
+  const ondas: MuralMorto[][] = [[], []];
+  for (const g of cam.formacao) {
+    const lista = ondas[g.onda === 2 ? 1 : 0]!;
+    for (const kind of g.mortos) {
+      const m = lista.find((x) => x.kind === kind && !!x.emboscada === !!g.emboscada);
+      if (m) m.n += 1;
+      else lista.push({ kind, n: 1, ...(g.emboscada ? { emboscada: true } : {}), ...(kind === "sentinela" ? { manto: true } : {}) });
+    }
+  }
+  if (cam.index === CAMARAS.length - 1) ondas[0]!.push({ kind: "guardia", n: 1 });
+  const grupos = ondas.filter((l) => l.length > 0);
+  const perigos: HazardKind[] = cam.perigos.map((p) => PERIGO[p]);
+  if (cam.modo === "vigilia") perigos.push("vigilia");
+  return { grupos, perigos };
+}
 
 /** Os dados do mural da antessala do `andar` (1 a 7). Fora da faixa, prende ao mais próximo. */
 export function muralDataFor(andar: number): MuralData {
@@ -92,7 +87,7 @@ export function muralDataFor(andar: number): MuralData {
   return {
     andar: n,
     foi: decal?.muralArt ?? decal?.art ?? "braseiro",
-    vem: VEM[n - 1]!,
+    vem: vemDaCamara(n - 1),
     inscricao: decal?.inscription ?? "",
   };
 }

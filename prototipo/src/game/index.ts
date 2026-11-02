@@ -12,6 +12,8 @@ export { HeroModel } from "./actors/heroModel";
 export { buildCryptGraybox } from "./scenes/crypt/cryptGraybox";
 export { buildCryptRoom, setupCryptScene, ensureCryptPieces } from "./scenes/crypt/cryptRoom";
 export type { CryptCtx, Room, RoomDef, RoomKind } from "./scenes/crypt/cryptRoom";
+export type { AntessalaHandle, Interativo, InteracaoId } from "./scenes/crypt/antessala";
+export { ancoras } from "./scenes/crypt/antessala";
 export { terrainHeightAt } from "./scenes/world";
 export { WORLD_GRAVITY } from "./content/world";
 export {
@@ -54,8 +56,8 @@ export {
 export type { Chapter, Objective } from "./content/campaign";
 export { ACHIEVEMENTS, achievementForObjective, achievementById } from "./content/achievements";
 export type { Achievement } from "./content/achievements";
-export { readGameSave, exploracaoDefaults, nichosVazios } from "./content/saveData";
-export type { GameSaveData, RunSave, FrascoTipo, CintoSave, NichoSave } from "./content/saveData";
+export { readGameSave, exploracaoDefaults } from "./content/saveData";
+export type { GameSaveData, RunSave, FrascoTipo, CintoSave } from "./content/saveData";
 export { ANTESSALAS, CAMARAS, NICHOS_POR_ANTESSALA, EVT, markMural, markAcendeu, MARK_SENTINELA_CAIU } from "./content/descida";
 export type {
   AntessalaDef, AntessalaId, CamaraDef, CamaraId, OficioId, PecaId, Ponto, PerigoId, SituacaoId, MortoCount, Gatilho, Grupo, Anexo, AnexoTipo,
@@ -68,6 +70,7 @@ export type { Place, Chama, BraseiroAndar, RouteSave, Commit } from "./run/rota"
 export { Pocoes, POCOES, POCAO_DEF } from "./run/pocoes";
 export type { Pocao, PocoesSave, PocoesRunSave, LegadoSave } from "./run/pocoes";
 export { openArmario } from "./ui/armarioUi";
+export { MuralPlate } from "./ui/muralPlate";
 export type { ArmarioHooks, ArmarioHandle } from "./ui/armarioUi";
 export { readLeaderboard, submitTime, formatTime } from "./content/leaderboard";
 export {
@@ -80,6 +83,7 @@ export {
   isCodexUnlocked,
   markFloor,
   markRead,
+  markCleared,
 } from "./content/codex";
 export type { CodexEntry, CodexCategory, CodexFloor, CodexDecal } from "./content/codex";
 export { DEFAULT_CHARACTER, readCharacter, MANTOS, DONS, DIFFICULTIES, mantoColor } from "./content/character";

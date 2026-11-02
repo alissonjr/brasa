@@ -10,6 +10,7 @@ export interface ExploracaoHooks {
   onEnterFloor?(i: number): void;
   onEnterAntessala?(i: number): void; // chegou à antessala do andar i (fresh ou retomada)
   onFragmentTaken?(): void; // as saídas abrem
+  onBrazierLit?(i: number): void; // acendeu o braseiro da antessala i (a Ferida fecha aqui)
   onHeroDied?(): void;
   update?(dt: number): void; // dt de combate (hit-stop não conta)
   snapshot?(): Partial<RunSave>; // grava o que o sistema possui
@@ -18,10 +19,10 @@ export interface ExploracaoHooks {
 
 /**
  * Campos do `RunSave` que os sistemas registrados possuem (os que `snapshot` pode devolver).
- * `no`, `gasto` e `braseiros` NÃO entram: pertencem ao `RouteState` que o `main.ts` guarda. `nichos` (armário)
- * só atravessa o registro até a fase R3 registrar o sistema que o possui; `cinto` o `main.ts` grava dos contadores.
+ * `no`, `gasto` e `braseiros` NÃO entram: pertencem ao `RouteState` que o `main.ts` guarda; `cinto`, `nichos`,
+ * `reserva` e `unguento` (o do cinto) pertencem ao modelo de poções (`run/pocoes.ts`), que o `main.ts` grava.
  */
-const OWNED: (keyof RunSave)[] = ["nichos", "secretos", "sabedoria", "livros", "raiz", "cera", "unguento", "ferida"];
+const OWNED: (keyof RunSave)[] = ["secretos", "sabedoria", "livros", "raiz", "cera", "ferida"];
 
 /**
  * Registro de sistemas. Também CARREGA os campos de exploração do save lido: o que nenhum
@@ -45,6 +46,9 @@ export class ExploracaoRegistry {
   }
   onFragmentTaken(): void {
     for (const s of this.systems) s.onFragmentTaken?.();
+  }
+  onBrazierLit(i: number): void {
+    for (const s of this.systems) s.onBrazierLit?.(i);
   }
   onHeroDied(): void {
     for (const s of this.systems) s.onHeroDied?.();

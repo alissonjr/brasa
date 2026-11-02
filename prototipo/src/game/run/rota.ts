@@ -20,6 +20,8 @@ export const ROTA = {
   commitSec: 0.6,
   /** Permanência diante da porta de pedra da antessala (curta: o mural fica ao lado, não pode cruzar sem querer). */
   portaSec: 0.4,
+  /** Segurar [R] diante do braseiro da antessala para acendê-lo. */
+  acenderSec: 1.2,
 } as const;
 
 /** PRNG determinístico (mulberry32). */

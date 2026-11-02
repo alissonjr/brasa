@@ -2,6 +2,7 @@ import { type CharacterSave, readCharacter } from "./character";
 import { markFloor, markRead } from "./codex";
 import { ANDARES, CHAMAS, type BraseiroAndar, type Chama, braseirosPadrao, formatNo, legacyNoToPlace, parseNo } from "../run/rota";
 import { NICHOS_POR_ANTESSALA, markMural } from "./descida";
+import { Pocoes, type Pocao } from "../run/pocoes";
 
 /**
  * CAMADA JOGO. Forma do payload `game` dentro do SaveData (a plataforma o trata
@@ -22,12 +23,6 @@ export interface CintoSave {
   vida: number;
   furia: number;
   unguento: number;
-}
-
-/** Um nicho do armário de uma antessala: vazio (`tipo` "") ou com 1 frasco; `deixado` = marcado "para quem descer". */
-export interface NichoSave {
-  tipo: FrascoTipo | "";
-  deixado: boolean;
 }
 
 export interface RunSave {
@@ -52,8 +47,13 @@ export interface RunSave {
   braseiros: BraseiroAndar[];
   /** Cinto de poções (redesenho 4.2). `pocaoVida`, `pocaoFuria` e `unguento` continuam como espelho legado. */
   cinto: CintoSave;
-  /** Armário: 4 nichos por antessala (7 x 4). Conteúdo inicial fixo é semeado pela fase R3 (`ANTESSALAS[i].armarioInicial`). */
-  nichos: NichoSave[][];
+  /**
+   * Armário (7 x 4 nichos) no formato do modelo `run/pocoes.ts`: "" vazio ou "tipo:origem:flags". Vazio (`[]`)
+   * = save sem armário (descida antiga ou nova): `Pocoes.carregar` semeia o conteúdo inicial fixo.
+   */
+  nichos: string[][];
+  /** Reserva da ordem: estoque restante por antessala, [Recuperação, Fúria] (7 x 2). Vazio = estoque cheio. */
+  reserva: number[][];
   /** Portas: segredos já achados nesta descida. */
   secretos: string[];
   /** Livros: Sabedoria por Linha (Lâmina, Fogo, Contragolpe), 0-9 cada. Vale só na descida. */
@@ -69,16 +69,11 @@ export interface RunSave {
 }
 
 /** Valores de partida dos campos de exploração (descida nova). */
-export function exploracaoDefaults(): Pick<RunSave, "no" | "gasto" | "braseiros" | "cinto" | "nichos" | "secretos" | "sabedoria" | "livros" | "raiz" | "cera" | "unguento" | "ferida"> {
+export function exploracaoDefaults(): Pick<RunSave, "no" | "gasto" | "braseiros" | "cinto" | "nichos" | "reserva" | "secretos" | "sabedoria" | "livros" | "raiz" | "cera" | "unguento" | "ferida"> {
   return {
-    no: "", gasto: [], braseiros: braseirosPadrao(), cinto: { vida: 0, furia: 0, unguento: 0 }, nichos: nichosVazios(),
+    no: "", gasto: [], braseiros: braseirosPadrao(), cinto: { vida: 0, furia: 0, unguento: 0 }, nichos: [], reserva: [],
     secretos: [], sabedoria: [0, 0, 0], livros: [], raiz: 0, cera: 0, unguento: 0, ferida: 0,
   };
-}
-
-/** Armário vazio: ANDARES antessalas x NICHOS_POR_ANTESSALA nichos. */
-export function nichosVazios(): NichoSave[][] {
-  return Array.from({ length: ANDARES }, () => Array.from({ length: NICHOS_POR_ANTESSALA }, () => ({ tipo: "" as const, deixado: false })));
 }
 
 export interface GameSaveData {
@@ -93,10 +88,10 @@ export interface GameSaveData {
   run: RunSave;
   /**
    * Legado do armário (meta-progressão, doc 4.2): frascos que a Acendedora anterior deixou "para quem
-   * descer", por antessala (7 x 4). Mora FORA de `run` de propósito: sobrevive à descida nova.
-   * Gravado só ao cruzar a porta de pedra (fase R3).
+   * descer", por antessala (7 listas de até 4 tipos). Mora FORA de `run` de propósito: sobrevive à descida
+   * nova. Gravado só ao cruzar a porta de pedra (`Pocoes.cruzarPorta`).
    */
-  legado: NichoSave[][];
+  legado: Pocao[][];
   /** O modo Vigília não precisa de campo: a câmara nunca salva no meio e a Vigília de C5 recomeça ao cruzar a porta. */
 }
 
@@ -115,25 +110,21 @@ function idList(v: unknown, max = 32): string[] {
     .slice(0, max);
 }
 
-function frasco(v: unknown): FrascoTipo | "" {
-  return typeof v === "string" && (FRASCOS as readonly string[]).includes(v) ? (v as FrascoTipo) : "";
+/** Armário de uma run: matriz 7 x 4 de textos curtos; qualquer outra forma vira "sem armário" (o modelo semeia o padrão). */
+function readNichos(v: unknown): string[][] {
+  if (!Array.isArray(v) || v.length !== ANDARES) return [];
+  return v.map((fila) =>
+    Array.from({ length: NICHOS_POR_ANTESSALA }, (_, n) => {
+      const c = Array.isArray(fila) ? fila[n] : undefined;
+      return typeof c === "string" && c.length <= 24 ? c : "";
+    })
+  );
 }
 
-/** Matriz 7 x 4 de nichos, defensiva: dimensões erradas viram vazio, valores desconhecidos viram nicho vazio. */
-function readNichos(v: unknown): NichoSave[][] {
-  const out = nichosVazios();
-  if (!Array.isArray(v)) return out;
-  for (let a = 0; a < ANDARES; a++) {
-    const row = v[a];
-    if (!Array.isArray(row)) continue;
-    for (let n = 0; n < NICHOS_POR_ANTESSALA; n++) {
-      const c = row[n] as Record<string, unknown> | null | undefined;
-      if (!c || typeof c !== "object") continue;
-      const tipo = frasco(c.tipo);
-      out[a]![n] = { tipo, deixado: tipo !== "" && c.deixado === true };
-    }
-  }
-  return out;
+/** Reserva da ordem: 7 pares [Recuperação, Fúria]; forma errada vira "sem reserva gasta" (estoque cheio). */
+function readReserva(v: unknown): number[][] {
+  if (!Array.isArray(v) || v.length !== ANDARES) return [];
+  return v.map((r) => (Array.isArray(r) ? [Math.max(0, Math.floor(num(r[0]))), Math.max(0, Math.floor(num(r[1])))] : [2, 1]));
 }
 
 function readBraseiros(v: unknown): BraseiroAndar[] {
@@ -193,6 +184,7 @@ function readRun(v: unknown): RunSave {
     braseiros: readBraseiros(o.braseiros),
     cinto,
     nichos: readNichos(o.nichos),
+    reserva: readReserva(o.reserva),
     secretos: idList(o.secretos),
     sabedoria: sab,
     livros: idList(o.livros),
@@ -233,6 +225,6 @@ export function readGameSave(blob: Record<string, unknown> | undefined): GameSav
     codex: readCodex(o, run),
     character: readCharacter(o.character as Record<string, unknown> | undefined),
     run,
-    legado: readNichos(o.legado),
+    legado: Pocoes.lerLegado(o.legado),
   };
 }
