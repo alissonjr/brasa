@@ -1,0 +1,4 @@
+Ultimate RPG Items Pack, por Quaternius (Aug 2019). Licenca: CC0 1.0 Universal (ver License.txt, copia do pacote).
+Fonte: https://opengameart.org/content/low-poly-rpg-pack (zip ultimate_rpg_items_pack_by_quaternius_0.zip, 44,6 MB; FBX/OBJ/Blend, sem glTF).
+Baixado em 2026-11-02. Aqui ficam SO 7 itens convertidos de FBX para GLB com FBX2glTF 0.9.7, para a pagina de comparacao
+(Axe_small, Axe_Double, Bow_Wooden, Dagger, Hammer_Double, Sword, Sword_big). O zip original nao esta no repositorio.

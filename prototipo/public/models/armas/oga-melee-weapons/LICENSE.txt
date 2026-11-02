@@ -1,0 +1,6 @@
+Melee Weapons, por Tedium Interactive (OpenGameArt.org, publicado em 2018-10-07)
+Licenca: CC0 1.0 Universal (pagina do asset: "License(s): CC0")
+Fonte: https://opengameart.org/content/melee-weapons-0
+Baixado em 2026-11-02 (melee weapons.zip, 48,9 KB, FBX unico com 12 armas + textura metal-wood.png).
+O pacote original nao traz arquivo de licenca; a licenca vem da pagina do asset.
+melee_weapons_convertido.glb: derivado do FBX original com FBX2glTF 0.9.7 (sem alterar a malha).
