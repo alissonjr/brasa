@@ -1,5 +1,5 @@
 import { Matrix, Scene, Vector3 } from "@babylonjs/core";
-import { addFinishingPass, addSceneOutline, createEngine, disposeOrphanSkeletons, el, enableHavokPhysics, enableSsao, InputState, ThirdPersonCamera, Tweens, UiManager } from "@engine";
+import { addFinishingPass, addSceneOutline, createEngine, disposeOrphanSkeletons, enableHavokPhysics, enableSsao, InputState, ThirdPersonCamera, Tweens, UiManager } from "@engine";
 import type { KeyBindings } from "@engine";
 import {
   WORLD_GRAVITY,
@@ -20,7 +20,6 @@ import {
   DEFAULT_CHAPTER,
   DEFAULT_CHARACTER,
   allObjectives,
-  chapterName,
   progressPercent,
   readGameSave,
   CodexLog,
@@ -33,6 +32,9 @@ import {
   setLanguage,
   T,
   F,
+  itemText,
+  onLanguageChange,
+  openBoonShop,
   createAutosaveIndicator,
   createPauseButton,
   configureUiSound,
@@ -62,6 +64,7 @@ import {
   POTIONS,
   ABSORB,
   type UiContext,
+  type StringKey,
   type CharacterSave,
   type RunSave,
 } from "@game";
@@ -106,12 +109,12 @@ async function main(): Promise<void> {
   };
 
   // --- ENGINE ---
-  stage("Iniciando engine (WebGPU/WebGL2)...");
+  stage(T.stageEngine);
   const engine = await createEngine(canvas);
   console.log(`[app] engine pronta: ${engine.constructor.name}`);
   const scene = new Scene(engine);
 
-  stage("Carregando física (Havok)...");
+  stage(T.stageFisica);
   await enableHavokPhysics(scene, WORLD_GRAVITY);
 
   // --- PLATAFORMA ---
@@ -165,7 +168,7 @@ async function main(): Promise<void> {
   platform.events.on<{ index: number }>("crypt:floor", ({ index }) => markCodex(markFloor(index + 1)));
 
   // --- JOGO: a descida pela cripta (uma sala por vez, com descarte) ---
-  stage("Acendendo a fagulha...");
+  stage(T.stageFagulha);
   const spawn = new Vector3(CRYPT_SPAWN.x, 1.5, CRYPT_SPAWN.z);
   const camera = new ThirdPersonCamera(scene, canvas, spawn);
   const cryptCtx = setupCryptScene(scene, camera.camera); // look global (glow/nevoa/luz/sombra/pos)
@@ -179,7 +182,7 @@ async function main(): Promise<void> {
   addFinishingPass(camera.camera, { posterizeLevels: 22, ditherStrength: 0.6, paperStrength: 0.15 });
   // ESTILO (Bloco 2, §4.2b): gerenciador de tween para o juice (atualizado no loop com dt real).
   const tweens = new Tweens();
-  stage("Cavando a cripta...");
+  stage(T.stageCripta);
   await ensureCryptPieces(scene); // carrega o kit KayKit uma vez
   const hero = new Acendedora(scene, spawn, WORLD_GRAVITY);
   // Herói projeta sombra assim que o modelo termina de carregar (async); persiste entre salas.
@@ -211,6 +214,10 @@ async function main(): Promise<void> {
       tp: (x: number, z: number, y = 1.5) => hero.teleport(new Vector3(x, y, z)),
       heal: () => hero.combat.health.heal(9999),
       enterRoom: (i: number) => enterRoom(i), // DEV: pula para o andar i (medição de perf / capturas)
+      room: () => (currentRoom ? { brazier: { x: currentRoom.brazier.x, z: currentRoom.brazier.z }, exit: currentRoom.exit } : null),
+      clear: () => combat.clearEnemies(), // DEV: limpa a sala (libera o relicário)
+      die: () => hero.combat.health.damage(99999), // DEV: derrota
+      win: () => { descentDone = true; }, // DEV: vitória (abre a tela de fim)
     };
   }
   // Gate de performance (NORMATIVO): mede draw calls + fps por sala. Overlay sob ?perf ou F9.
@@ -302,7 +309,7 @@ async function main(): Promise<void> {
   const updatePotionHud = (): void => {
     const pot = (key: string, label: string, n: number): string =>
       `<span class="hud-pot${n > 0 ? "" : " off"}"><span class="ds-kbd">${key}</span>${label} ×${n}</span>`;
-    potionsEl.innerHTML = pot("1", "Recuperação", inv.vida) + pot("2", "Fúria", inv.furia);
+    potionsEl.innerHTML = pot("1", T.potRecuperacao, inv.vida) + pot("2", T.potFuria, inv.furia);
     potionsEl.style.display = gameActive ? "" : "none";
   };
 
@@ -314,7 +321,7 @@ async function main(): Promise<void> {
   brasaWrap.style.display = "none";
   const brasaLabel = document.createElement("span");
   brasaLabel.className = "ds-bar__label";
-  brasaLabel.textContent = "BRASA";
+  brasaLabel.textContent = T.hudBrasa;
   const brasaFill = document.createElement("div");
   brasaFill.className = "ds-bar__fill";
   brasaFill.style.setProperty("--v", "0%");
@@ -322,7 +329,7 @@ async function main(): Promise<void> {
   document.body.appendChild(brasaWrap);
   const updateBrasaHud = (): void => {
     brasaFill.style.setProperty("--v", `${Math.round(brasaMeter)}%`);
-    brasaLabel.textContent = brasaMeter >= 100 ? "BRASA  [X] ERUPÇÃO" : "BRASA";
+    brasaLabel.textContent = brasaMeter >= 100 ? `${T.hudBrasa}  ${T.hudErupcao}` : T.hudBrasa;
     brasaWrap.classList.toggle("ready", brasaMeter >= 100);
   };
   // Enche a barra causando dano (combat:hit) e apanhando (hero:hit).
@@ -338,7 +345,7 @@ async function main(): Promise<void> {
   // Aviso na tela quando a câmara é limpa e a passagem abre.
   const promptEl = document.createElement("div");
   promptEl.className = "hud-callout";
-  promptEl.textContent = "Câmara limpa: recupere a estilha de Brasa no relicário";
+  promptEl.textContent = T.promptEstilha;
   document.body.appendChild(promptEl);
 
   // Barra de progresso da canalização do acender (aparece só enquanto canaliza).
@@ -352,7 +359,10 @@ async function main(): Promise<void> {
   // Prompt de EXECUÇÃO: aparece quando há inimigo em vacilo (vida baixa) ao alcance.
   const execEl = document.createElement("div");
   execEl.className = "hud-callout hud-callout--danger";
-  execEl.innerHTML = '<span class="ds-kbd">F</span> Executar';
+  const paintExec = (): void => {
+    execEl.replaceChildren(Object.assign(document.createElement("span"), { className: "ds-kbd", textContent: "F" }), ` ${T.executar}`);
+  };
+  paintExec();
   document.body.appendChild(execEl);
 
   // Prompt de PEGAR ARMA (captura de arma): aparece quando há uma arma dropada ao alcance.
@@ -371,7 +381,7 @@ async function main(): Promise<void> {
   bossWrap.className = "hud-boss";
   const bossName = document.createElement("div");
   bossName.className = "hud-boss__name";
-  bossName.textContent = "O GUARDIÃO";
+  bossName.textContent = T.guardiao;
   const bossTrack = document.createElement("div");
   bossTrack.className = "hud-boss__track";
   const bossFill = document.createElement("div");
@@ -386,6 +396,16 @@ async function main(): Promise<void> {
   reticleEl.style.display = "none";
   document.body.appendChild(reticleEl);
   const reticleWorld = new Vector3();
+  const weaponName = (kind: string): string => (kind === "clava" ? T.armaClava : kind === "espada" ? T.armaEspada : T.armaCajado);
+  fagulhaEl.setAttribute("aria-label", T.fagulhaRotulo);
+  // Rótulos montados uma vez (barra de Brasa, poções, executar, chefe) acompanham a troca de idioma.
+  onLanguageChange(() => {
+    updateBrasaHud();
+    updatePotionHud();
+    paintExec();
+    bossName.textContent = T.guardiao;
+    fagulhaEl.setAttribute("aria-label", T.fagulhaRotulo);
+  });
 
   // HUD de jogo (selo de profundidade, objetivo, legendas e toasts). Criado aqui porque o eco
   // do andar e as falas dependem dele; entra na camada de UI mais abaixo.
@@ -454,7 +474,7 @@ async function main(): Promise<void> {
       console.log(`[descida] andar ${i + 1}/${DESCENT.length} (${def.kind}): GUARDIÃO`);
       if (announce) playStinger("guardiao"); // avistar o Guardião (stinger grave e ominoso)
       // Confronto encenado: a Primeira Acendedora fala antes de atacar (canon, narrativa §0).
-      if (announce) window.setTimeout(() => { if (combat.bossActive) gameHud.say("voz", "Esperei tanto que esqueci meu nome. Qual é o teu?", 5000); }, 1400);
+      if (announce) window.setTimeout(() => { if (combat.bossActive) gameHud.say("voz", T.falaGuardiao1, 5000); }, 1400);
     } else {
       const kinds = ROSTER[i] ?? ["warrior"];
       // W6/Item5: variação por run DETERMINÍSTICA. O jitter de ângulo/raio vem de um PRNG
@@ -484,116 +504,72 @@ async function main(): Promise<void> {
     }
   };
 
-  // Dádivas da Brasa: compradas no braseiro (custam Fagulha). Cada descida oferece 3 do
+  // Dádivas da Brasa: compradas no relicário (custam Fagulha). Cada descida oferece 3 do
   // acervo + a "Lasca de Brasa" GRÁTIS (garante progresso mesmo com a bolsa vazia).
   // Árvore de dádivas da Brasa (W2): três ramos (Agressão / Defesa / Utilidade). A oferta
-  // do braseiro é CURADA: 1 de cada ramo (garante sempre 1 ofensiva + 1 defensiva + 1 de
+  // é CURADA: 1 de cada ramo (garante sempre 1 ofensiva + 1 defensiva + 1 de
   // utilidade) + a Lasca grátis. Ver docs/brasa/00-aprofundamento-e-roadmap.md (3.1).
+  // O save guarda o `id` (estável entre idiomas); `legacy` é o nome PT de saves antigos.
   type Ramo = "agressao" | "defesa" | "utilidade";
-  interface Boon { name: string; desc: string; cost: number; ramo: Ramo; apply: () => void; }
+  interface Boon { id: string; legacy: string; cost: number; ramo: Ramo; apply: () => void; }
   const BOONS: Boon[] = [
     // Agressão
-    { name: "Golpista", desc: "+12% de dano em cada golpe.", cost: 8, ramo: "agressao", apply: () => hero.combat.addDamageMul(0.12) },
-    { name: "Queimador", desc: "A Queimadura do fogo dura mais e empilha mais.", cost: 9, ramo: "agressao", apply: () => hero.combat.addBurnBoost(2, 1) },
-    { name: "Sede da Brasa", desc: `Cada golpe rouba ${Math.round(ABSORB.sedeDaBrasa.lifestealFrac * 100)}% do dano em vida.`, cost: 10, ramo: "agressao", apply: () => hero.combat.addLifesteal(ABSORB.sedeDaBrasa.lifestealFrac) },
+    { id: "golpista", legacy: "Golpista", cost: 8, ramo: "agressao", apply: () => hero.combat.addDamageMul(0.12) },
+    { id: "queimador", legacy: "Queimador", cost: 9, ramo: "agressao", apply: () => hero.combat.addBurnBoost(2, 1) },
+    { id: "sedeDaBrasa", legacy: "Sede da Brasa", cost: 10, ramo: "agressao", apply: () => hero.combat.addLifesteal(ABSORB.sedeDaBrasa.lifestealFrac) },
     // Defesa
-    { name: "Revestimento", desc: "Nenhum golpe tira mais de 22 de vida.", cost: 10, ramo: "defesa", apply: () => hero.combat.setDamageCap(22) },
-    { name: "Fôlego", desc: "+25 de stamina máxima.", cost: 8, ramo: "defesa", apply: () => hero.combat.addMaxStamina(25) },
-    { name: "Pele de Brasa", desc: "+25 de vida máxima (e cura).", cost: 9, ramo: "defesa", apply: () => hero.combat.addMaxHealth(25) },
+    { id: "revestimento", legacy: "Revestimento", cost: 10, ramo: "defesa", apply: () => hero.combat.setDamageCap(22) },
+    { id: "folego", legacy: "Fôlego", cost: 8, ramo: "defesa", apply: () => hero.combat.addMaxStamina(25) },
+    { id: "peleDeBrasa", legacy: "Pele de Brasa", cost: 9, ramo: "defesa", apply: () => hero.combat.addMaxHealth(25) },
     // Utilidade
-    { name: "Fagulha Perene", desc: "A Fagulha regenera 60% mais rápido.", cost: 9, ramo: "utilidade", apply: () => hero.combat.addSparkRegenMul(1.6) },
-    { name: "Ressonância", desc: "Acertos encadeados sem apanhar dão até +30% de dano.", cost: 9, ramo: "utilidade", apply: () => hero.combat.enableResonance() },
-    { name: "Braseiro Quente", desc: "Acender o braseiro cura 60% da vida (em vez de 40%).", cost: 8, ramo: "utilidade", apply: () => hero.combat.setBrazierHealFrac(0.6) },
+    { id: "fagulhaPerene", legacy: "Fagulha Perene", cost: 9, ramo: "utilidade", apply: () => hero.combat.addSparkRegenMul(1.6) },
+    { id: "ressonancia", legacy: "Ressonância", cost: 9, ramo: "utilidade", apply: () => hero.combat.enableResonance() },
+    { id: "reliquarioQuente", legacy: "Braseiro Quente", cost: 8, ramo: "utilidade", apply: () => hero.combat.setBrazierHealFrac(0.6) },
   ];
-  const FREE_BOON: Boon = { name: "Lasca de Brasa", desc: "+10 de vida. Sempre disponível.", cost: 0, ramo: "defesa", apply: () => hero.combat.addMaxHealth(10) };
+  const FREE_BOON: Boon = { id: "lasca", legacy: "Lasca de Brasa", cost: 0, ramo: "defesa", apply: () => hero.combat.addMaxHealth(10) };
+  const boonName = (b: Boon): string => T[`boon_${b.id}_n` as StringKey];
+  const boonDesc = (b: Boon): string =>
+    F(`boon_${b.id}_d` as StringKey, { p: Math.round(ABSORB.sedeDaBrasa.lifestealFrac * 100) });
   const pickFromRamo = (r: Ramo, rand: () => number): Boon => {
     const pool = BOONS.filter((b) => b.ramo === r);
     return pool[Math.floor(rand() * pool.length)]!;
   };
 
-  const chooseBoon = (): Promise<void> =>
-    new Promise((resolve) => {
-      // Oferta CURADA e fixa nesta visita: 1 de cada ramo + a Lasca grátis. A escolha de QUAL
-      // dádiva de cada ramo é determinística pela semente da run (mesma run -> mesma oferta).
-      const rand = mulberry32(runSeed + (floorIndex + 1) * 7919 + 13);
-      const offer = [pickFromRamo("agressao", rand), pickFromRamo("defesa", rand), pickFromRamo("utilidade", rand), FREE_BOON];
-      const panel = el("div", { class: "ds-frame menu-panel" });
-      const overlay = el("div", { class: "menu-backdrop" }, panel);
-      overlay.style.zIndex = "60";
-      const close = (): void => {
-        document.body.removeChild(overlay);
-        resolve();
-      };
-
-      // Banca do alquimista: comprar cargas de poção (repetível; respeita saldo e capacidade).
-      const shopItem = (label: string, cost: number, cap: number, get: () => number, inc: () => void): HTMLElement => {
-        const full = get() >= cap;
-        const afford = fagulhas >= cost;
-        const note = full ? "cheio" : afford ? `✦ ${cost}` : `✦ ${cost} (sem Fagulha)`;
-        const b = el(
-          "button",
-          { class: "choice" },
-          el("strong", { text: `${label}  (x${get()}/${cap})` }),
-          el("span", { text: note, style: `color:${full ? "var(--text-lo)" : afford ? "var(--gold-200)" : "var(--text-lo)"};font-weight:600` })
-        );
-        if (full || !afford) b.style.opacity = "0.45";
-        else
-          b.addEventListener("click", () => {
-            fagulhas -= cost;
-            inc();
-            updateFagulhaHud();
-            updatePotionHud();
-            render();
-          });
-        return b;
-      };
-
-      const render = (): void => {
-        panel.innerHTML = "";
-        const boonCards = offer.map((bn) => {
-          const afford = fagulhas >= bn.cost;
-          const priceTxt = bn.cost === 0 ? "grátis" : `✦ ${bn.cost}`;
-          const c = el(
-            "button",
-            { class: "choice" },
-            el("strong", { text: bn.name }),
-            el("span", { text: bn.desc }),
-            el("span", { text: afford ? priceTxt : `${priceTxt} (sem Fagulha)`, style: `color:${afford ? "var(--gold-200)" : "var(--text-lo)"};font-weight:600` })
-          );
-          if (!afford) c.style.opacity = "0.45";
-          else
-            c.addEventListener("click", () => {
-              if (fagulhas < bn.cost) return; // saldo pode ter mudado comprando poções
-              fagulhas -= bn.cost;
-              bn.apply();
-              purchasedBoons.push(bn.name); // persiste a dádiva (reaplicada ao retomar a run)
-              updateFagulhaHud();
-              close();
-            });
-          return c;
-        });
-        panel.append(
-          el("h2", { class: "menu-title", text: "Acender o braseiro" }),
-          el("p", { class: "menu-subtitle", text: `A chama curou suas feridas. Você tem ✦ ${fagulhas}.` }),
-          el(
-            "div",
-            { class: "menu-body" },
-            el("p", { class: "menu-subtitle", text: "Banca do alquimista (poções para a descida):" }),
-            el(
-              "div",
-              { class: "choice-group" },
-              shopItem("Poção de Recuperação", POTIONS.vida.cost, POTIONS.vida.cap, () => inv.vida, () => (inv.vida += 1)),
-              shopItem("Elixir de Fúria", POTIONS.furia.cost, POTIONS.furia.cap, () => inv.furia, () => (inv.furia += 1))
-            ),
-            el("p", { class: "menu-subtitle", text: "Escolha uma dádiva para descer:" }),
-            el("div", { class: "choice-group" }, ...boonCards)
-          )
-        );
-      };
-
-      render();
-      document.body.appendChild(overlay);
+  const chooseBoon = (): Promise<void> => {
+    // Oferta CURADA e fixa nesta visita: 1 de cada ramo + a Lasca grátis. A escolha de QUAL
+    // dádiva de cada ramo é determinística pela semente da run (mesma run -> mesma oferta).
+    const rand = mulberry32(runSeed + (floorIndex + 1) * 7919 + 13);
+    const offer = [pickFromRamo("agressao", rand), pickFromRamo("defesa", rand), pickFromRamo("utilidade", rand), FREE_BOON];
+    const potions = [
+      { id: "vida", name: () => T.bancaPocaoVida, def: POTIONS.vida, inc: () => (inv.vida += 1), have: () => inv.vida },
+      { id: "furia", name: () => T.bancaElixirFuria, def: POTIONS.furia, inc: () => (inv.furia += 1), have: () => inv.furia },
+    ];
+    return openBoonShop({
+      fagulhas: () => fagulhas,
+      have: (id) => potions.find((p) => p.id === id)!.have(),
+      labels: () => ({
+        boons: offer.map((b) => ({ id: b.id, cost: b.cost, name: boonName(b), desc: boonDesc(b) })),
+        potions: potions.map((p) => ({ id: p.id, name: p.name(), cost: p.def.cost, cap: p.def.cap })),
+      }),
+      buyPotion: (id) => {
+        const p = potions.find((x) => x.id === id)!;
+        if (fagulhas < p.def.cost || p.have() >= p.def.cap) return;
+        fagulhas -= p.def.cost;
+        p.inc();
+        updateFagulhaHud();
+        updatePotionHud();
+      },
+      buyBoon: (id) => {
+        const bn = offer.find((b) => b.id === id)!;
+        if (fagulhas < bn.cost) return false;
+        fagulhas -= bn.cost;
+        bn.apply();
+        purchasedBoons.push(bn.id); // persiste a dádiva (reaplicada ao retomar a run)
+        updateFagulhaHud();
+        return true;
+      },
     });
+  };
 
   const advance = async (): Promise<void> => {
     descending = true;
@@ -673,7 +649,7 @@ async function main(): Promise<void> {
     const b = currentRoom.brazier;
     const near = Math.hypot(hero.position.x - b.x, hero.position.z - b.z) <= 3.2;
     if (!fragmentTaken) {
-      promptEl.textContent = near ? "" : "Recupere a estilha de Brasa no relicário";
+      promptEl.textContent = near ? "" : T.promptEstilha;
       if (near) {
         fragmentTaken = true;
         fragments += 1;
@@ -685,7 +661,7 @@ async function main(): Promise<void> {
         gameHud.toast(F("estilhaRecuperada", { n: fragments }));
       }
     } else {
-      promptEl.textContent = "Desça pelo alçapão";
+      promptEl.textContent = T.objAlcapao;
     }
   };
 
@@ -733,10 +709,10 @@ async function main(): Promise<void> {
     purchasedBoons.length = 0;
     const all = [...BOONS, FREE_BOON];
     for (const name of run.upgrades) {
-      const bn = all.find((b) => b.name === name);
+      const bn = all.find((b) => b.id === name || b.legacy === name); // saves antigos guardavam o nome PT
       if (bn) {
         bn.apply();
-        purchasedBoons.push(name);
+        purchasedBoons.push(bn.id);
       }
     }
     hero.combat.revive(); // descanso no braseiro: vida cheia (após reaplicar dádivas)
@@ -879,7 +855,7 @@ async function main(): Promise<void> {
       profileId: profile.id,
       points: platform.score.total,
       playtimeSec: Math.round((performance.now() - startedAt) / 1000),
-      summary: `${chapterName(prog)} · ${progressPercent(prog)}%`,
+      summary: `${T.nomeCapitulo} · ${progressPercent(prog)}%`,
       game: {
         chapter: prog.chapterId,
         checkpoint: prog.checkpointId,
@@ -908,7 +884,8 @@ async function main(): Promise<void> {
   platform.events.on<{ id: string }>("objective:done", ({ id }) => {
     const ach = achievementForObjective(id);
     if (ach && platform.achievements.unlock(ach.id)) {
-      gameHud.notify(ach.name, ach.description);
+      const t = itemText("ach_", ach);
+      gameHud.notify(t.name, t.description);
       console.log(`[conquista] desbloqueada: ${ach.id}`);
     }
   });
@@ -996,6 +973,11 @@ async function main(): Promise<void> {
       announceNext = true;
       enterRoom(0);
       startGame();
+    },
+    relocalize: (reopen) => {
+      ui.clear();
+      ui.push(pausedOpen ? new PauseScreen(ctx) : new MainMenuScreen(ctx));
+      ui.push(reopen());
     },
     setReducedMotion: (on) => applyReducedMotion(on),
     setQuality: (q) => applyQuality(q),
@@ -1114,14 +1096,14 @@ async function main(): Promise<void> {
     brasaWrap.style.display = gameActive && !descending ? "" : "none";
     const dropName = gameActive && !descending ? combat.nearbyDrop() : null;
     if (dropName) {
-      pickupEl.replaceChildren(Object.assign(document.createElement("span"), { className: "ds-kbd", textContent: "G" }), ` Pegar ${dropName}`);
+      pickupEl.replaceChildren(Object.assign(document.createElement("span"), { className: "ds-kbd", textContent: "G" }), ` ${F("pegar", { nome: weaponName(dropName) })}`);
       pickupEl.style.opacity = "1";
     } else {
       pickupEl.style.opacity = "0";
     }
     const wpn = gameActive && !descending ? combat.weaponHud : null;
     if (wpn) {
-      weaponEl.textContent = wpn;
+      weaponEl.textContent = `${weaponName(wpn.kind)} (${wpn.charges}${wpn.kind === "cajado" ? "x" : ""})`;
       weaponEl.style.display = "";
     } else {
       weaponEl.style.display = "none";
@@ -1179,7 +1161,7 @@ async function main(): Promise<void> {
     }
     if (gameActive) {
       updateReadables(); // ler inscrições/pergaminhos ([R] perto)
-      if (nearReadable) { promptEl.textContent = "Pressione [R] para ler"; promptEl.style.opacity = "1"; }
+      if (nearReadable) { promptEl.textContent = T.promptLer; promptEl.style.opacity = "1"; }
     }
     if (acc > 250) {
       fpsEl.textContent = `${engine.getFps().toFixed(0)} fps`;
@@ -1201,7 +1183,7 @@ async function main(): Promise<void> {
 
         // Confronto encenado: ao cair, o Guardião (a Primeira) sussurra a verdade (canon §0).
         if (DESCENT[floorIndex]?.boss) {
-          gameHud.say("voz", "Vai. Acende a Brasa... e não a deixes sozinha, como eu fiquei.", 6500);
+          gameHud.say("voz", T.falaGuardiao2, 6500);
           markCodex(MARK_BOSS_DOWN); // o Guardião sussurrou a verdade: a Primeira entra na Crônica
         }
       }
@@ -1231,6 +1213,6 @@ main().catch((err) => {
   const loading = document.getElementById("loading");
   if (loading) {
     const msg = err instanceof Error ? err.message : String(err);
-    loading.textContent = `Erro ao iniciar: ${msg} (veja o console)`;
+    loading.textContent = F("erroIniciar", { msg });
   }
 });

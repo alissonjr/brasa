@@ -258,6 +258,24 @@
 .ds-row.current, .ds-row.selected { border-color: var(--ember-400); background: var(--surface-card-hot); box-shadow: 0 0 0 1px var(--ember-400), inset 0 0 28px rgba(255, 138, 44, 0.08); color: var(--text-hi); }
 .ds-row.locked, .ds-row[aria-disabled="true"] { color: var(--text-lo); background: var(--ink-900); border-style: dashed; border-color: var(--ink-600); cursor: default; }
 
+/* ---------- Abas ---------- */
+.ds-tabs { display: flex; flex-wrap: wrap; gap: var(--sp-1); border-bottom: var(--line) solid var(--ink-600); }
+.ds-tab { appearance: none; margin-bottom: calc(-1 * var(--line)); padding: var(--sp-2) var(--sp-2); background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer; font-family: var(--font-display); font-weight: 600; font-size: var(--fs-xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-lo); transition: color var(--dur-base) ease, border-color var(--dur-base) ease; }
+.ds-tab:hover { color: var(--gold-200); }
+.ds-tab[aria-selected="true"] { color: var(--gold-100); border-bottom-color: var(--ember-400); }
+.ds-tab:focus-visible { outline: 2px solid var(--ember-300); outline-offset: 2px; }
+
+/* ---------- Oferta (linha-botão do relicário: nome, descrição e preço) ---------- */
+.ds-offers { display: flex; flex-direction: column; gap: var(--sp-2); }
+.ds-offer { appearance: none; width: 100%; font: inherit; text-align: left; color: var(--text-mid); }
+.ds-offer__txt { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.ds-offer__txt strong { font-family: var(--font-display); font-size: var(--fs-sm); letter-spacing: 0.06em; color: var(--text-hi); }
+.ds-offer__txt span { font-size: var(--fs-sm); }
+.ds-offer__price { flex: none; }
+.ds-offer__price .ds-icon { margin-right: var(--sp-1); }
+.ds-offer:disabled { opacity: 0.5; cursor: not-allowed; }
+.ds-offer:disabled:hover { border-color: var(--ink-600); box-shadow: none; background: var(--surface-card); }
+
 /* ---------- Item de menu (lista vertical) ---------- */
 .ds-menu { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-1); min-width: 280px; }
 .ds-menu__item { position: relative; display: flex; align-items: center; gap: var(--sp-3); height: 48px; padding: 0 var(--sp-5); font-family: var(--font-display); font-weight: 600; font-size: var(--fs-md); letter-spacing: 0.22em; text-transform: uppercase; color: var(--text-mid); background: transparent; border: 0; cursor: pointer; text-align: left; transition: color var(--dur-base) ease, background var(--dur-base) ease, padding var(--dur-base) var(--ease-out); }

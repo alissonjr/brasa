@@ -231,6 +231,9 @@
 .hidden-file {
   display: none;
 }
+.opt-panels { display: flex; flex-direction: column; min-height: 168px; padding-top: var(--sp-3); }
+.opt-panel { display: flex; flex-direction: column; gap: var(--sp-3); }
+.opt-panel[hidden] { display: none; }
 .opt-note {
   margin: calc(-1 * var(--sp-1)) 0 var(--sp-1);
   font-size: var(--fs-sm);
@@ -483,7 +486,7 @@ html.ui-open .hud-potions,
 html.ui-open .brasa-bar { visibility: hidden; }
 
 /* Barra de Brasa (ultimate): canto inferior-esquerdo, sob a fagulha. */
-.ds-bar.brasa-bar { position: fixed; left: 18px; bottom: 18px; width: 260px; z-index: 35; pointer-events: none; }
+.ds-bar.brasa-bar { box-sizing: border-box; position: fixed; left: 18px; bottom: 18px; width: 260px; z-index: 35; pointer-events: none; }
 /* --- Perfil --- */
 .field-label {
   font-family: var(--font-display);
@@ -830,50 +833,6 @@ html.reduce-motion .model-stage-canvas {
   border: 1px solid rgba(0, 0, 0, 0.4);
   box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3);
 }
-.choice-group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-2);
-}
-/* Escolha do braseiro (dádivas e poções): mesma linha do design system (.ds-row), em botão. */
-.choice {
-  appearance: none;
-  font-family: var(--font-text);
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  text-align: left;
-  padding: var(--sp-3) var(--sp-4);
-  color: var(--text-mid);
-  background: var(--surface-card);
-  border: var(--line) solid var(--ink-600);
-  border-radius: var(--radius-md);
-  transition: border-color var(--dur-base) ease, background var(--dur-base) ease, box-shadow var(--dur-base) ease;
-}
-.choice:hover {
-  border-color: var(--gold-400);
-  box-shadow: var(--shadow-1);
-}
-.choice.selected {
-  border-color: var(--ember-400);
-  background: var(--surface-card-hot);
-}
-.choice:focus-visible {
-  outline: 2px solid var(--ember-300);
-  outline-offset: 2px;
-}
-.choice strong {
-  font-family: var(--font-display);
-  font-size: var(--fs-sm);
-  letter-spacing: 0.06em;
-  color: var(--text-hi);
-}
-.choice span {
-  font-size: var(--fs-sm);
-  color: var(--text-mid);
-}
-
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.55; }

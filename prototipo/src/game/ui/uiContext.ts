@@ -1,4 +1,4 @@
-import type { KeyBindings, UiManager } from "@engine";
+import type { KeyBindings, Screen, UiManager } from "@engine";
 import type {
   AchievementService,
   ProfileService,
@@ -40,6 +40,8 @@ export interface UiContext {
   newGame(): void | Promise<void>;
   /** Confirma a criação e começa uma campanha nova. */
   startNewGame(character: CharacterSave): void | Promise<void>;
+  /** Troca de idioma com telas abertas: refaz a tela-base (título ou pausa) e reabre `reopen` por cima. */
+  relocalize(reopen: () => Screen): void;
   /** Liga/desliga "reduzir movimento" ao vivo: animações da UI, shake da câmera e molduras de flash. */
   setReducedMotion(on: boolean): void;
   /** Aplica a qualidade gráfica ao vivo (resolução de render + sombras). */

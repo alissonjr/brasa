@@ -1,4 +1,5 @@
 import { el } from "@engine";
+import { T, onLanguageChange } from "./strings";
 
 /**
  * CAMADA JOGO. HUD de combate (M2.2): barra de VIDA (canto inferior-esquerdo, placa de
@@ -102,10 +103,13 @@ export class CombatHud {
     ensureStyle();
     this.healthFill = el("div", { class: "chud-fill" });
     this.staminaFill = el("div", { class: "chud-fill" });
-    const health = el("div", { class: "chud-bar chud-health" }, this.healthFill, el("span", { class: "chud-label", text: "VIDA" }));
+    const lifeLabel = el("span", { class: "chud-label", text: T.vidaRotulo });
+    const health = el("div", { class: "chud-bar chud-health" }, this.healthFill, lifeLabel);
     this.staminaBar = el("div", { class: "chud-bar chud-stamina" }, this.staminaFill);
-    this.sparkRow = el("div", { class: "chud-spark-row" }, el("span", { class: "chud-spark-label", text: "FAGULHA" }));
-    this.resoRow = el("div", { class: "chud-reso-row" }, el("span", { class: "chud-reso-label", text: "RESSONÂNCIA" }));
+    const sparkLabel = el("span", { class: "chud-spark-label", text: T.fagulhaRotulo });
+    this.sparkRow = el("div", { class: "chud-spark-row" }, sparkLabel);
+    const resoLabel = el("span", { class: "chud-reso-label", text: T.ressonanciaRotulo });
+    this.resoRow = el("div", { class: "chud-reso-row" }, resoLabel);
     for (let i = 0; i < 5; i++) {
       const mark = el("div", { class: "chud-reso-mark" });
       this.resoRow.appendChild(mark);
@@ -115,18 +119,28 @@ export class CombatHud {
     this.vignette = el("div", { class: "damage-vignette" });
     this.feedback = el("div", { class: "combat-feedback" });
     this.hint = el("div", { class: "combat-hint" });
-    const hintItems: Array<[string[], string]> = [
-      [["Clique", "J"], "Atacar"],
-      [["Dir.", "K"], "Pesado"],
-      [["C"], "Esquiva"],
-      [["E"], "Fogo"],
-      [["Q"], "Bloqueio"],
-      [["T"], "Alvo"],
-    ];
-    hintItems.forEach(([keys, label], i) => {
-      if (i > 0) this.hint.append(el("span", { class: "chint-sep" }));
-      for (const k of keys) this.hint.append(el("span", { class: "ds-kbd", text: k }));
-      this.hint.append(el("span", { text: label }));
+    const paintHint = (): void => {
+      const hintItems: Array<[string[], string]> = [
+        [[T.tcClique, "J"], T.dicaAtacar],
+        [[T.tcDir, "K"], T.dicaPesado],
+        [["C"], T.dicaEsquiva],
+        [["E"], T.dicaFogo],
+        [["Q"], T.dicaBloqueio],
+        [["T"], T.dicaAlvo],
+      ];
+      this.hint.replaceChildren();
+      hintItems.forEach(([keys, label], i) => {
+        if (i > 0) this.hint.append(el("span", { class: "chint-sep" }));
+        for (const k of keys) this.hint.append(el("span", { class: "ds-kbd", text: k }));
+        this.hint.append(el("span", { text: label }));
+      });
+    };
+    paintHint();
+    onLanguageChange(() => {
+      lifeLabel.textContent = T.vidaRotulo;
+      sparkLabel.textContent = T.fagulhaRotulo;
+      resoLabel.textContent = T.ressonanciaRotulo;
+      paintHint();
     });
   }
 

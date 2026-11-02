@@ -4,7 +4,7 @@ import { CRYPT_SPAWN } from "./map";
 /**
  * CAMADA JOGO (Brasa). Definição da campanha (capítulos e objetivos da descida) e os
  * resolvedores que traduzem o estado genérico de progressão (ProgressionService, da
- * plataforma) em nome do capítulo e progresso (%). O texto de objetivo mostrado ao jogador vem do
+ * plataforma) em progresso (%). O texto de objetivo mostrado ao jogador vem do
  * andar atual (main.ts, `ctx.objective()`), não daqui. É AQUI que
  * mora o conteúdo; a plataforma só guarda ids. Cada objetivo tem um gatilho de mundo
  * (trigger) que o app avalia (ex.: chegar perto de um ponto da sala).
@@ -38,10 +38,6 @@ export const DEFAULT_CHAPTER = CAMPAIGN[0]!.id;
 
 export function findChapter(state: ProgressionState): Chapter {
   return CAMPAIGN.find((c) => c.id === state.chapterId) ?? CAMPAIGN[0]!;
-}
-
-export function chapterName(state: ProgressionState): string {
-  return findChapter(state).name;
 }
 
 /** Progresso da campanha inteira (objetivos concluídos / total), 0..100. */

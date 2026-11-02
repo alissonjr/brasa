@@ -31,6 +31,7 @@ export {
 } from "./ui/screens";
 export { configureUiSound } from "./ui/uiSound";
 export { mountMuteButton } from "./ui/muteButton";
+export { openBoonShop } from "./ui/boonShop";
 export { installDesktopNotice } from "./ui/desktopNotice";
 export { configureTitleAmbience, startTitleAmbience, stopTitleAmbience } from "./ui/titleAmbience";
 export { configureMusic, startMusic, stopMusic, setMusicState } from "./audio/musicManager";
@@ -39,13 +40,12 @@ export { configureAmbience, startAmbience, setAmbience, updateAmbience, playWhis
 export { GameHud } from "./ui/hud";
 export type { HudState } from "./ui/hud";
 export type { UiContext } from "./ui/uiContext";
-export { T, F, setLanguage, getLanguage, onLanguageChange } from "./ui/strings";
-export type { Lang } from "./ui/strings";
+export { T, F, itemText, tr, setLanguage, getLanguage, onLanguageChange } from "./ui/strings";
+export type { Lang, StringKey } from "./ui/strings";
 export { CRYPT_SPAWN } from "./content/map";
 export {
   CAMPAIGN,
   DEFAULT_CHAPTER,
-  chapterName,
   progressPercent,
   allObjectives,
 } from "./content/campaign";

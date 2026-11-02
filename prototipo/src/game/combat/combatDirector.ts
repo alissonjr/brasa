@@ -26,7 +26,7 @@ import type { DamageKind } from "../ui/damageNumbers";
 const HIT_RADIUS = 0.7; // raio da hitbox à frente do herói (alcance generoso, golpe confiável)
 
 /** Armas que o herói pode capturar de mortos (cada familia larga a sua). */
-type WeaponKind = "clava" | "cajado" | "espada";
+export type WeaponKind = "clava" | "cajado" | "espada";
 
 export class CombatDirector {
   private readonly hitStop = new HitStop();
@@ -330,10 +330,10 @@ export class CombatDirector {
     return best;
   }
 
-  /** Nome da arma dropada ao alcance (prompt "[G] Pegar X"); null = nenhuma. */
-  nearbyDrop(): string | null {
+  /** Tipo da arma dropada ao alcance (prompt "[G] Pegar X"); null = nenhuma. */
+  nearbyDrop(): WeaponKind | null {
     const d = this.nearestDrop();
-    return d ? (d.kind === "clava" ? "Clava" : d.kind === "espada" ? "Espada" : "Cajado") : null;
+    return d ? d.kind : null;
   }
 
   /** Equipa a arma dropada mais próxima (tecla G). true se pegou. */
@@ -391,11 +391,10 @@ export class CombatDirector {
     }
   }
 
-  /** Arma equipada (HUD): "Clava (4)" / "Cajado (2x)" ou null. */
-  get weaponHud(): string | null {
+  /** Arma equipada (HUD): tipo e cargas restantes (o HUD escreve o nome no idioma ativo), ou null. */
+  get weaponHud(): { kind: WeaponKind; charges: number } | null {
     if (!this.heroWeapon) return null;
-    const w = this.heroWeapon;
-    return w.kind === "clava" ? `Clava (${w.charges})` : w.kind === "espada" ? `Espada (${w.charges})` : `Cajado (${w.charges}x)`;
+    return { kind: this.heroWeapon.kind, charges: this.heroWeapon.charges };
   }
 
   /** Bola de fogo AMIGA disparada pelo cajado capturado (fere inimigos). */

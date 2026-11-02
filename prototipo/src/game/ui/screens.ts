@@ -6,14 +6,14 @@ import "./ds/codex.css";
 import { icon } from "./ds/icons";
 import { illustration, type IllustrationId } from "./ds/illustrations";
 import { DEFAULT_BINDINGS, INPUT_ACTIONS, el, type InputAction, type KeyBindings, type Screen } from "@engine";
-import type { DialogueSpeed, Quality } from "@platform";
-import { T, setLanguage } from "./strings";
+import type { Quality } from "@platform";
+import { T, getLanguage, itemText, onLanguageChange, setLanguage, tr } from "./strings";
 import { uiHover, uiClick } from "./uiSound";
 import { ModelStage } from "./modelStage";
 import { TitleScene } from "./titleScene";
 import { formatTime, readLeaderboard, submitTime } from "../content/leaderboard";
 import type { UiContext } from "./uiContext";
-import { chapterName, progressPercent } from "../content/campaign";
+import { progressPercent } from "../content/campaign";
 import { ACHIEVEMENTS } from "../content/achievements";
 import {
   CODEX_DESCENT,
@@ -298,6 +298,9 @@ export class MainMenuScreen implements Screen {
   }
 }
 
+/** Locale das datas, pelo idioma ativo da UI. */
+const dateLocale = (): string => (getLanguage() === "en" ? "en-US" : "pt-BR");
+
 // --- Carregar / slots de save ---
 
 const AUTO_SLOT = "auto";
@@ -373,7 +376,7 @@ export class SavesScreen implements Screen {
       return;
     }
     for (const s of slots) {
-      const quando = new Date(s.updatedAt).toLocaleString("pt-BR");
+      const quando = new Date(s.updatedAt).toLocaleString(dateLocale());
       const info = el(
         "div",
         { class: "slot-info" },
@@ -430,10 +433,12 @@ export class SavesScreen implements Screen {
 
 // --- Opções ---
 
+type OptionsTab = "audio" | "controles" | "graficos" | "idioma" | "acessibilidade";
+
 export class OptionsScreen implements Screen {
   readonly element: HTMLElement;
 
-  constructor(ctx: UiContext) {
+  constructor(ctx: UiContext, initialTab: OptionsTab = "audio") {
     const s = ctx.settings.get();
 
     // Deslizante do design system: o preenchimento em brasa segue o valor via --p.
@@ -470,7 +475,7 @@ export class OptionsScreen implements Screen {
 
     const langSel = el(
       "select",
-      { class: "ds-select" },
+      { class: "ds-select", "aria-label": T.idioma },
       el("option", { value: "pt", text: "Português" }),
       el("option", { value: "en", text: "English" })
     );
@@ -479,11 +484,10 @@ export class OptionsScreen implements Screen {
       const lang = langSel.value as "pt" | "en";
       ctx.settings.set({ language: lang });
       setLanguage(lang); // troca o idioma da UI em runtime
-      ctx.ui.back(); // reabre esta tela já no novo idioma
-      ctx.ui.push(new OptionsScreen(ctx));
+      ctx.relocalize(() => new OptionsScreen(ctx, "idioma")); // refaz a tela de baixo e reabre aqui
     });
 
-    const scaleSel = el("select", { class: "ds-select" });
+    const scaleSel = el("select", { class: "ds-select", "aria-label": T.escalaInterface });
     for (const p of [90, 100, 110, 125]) scaleSel.append(el("option", { value: String(p / 100), text: `${p}%` }));
     scaleSel.value = String(s.uiScale);
     scaleSel.addEventListener("change", () => {
@@ -493,7 +497,7 @@ export class OptionsScreen implements Screen {
     });
 
     // Qualidade gráfica (resolução de render + sombras): aplica ao vivo via ctx.
-    const qualitySel = el("select", { class: "ds-select" });
+    const qualitySel = el("select", { class: "ds-select", "aria-label": T.qualidade });
     const qualityLabels: Record<Quality, string> = { baixo: T.qualBaixo, medio: T.qualMedio, alto: T.qualAlto };
     for (const q of ["baixo", "medio", "alto"] as Quality[]) qualitySel.append(el("option", { value: q, text: qualityLabels[q] }));
     qualitySel.value = s.quality;
@@ -503,47 +507,65 @@ export class OptionsScreen implements Screen {
       ctx.setQuality(v);
     });
 
-    // Velocidade do typewriter de diálogo (persiste; a caixa de diálogo consome no futuro).
-    const speedSel = el("select", { class: "ds-select" });
-    const speedLabels: Record<DialogueSpeed, string> = {
-      lento: T.velLento,
-      normal: T.velNormal,
-      rapido: T.velRapido,
-      instantaneo: T.velInstantaneo,
+    // Abas (spec-ui-hud-ux 5.3): Áudio, Controles, Gráficos, Idioma, Acessibilidade. Cada aba é
+    // um painel; só o ativo aparece (o resto fica `hidden`, fora do foco e das setas).
+    const tabs: Array<{ id: OptionsTab; label: string; rows: Array<Node> }> = [
+      {
+        id: "audio",
+        label: T.audio,
+        rows: [
+          slider(T.geral, s.masterVolume, (v) => ctx.settings.set({ masterVolume: v })),
+          slider(T.musica, s.musicVolume, (v) => ctx.settings.set({ musicVolume: v })),
+          slider(T.efeitos, s.sfxVolume, (v) => ctx.settings.set({ sfxVolume: v })),
+        ],
+      },
+      { id: "controles", label: T.controles, rows: [btn(T.remapear, () => ctx.ui.push(new ControlsScreen(ctx)))] },
+      { id: "graficos", label: T.graficos, rows: [el("label", { class: "opt-row" }, el("span", { text: T.qualidade }), qualitySel)] },
+      { id: "idioma", label: T.idioma, rows: [el("label", { class: "opt-row" }, el("span", { text: T.idioma }), langSel)] },
+      {
+        id: "acessibilidade",
+        label: T.acessibilidade,
+        rows: [
+          el("label", { class: "opt-row" }, el("span", { text: T.escalaInterface }), scaleSel),
+          toggle(T.reduzirMovimento, s.reducedMotion, (v) => {
+            ctx.settings.set({ reducedMotion: v });
+            ctx.setReducedMotion(v);
+          }),
+          toggle(T.altoContraste, s.highContrast, (v) => {
+            ctx.settings.set({ highContrast: v });
+            ctx.ui.setHighContrast(v);
+          }),
+        ],
+      },
+    ];
+    const tablist = el("div", { class: "ds-tabs", role: "tablist", "aria-label": T.opcoes });
+    const panels = el("div", { class: "opt-panels" });
+    const tabEls = new Map<OptionsTab, HTMLElement>();
+    const panelEls = new Map<OptionsTab, HTMLElement>();
+    const select = (id: OptionsTab): void => {
+      for (const t of tabs) {
+        const on = t.id === id;
+        tabEls.get(t.id)!.setAttribute("aria-selected", String(on));
+        tabEls.get(t.id)!.tabIndex = on ? 0 : -1;
+        panelEls.get(t.id)!.hidden = !on;
+      }
     };
-    for (const sp of ["lento", "normal", "rapido", "instantaneo"] as DialogueSpeed[]) {
-      speedSel.append(el("option", { value: sp, text: speedLabels[sp] }));
+    for (const t of tabs) {
+      const tab = el("button", { class: "ds-tab", type: "button", role: "tab", id: `opt-tab-${t.id}`, "aria-controls": `opt-panel-${t.id}`, text: t.label });
+      tab.addEventListener("pointerenter", uiHover);
+      tab.addEventListener("click", () => {
+        uiClick();
+        select(t.id);
+      });
+      const panel = el("div", { class: "opt-panel", role: "tabpanel", id: `opt-panel-${t.id}`, "aria-labelledby": `opt-tab-${t.id}` }, ...t.rows);
+      tabEls.set(t.id, tab);
+      panelEls.set(t.id, panel);
+      tablist.append(tab);
+      panels.append(panel);
     }
-    speedSel.value = s.dialogueSpeed;
-    speedSel.addEventListener("change", () => ctx.settings.set({ dialogueSpeed: speedSel.value as DialogueSpeed }));
+    select(initialTab);
 
-    this.element = backdrop([
-      el("h2", { class: "menu-title", text: T.opcoes }),
-      el("div", { class: "opt-section", text: T.audio }),
-      slider(T.geral, s.masterVolume, (v) => ctx.settings.set({ masterVolume: v })),
-      slider(T.musica, s.musicVolume, (v) => ctx.settings.set({ musicVolume: v })),
-      slider(T.efeitos, s.sfxVolume, (v) => ctx.settings.set({ sfxVolume: v })),
-      el("p", { class: "opt-note", text: T.audioEmBreve }),
-      el("div", { class: "opt-section", text: T.graficos }),
-      el("label", { class: "opt-row" }, el("span", { text: T.qualidade }), qualitySel),
-      el("div", { class: "opt-section", text: T.dialogo }),
-      el("label", { class: "opt-row" }, el("span", { text: T.velocidadeTexto }), speedSel),
-      el("p", { class: "opt-note", text: T.dialogoEmBreve }),
-      el("div", { class: "opt-section", text: T.controles }),
-      btn(T.remapear, () => ctx.ui.push(new ControlsScreen(ctx))),
-      el("div", { class: "opt-section", text: T.acessibilidade }),
-      el("label", { class: "opt-row" }, el("span", { text: T.escalaInterface }), scaleSel),
-      toggle(T.reduzirMovimento, s.reducedMotion, (v) => {
-        ctx.settings.set({ reducedMotion: v });
-        ctx.setReducedMotion(v);
-      }),
-      toggle(T.altoContraste, s.highContrast, (v) => {
-        ctx.settings.set({ highContrast: v });
-        ctx.ui.setHighContrast(v);
-      }),
-      el("label", { class: "opt-row" }, el("span", { text: T.idioma }), langSel),
-      btn(T.voltar, () => ctx.ui.back()),
-    ]);
+    this.element = backdrop([el("h2", { class: "menu-title", text: T.opcoes }), tablist, panels, btn(T.voltar, () => ctx.ui.back())]);
   }
 }
 
@@ -691,13 +713,13 @@ export class ProfileScreen implements Screen {
       el(
         "div",
         { class: "profile-stats" },
-        statRow(T.dificuldade, difficultyName(ch.difficulty)),
-        statRow(T.dom, domName(ch.dom)),
+        statRow(T.dificuldade, tr("dif_", `${ch.difficulty}_n`, difficultyName(ch.difficulty))),
+        statRow(T.dom, tr("dom_", `${ch.dom}_n`, domName(ch.dom))),
         statRow(T.progresso, `${progressPercent(ctx.progression.state())}%`),
         statRow(T.conquistas, `${ctx.achievements.count()}/${ACHIEVEMENTS.length}`),
         statRow(T.tempoDeJogo, fmtTime(ctx.playtimeSec())),
-        statRow(T.capitulo, chapterName(ctx.progression.state())),
-        statRow(T.membroDesde, new Date(p.createdAt).toLocaleDateString("pt-BR"))
+        statRow(T.capitulo, T.nomeCapitulo),
+        statRow(T.membroDesde, new Date(p.createdAt).toLocaleDateString(dateLocale()))
       ),
       el(
         "div",
@@ -719,6 +741,7 @@ export class AchievementsScreen implements Screen {
     const list = el("div", { class: "ach-list" });
     for (const a of ACHIEVEMENTS) {
       const unlocked = ctx.achievements.has(a.id);
+      const txt = itemText("ach_", a);
       list.append(
         el(
           "div",
@@ -727,8 +750,8 @@ export class AchievementsScreen implements Screen {
           el(
             "div",
             { class: "ach-text" },
-            el("strong", { text: unlocked ? a.name : "???" }),
-            el("span", { text: unlocked ? a.description : T.bloqueada })
+            el("strong", { text: unlocked ? txt.name : "???" }),
+            el("span", { text: unlocked ? txt.description : T.bloqueada })
           )
         )
       );
@@ -752,11 +775,11 @@ function codeLabel(code: string): string {
     ArrowDown: "↓",
     ArrowLeft: "←",
     ArrowRight: "→",
-    Space: "Espaço",
-    ShiftLeft: "Shift", ShiftRight: "Shift D.",
-    ControlLeft: "Ctrl", ControlRight: "Ctrl D.",
-    AltLeft: "Alt", AltRight: "Alt D.",
-    Mouse0: "Botão esq.", Mouse1: "Botão meio", Mouse2: "Botão dir.",
+    Space: T.tcEspaco,
+    ShiftLeft: "Shift", ShiftRight: T.tcShiftD,
+    ControlLeft: "Ctrl", ControlRight: T.tcCtrlD,
+    AltLeft: "Alt", AltRight: T.tcAltD,
+    Mouse0: T.tcMouseEsq, Mouse1: T.tcMouseMeio, Mouse2: T.tcMouseDir,
   };
   return specials[code] ?? code;
 }
@@ -774,12 +797,12 @@ const ACTION_LABEL: Record<InputAction, () => string> = {
   block: () => T.acBloqueio,
   ember: () => T.acFagulha,
   lockOn: () => T.acLockon,
-  potion1: () => "Poção: Recuperação",
-  potion2: () => "Poção: Fúria",
-  interact: () => "Acender / Interagir",
-  execute: () => "Executar",
-  ultimate: () => "Ultimate (Erupção)",
-  pickup: () => "Pegar arma",
+  potion1: () => T.acPocao1,
+  potion2: () => T.acPocao2,
+  interact: () => T.acInteragir,
+  execute: () => T.acExecutar,
+  ultimate: () => T.acUltimate,
+  pickup: () => T.acPegar,
 };
 
 /** Mescla o remapeamento salvo (parcial) sobre o padrão da engine. */
@@ -1180,9 +1203,9 @@ export class CharacterCreateScreen implements Screen {
       const buttons = MANTOS.map((m, i) => {
         const b = el(
           "button",
-          { class: "ds-swatch ds-rise", title: m.name, style: `--i:${i};--c:${m.color}` },
+          { class: "ds-swatch ds-rise", title: tr("manto_", m.id, m.name), style: `--i:${i};--c:${m.color}` },
           el("span", { class: "ds-swatch__dot" }),
-          el("span", { text: m.name }),
+          el("span", { text: tr("manto_", m.id, m.name) }),
         );
         b.addEventListener("pointerenter", uiHover);
         b.addEventListener("click", () => {
@@ -1246,14 +1269,14 @@ export class CharacterCreateScreen implements Screen {
 
     const buildDom = (): HTMLElement =>
       buildCards(
-        DONS,
+        DONS.map((d) => ({ id: d.id, ...itemText("dom_", d) })),
         () => this.draft.dom,
         (id) => (this.draft.dom = id),
         (id) => icon(CC_DOM_ICON[id] ?? "spark", 46),
       );
     const buildDificuldade = (): HTMLElement =>
       buildCards(
-        DIFFICULTIES,
+        DIFFICULTIES.map((d) => ({ id: d.id, ...itemText("dif_", d) })),
         () => this.draft.difficulty,
         (id) => (this.draft.difficulty = id as Difficulty),
         (id) => icon("flame", 46).repeat(CC_DIFF_FLAMES[id] ?? 1),
@@ -1338,12 +1361,12 @@ export class CharacterCreateScreen implements Screen {
 
 /** Botão "Menu" persistente no HUD do jogo (abre a pausa). Discoverável e tocável. */
 export function createPauseButton(onClick: () => void): HTMLElement {
-  const b = el(
-    "button",
-    { class: "hud-pause-btn", title: "Pausar (Esc)" },
-    el("span", { class: "glyph", text: "≡" }),
-    el("span", { text: T.menu })
-  );
+  const label = el("span", { text: T.menu });
+  const b = el("button", { class: "hud-pause-btn", title: T.pausarTitulo }, el("span", { class: "glyph", text: "≡" }), label);
+  onLanguageChange(() => {
+    b.title = T.pausarTitulo;
+    label.textContent = T.menu;
+  });
   b.addEventListener("pointerenter", uiHover);
   b.addEventListener("click", uiClick);
   b.addEventListener("click", onClick);
@@ -1352,6 +1375,7 @@ export function createPauseButton(onClick: () => void): HTMLElement {
 
 export function createAutosaveIndicator(): { element: HTMLElement; flash: () => void } {
   const element = el("div", { class: "autosave-indicator", text: T.autosalvando });
+  onLanguageChange(() => (element.textContent = T.autosalvando));
   let timer = 0;
   const flash = (): void => {
     element.classList.add("show");
