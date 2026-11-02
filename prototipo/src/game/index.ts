@@ -52,8 +52,12 @@ export {
 export type { Chapter, Objective } from "./content/campaign";
 export { ACHIEVEMENTS, achievementForObjective, achievementById } from "./content/achievements";
 export type { Achievement } from "./content/achievements";
-export { readGameSave } from "./content/saveData";
+export { readGameSave, exploracaoDefaults } from "./content/saveData";
 export type { GameSaveData, RunSave } from "./content/saveData";
+export { ExploracaoRegistry } from "./run/exploracao";
+export type { ExploracaoHooks } from "./run/exploracao";
+export { RouteState, ROTA, exitsFor, planRoute, formatNo, parseNo, TRANSITIONS } from "./run/rota";
+export type { NodeKind, ExitKind, Place, RoutePlan } from "./run/rota";
 export { readLeaderboard, submitTime, formatTime } from "./content/leaderboard";
 export {
   CODEX_FLOORS,
