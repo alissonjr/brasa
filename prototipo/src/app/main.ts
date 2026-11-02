@@ -68,8 +68,14 @@ import {
   type StringKey,
   type CharacterSave,
   type RunSave,
+  type NodeKind,
   ExploracaoRegistry,
+  RouteState,
+  ROTA,
+  stepCommit,
   exploracaoDefaults,
+  ExitMarkers,
+  type Commit,
 } from "@game";
 import { SAVE_SCHEMA_VERSION, requestPersistentStorage } from "@platform";
 import type { Quality, SaveData } from "@platform";
@@ -216,7 +222,10 @@ async function main(): Promise<void> {
       tp: (x: number, z: number, y = 1.5) => hero.teleport(new Vector3(x, y, z)),
       heal: () => hero.combat.health.heal(9999),
       enterRoom: (i: number) => enterRoom(i), // DEV: pula para o andar i (medição de perf / capturas)
-      room: () => (currentRoom ? { brazier: { x: currentRoom.brazier.x, z: currentRoom.brazier.z }, exit: currentRoom.exit } : null),
+      room: () => (currentRoom ? { brazier: { x: currentRoom.brazier.x, z: currentRoom.brazier.z }, exit: currentRoom.exit, doors: currentRoom.doors } : null),
+      enterNode: (k: NodeKind, from: number) => enterNode(k, from, true), // DEV: vai direto a uma antecâmara
+      route: () => ({ ...route.save(), plan: route.plan.side, node: route.node, floor: floorIndex, passageOpen, fragments }),
+      takeFragment: () => { if (currentRoom && !fragmentTaken) { const b = currentRoom.brazier; hero.teleport(new Vector3(b.x + 3, 1.5, b.z - 0.6)); } }, // DEV: encosta no relicário (colhe a estilha) fora do gatilho do alçapão
       clear: () => combat.clearEnemies(), // DEV: limpa a sala (libera o relicário)
       die: () => platform.events.emit("hero:died", {}), // DEV: derrota
       win: () => { descentDone = true; }, // DEV: vitória (abre a tela de fim)
@@ -266,9 +275,10 @@ async function main(): Promise<void> {
   let fagulhas = 0; // moeda: cinza quente dos mortos, gasta nas dádivas do braseiro
   let runActive = false; // há uma descida em andamento (para persistência/retomar)
   let runSeed = newSeed(); // semente da run: jitter de posição e ordem de oferta determinísticos
-  // EXPLORAÇÃO (docs/brasa/spec-exploracao-indice.md): os sistemas (livros, poções, cenário) se
-  // registram aqui, cada um com UMA linha; o `main.ts` só dispara os eventos.
+  // EXPLORAÇÃO (docs/brasa/spec-exploracao-indice.md): `explor` recebe os sistemas (livros, poções,
+  // cenário), cada um com uma linha de registro; `route` é o plano de saídas, o nó e o gasto.
   const explor = new ExploracaoRegistry();
+  const route = new RouteState(runSeed);
   let timedRun = false; // a descida foi jogada do começo nesta sessão (vale para o leaderboard)
   let runStartedAt = 0; // performance.now() do início da descida cronometrada
   const purchasedBoons: string[] = []; // nomes das dádivas compradas (reaplicadas ao carregar)
@@ -281,10 +291,11 @@ async function main(): Promise<void> {
   // derrotar -> recuperar a estilha -> descer). `ctx.objective()` devolve isto.
   const descentObjective = (): string => {
     if (descentDone) return T.objVitoria;
+    if (route.node) return `${nodeName(route.node.node)}. ${F("objNoSair", { n: route.node.from + 2 })}`;
     const n = combat.enemiesAlive;
     const last = floorIndex >= DESCENT.length - 1;
     if (n > 0) return F("objDerrote", { n });
-    if (fragmentTaken) return last ? T.objFosso : T.objAlcapao;
+    if (fragmentTaken) return last ? T.objFosso : currentRoom && currentRoom.doors.length > 0 ? T.promptSaida : T.objAlcapao;
     return last ? T.objUltimaEstilha : F("objEstilha", { n: fragments });
   };
   // Inventário de poções (cargas; comprado na banca do braseiro, usado com Digit1/Digit2).
@@ -353,6 +364,12 @@ async function main(): Promise<void> {
   promptEl.textContent = T.promptEstilha;
   document.body.appendChild(promptEl);
 
+  // Saídas do andar: marcadores projetados (ícone + anel de compromisso) e o compromisso em curso.
+  const exitMarkers = new ExitMarkers(document.body);
+  const commit: Commit = { id: null, t: 0 };
+  let exitsArmed = false; // o compromisso das saídas só conta depois de a Acendedora sair dos gatilhos uma vez
+  const nodeName = (k: NodeKind): string => (k === "estante" ? T.saidaEstante : k === "bancada" ? T.saidaBancada : T.saidaAlcapao);
+
   // Barra de progresso da canalização do acender (aparece só enquanto canaliza).
   const channelBar = document.createElement("div");
   channelBar.className = "hud-channel";
@@ -410,6 +427,7 @@ async function main(): Promise<void> {
     paintExec();
     bossName.textContent = T.guardiao;
     fagulhaEl.setAttribute("aria-label", T.fagulhaRotulo);
+    exitMarkers.relabel();
   });
 
   // HUD de jogo (selo de profundidade, objetivo, legendas e toasts). Criado aqui porque o eco
@@ -435,25 +453,40 @@ async function main(): Promise<void> {
   // Descidas, retry e novo jogo anunciam o andar (eco, stinger, fala do Guardiao) mesmo com a
   // simulacao pausada na transicao; boot e restauracao de save entram em silencio.
   let announceNext = false;
+  // Monta a sala `def` no lugar da anterior (andar ou antecâmara): descarte, herói na entrada,
+  // câmera colada, fagulha cheia e a lista de props/limites que o diretor de combate precisa.
+  const mountRoom = (def: RoomDef, perfIndex: number, perfKind: string): Room => {
+    currentRoom?.dispose();
+    currentBoss = null;
+    exitMarkers.clear();
+    combat.clearEnemies();
+    disposeOrphanSkeletons(scene); // esqueletos/texturas de ossos dos mortos descartados (vazavam por sala)
+    const room = buildCryptRoom(scene, cryptCtx, def);
+    currentRoom = room;
+    perf.logRoom(perfIndex, perfKind); // mede draw calls da sala recem-montada (gate de performance)
+    hero.teleport(room.spawn);
+    camera.snap(room.spawn); // cola a câmera atrás do herói na nova sala (sem varrer o cenário)
+    hero.combat.refillSpark(); // entra com a fagulha cheia
+    combat.setEnemyBounds(room.enemyBounds); // inimigos não recuam para trás do altar/paredes
+    combat.setStrikeProps(room.strikeProps); // vasos quebráveis / cadeiras chutáveis desta sala
+    commit.id = null;
+    commit.t = 0;
+    exitsArmed = false;
+    return room;
+  };
+
   const enterRoom = (i: number): void => {
     const announce = gameActive || announceNext;
     announceNext = false;
-    currentRoom?.dispose();
-    currentBoss = null;
-    combat.clearEnemies();
-    disposeOrphanSkeletons(scene); // esqueletos/texturas de ossos dos mortos descartados (vazavam por sala)
-    const def = DESCENT[i]!;
-    currentRoom = buildCryptRoom(scene, cryptCtx, def);
-    perf.logRoom(i, def.kind); // mede draw calls da sala recem-montada (gate de performance)
+    route.enterFloor(i); // sai de qualquer antecâmara; as escolhas daqui em diante ainda não valem
+    const def: RoomDef = { ...DESCENT[i]!, sideDoor: route.plan.side[i] ?? undefined };
+    const room = mountRoom(def, i, def.kind);
     floorIndex = i;
     runActive = true; // há uma descida em andamento (persistível)
     roomCleared = false; // passagem selada até limpar a câmara
     passageOpen = false; // alçapão só libera após recuperar a estilha
     fragmentTaken = false; // a estilha deste andar ainda está no relicário
     readShown.clear(); // inscrições do andar anterior não contam mais
-    hero.teleport(currentRoom.spawn);
-    camera.snap(currentRoom.spawn); // cola a câmera atrás do herói na nova sala (sem varrer o cenário)
-    hero.combat.refillSpark(); // entra no andar com a fagulha cheia
     // Mortos despertos do andar: mistura de tipos que endurece com a profundidade
     // (morte permanente: a sala "limpa" ao derrotá-los). Os arquétipos entram em ESCADA,
     // cada um introduzindo um COMPORTAMENTO novo (não só stats): demônio (melee agressivo),
@@ -468,13 +501,11 @@ async function main(): Promise<void> {
       ["sentinela", "espreitador", "arqueiro", "warrior", "rogue"], // 5 elite + pressão mista (ranged + melee)
       ["brutamonte", "antigo", "conjurador", "demonio"], // 6 (sobra: o andar 6 é do CHEFE)
     ];
-    const anchor = currentRoom.enemyAnchor; // centro do spawn (varia com a planta)
-    combat.setEnemyBounds(currentRoom.enemyBounds); // inimigos não recuam para trás do altar/paredes
-    combat.setStrikeProps(currentRoom.strikeProps); // vasos quebráveis / cadeiras chutáveis deste andar
+    const anchor = currentRoom!.enemyAnchor; // centro do spawn (varia com a planta)
     if (def.boss) {
       // Andar do Guardião: 1 contra 1 na arena (surge à frente do altar).
       currentBoss = combat.addBoss(new Vector3(anchor.x, 0, anchor.z + 4));
-      currentBoss.bindArena(currentRoom.arena); // a arena reage à gangorra de luz da Brasa
+      currentBoss.bindArena(room.arena); // a arena reage à gangorra de luz da Brasa
       platform.events.emit("crypt:floor", { index: i, kind: def.kind });
       console.log(`[descida] andar ${i + 1}/${DESCENT.length} (${def.kind}): GUARDIÃO`);
       if (announce) playStinger("guardiao"); // avistar o Guardião (stinger grave e ominoso)
@@ -505,9 +536,42 @@ async function main(): Promise<void> {
       if (!def.boss) playStinger("despertar"); // os mortos da câmara acordam (stinger frio)
       playStir(def.boss ? 1 : (ROSTER[i]?.length ?? 1)); // os mortos se agitam ao acordar
       gameHud.say("eco", ECHOES[i] ?? "", 4200); // eco/memória do andar
-      playWhisper(Math.sign(currentRoom.inscriptionPos?.x ?? 0) * 0.6); // o eco sussurra do nicho
+      playWhisper(Math.sign(currentRoom!.inscriptionPos?.x ?? 0) * 0.6); // o eco sussurra do nicho
     }
     explor.onEnterFloor(i);
+  };
+
+  // ANTECÂMARA (nó): sala lateral entre o andar `from` e o `from + 1`. Sem inimigos, sem eco, sem
+  // `crypt:floor` (a Crônica só marca andares) e sem estilha: a estilha do andar de origem já foi
+  // colhida (R1), então tudo nasce "limpo" e a única saída é a escada para o andar seguinte.
+  // `fresh`: entrada nova (cura própria, gasto zerado); retomar e recomeçar mantêm o gasto (R7, R8).
+  const enterNode = (kind: NodeKind, from: number, fresh: boolean): void => {
+    const announce = gameActive || announceNext;
+    announceNext = false;
+    // perf: indice 10+ (antecâmaras ficam fora do 1..7 dos andares); +10 por tipo para as linhas não se sobrescreverem
+    mountRoom({ index: from, fromIndex: from, kind: "guarda", enemies: 0, node: kind }, 10 + from + (kind === "bancada" ? 10 : kind === "esquecida" ? 20 : 0), kind);
+    route.enterNode(kind, from, fresh);
+    floorIndex = from; // continua sendo o andar de origem (save, HUD, retry)
+    runActive = true;
+    roomCleared = true;
+    fragmentTaken = true;
+    passageOpen = true;
+    readShown.clear();
+    currentRoom!.setCleared(true); // a escada para o andar seguinte já está aberta
+    promptEl.textContent = T.promptEscada;
+    floorDepth = from / Math.max(1, DESCENT.length - 1);
+    startAmbience();
+    setAmbience({ depth: floorDepth, danger: 0, urgency: 0 });
+    if (fresh && !route.isSpent("cura")) {
+      route.markSpent("cura");
+      hero.combat.healByMax(ROTA.nodeHealFrac[kind]); // cura própria da antecâmara (R5), no lugar dos 40% do braseiro
+      combatHud.flashHeal();
+      healChime();
+    }
+    platform.events.emit("crypt:node", { node: kind, fromIndex: from });
+    if (announce) gameHud.toast(nodeName(kind));
+    console.log(`[descida] antecâmara ${kind} (entre o andar ${from + 1} e o ${from + 2})`);
+    explor.onEnterNode(kind, from);
   };
 
   // Dádivas da Brasa: compradas no relicário (custam Fagulha). Cada descida oferece 3 do
@@ -588,6 +652,7 @@ async function main(): Promise<void> {
       runActive = false; // run concluída: não retomar
       void doAutosave();
     } else {
+      route.choose(floorIndex, "alcapao");
       hero.combat.healByMax(hero.combat.brazierHealFrac); // acender o braseiro cura (respiro; Braseiro Quente sobe)
       combatHud.flashHeal();
       healChime();
@@ -600,6 +665,31 @@ async function main(): Promise<void> {
     gameActive = true;
     descending = false;
   };
+
+  // Troca de lugar com fade, simulação pausada e checkpoint gravado DENTRO do fade (a gravação
+  // acabar antes do recarregar da página: o autosave do beforeunload é "dispare e esqueça").
+  const transition = async (swap: () => void): Promise<void> => {
+    descending = true;
+    gameActive = false;
+    promptEl.style.opacity = "0";
+    exitMarkers.clear();
+    document.exitPointerLock();
+    await fadeTo(1);
+    announceNext = true;
+    swap();
+    await doAutosave();
+    await fadeTo(0);
+    gameActive = true;
+    descending = false;
+  };
+  /** Porta lateral: o andar de origem dá lugar à antecâmara, SEM tela de braseiro (R5). */
+  const takeSideDoor = (kind: NodeKind): Promise<void> =>
+    transition(() => {
+      route.choose(floorIndex, kind);
+      enterNode(kind, floorIndex, true);
+    });
+  /** Escada da antecâmara: segue para o andar seguinte, sem braseiro (a cura veio com a entrada). */
+  const leaveNode = (): Promise<void> => transition(() => enterRoom(floorIndex + 1));
 
   /** Leitura de inscrições/pergaminhos: perto + [R] mostra a lore (uma vez por texto). */
   const updateReadables = (): void => {
@@ -618,11 +708,29 @@ async function main(): Promise<void> {
   };
 
   /** Chamado no loop: desce quando a sala está limpa e a Acendedora alcança o braseiro. */
-  const tryDescend = (): void => {
+  const tryDescend = (dt: number): void => {
     if (descending || descentDone || defeated || !currentRoom) return;
     if (!passageOpen) return; // só desce depois de acender a Brasa
     const ex = currentRoom.exit;
-    if (Math.hypot(hero.position.x - ex.x, hero.position.z - ex.z) <= ex.radius) void advance();
+    const hx = hero.position.x;
+    const hz = hero.position.z;
+    const onHatch = Math.hypot(hx - ex.x, hz - ex.z) <= ex.radius;
+    const door = currentRoom.doors.find((d) => Math.hypot(hx - d.x, hz - d.z) <= d.radius);
+    // Sem escolha (primeiro andar, antecâmara, última câmara): pisar basta, como sempre foi.
+    // Com duas saídas, entrar exige 0,6 s dentro do gatilho de UMA delas (R4); sair do raio cancela.
+    if (currentRoom.doors.length === 0) {
+      if (onHatch) void (route.node ? leaveNode() : advance());
+      return;
+    }
+    // Ao abrir, a Acendedora costuma estar pisando o gatilho do alçapão (o relicário fica a 3 m dele):
+    // o compromisso só vale depois de sair de todos os gatilhos uma vez (nada de descer sem querer).
+    const inside = onHatch ? "alcapao" : door ? door.kind : null;
+    if (inside === null) exitsArmed = true;
+    if (!exitsArmed) return;
+    if (!stepCommit(commit, inside, dt)) return;
+    playStinger("fagulha");
+    if (onHatch) void advance();
+    else if (door) void takeSideDoor(door.kind);
   };
 
   // Acender a Brasa: roda TODO frame (não no throttle do HUD) para canalização/virada suaves.
@@ -665,10 +773,30 @@ async function main(): Promise<void> {
         currentRoom.setBrazierLit(1); // lampejo do relicário ao ceder a estilha (não permanece)
         window.setTimeout(() => currentRoom?.setBrazierLit(0), 900); // e some logo (sem fogo no andar)
         playStinger("fagulha");
-        gameHud.toast(F("estilhaRecuperada", { n: fragments }));
+        const doors = currentRoom.doors;
+        exitsArmed = false;
+        promptEl.textContent = doors.length > 0 ? T.promptSaida : T.objAlcapao;
+        if (doors.length > 0) {
+          // Duas saídas: cada uma com ícone, assinatura sonora e luz próprias (sem texto para entender).
+          const ex = currentRoom.exit;
+          exitMarkers.set([
+            { id: "alcapao", icon: "hatch", color: "var(--ember-400)", name: () => T.saidaAlcapao, promise: () => T.saidaAlcapaoD, x: ex.x, y: 1.7, z: ex.z },
+            ...doors.map((d) => ({
+              id: d.kind,
+              icon: d.kind === "bancada" ? "potion" : "book",
+              color: d.kind === "bancada" ? "var(--life-400)" : "var(--gold-300)",
+              name: () => nodeName(d.kind),
+              promise: () => (d.kind === "bancada" ? T.saidaBancadaD : T.saidaEstanteD),
+              x: d.x - 0.3, y: 1.9, z: d.z,
+            })),
+          ]);
+          window.setTimeout(() => playStinger("saidaAlcapao"), 380);
+          for (const d of doors) window.setTimeout(() => playStinger(d.kind === "bancada" ? "saidaBancada" : "saidaEstante"), 820);
+        }
+        gameHud.toast(F(doors.length > 0 ? "estilhaRecuperadaPortas" : "estilhaRecuperada", { n: fragments }));
       }
     } else {
-      promptEl.textContent = T.objAlcapao;
+      promptEl.textContent = currentRoom.doors.length > 0 ? T.promptSaida : T.objAlcapao;
     }
   };
 
@@ -678,7 +806,10 @@ async function main(): Promise<void> {
     combat.resetHeroDeath();
     hero.combat.revive(); // vida cheia
     announceNext = true;
-    enterRoom(floorIndex); // recomeça o ANDAR atual (inimigos restaurados; upgrades/Fagulha mantidos)
+    const n = route.node;
+    // R8: morrer numa antecâmara recomeça a antecâmara (o gasto fica), nunca o andar de origem.
+    if (n) enterNode(n.node, n.from, false);
+    else enterRoom(floorIndex); // recomeça o ANDAR atual (inimigos restaurados; upgrades/Fagulha mantidos)
     gameActive = true;
     gameHud.setVisible(true);
     pauseBtn.style.display = "";
@@ -713,7 +844,9 @@ async function main(): Promise<void> {
     inv.vida = run.pocaoVida;
     inv.furia = run.pocaoFuria;
     runSeed = run.seed > 0 ? run.seed : newSeed(); // legado (seed 0): gera uma para esta retomada
+    const place = route.load(run, runSeed); // R7: volta ao andar ou à antecâmara em que o save estava
     explor.restore(run);
+    fragments = place.kind === "node" ? place.from + 1 : Math.min(run.floorIndex, DESCENT.length - 1); // uma estilha por andar já deixado (a da antecâmara já foi colhida)
     timedRun = false; // run retomada não conta para o leaderboard (tempo não é justo)
     purchasedBoons.length = 0;
     const all = [...BOONS, FREE_BOON];
@@ -725,7 +858,8 @@ async function main(): Promise<void> {
       }
     }
     hero.combat.revive(); // descanso no braseiro: vida cheia (após reaplicar dádivas)
-    enterRoom(Math.min(run.floorIndex, DESCENT.length - 1));
+    if (place.kind === "node") enterNode(place.node, place.from, false);
+    else enterRoom(Math.min(run.floorIndex, DESCENT.length - 1));
     updateFagulhaHud();
     updatePotionHud();
   };
@@ -736,7 +870,9 @@ async function main(): Promise<void> {
     inv.furia = 0;
     purchasedBoons.length = 0;
     runSeed = newSeed(); // nova run: nova semente
+    route.reset(runSeed); // novo plano de saídas, sem histórico
     explor.forget();
+    fragments = 0;
     timedRun = true; // jogada do começo nesta sessão: vale para o leaderboard
     runStartedAt = performance.now();
     descentDone = false;
@@ -793,7 +929,7 @@ async function main(): Promise<void> {
     // O diretor avança hit stop + alvos e devolve o dt de combate (0 no freeze) do herói.
     const combatDt = combat.update(dt);
     hero.update(combatDt, input, camera);
-    explor.update(combatDt); // sistemas de exploração avançam com o dt de combate (hit-stop não conta)
+    explor.update(combatDt); // sistemas de exploração (livros, poções, cenário) avançam com o dt de combate
   });
   scene.onBeforeRenderObservable.add(() => {
     const dt = engine.getDeltaTime() / 1000;
@@ -889,8 +1025,10 @@ async function main(): Promise<void> {
           pocaoFuria: inv.furia,
           upgrades: purchasedBoons,
           seed: runSeed,
-          ...exploracaoDefaults(), // campos de exploração: padrão, sobrescrito pelo que cada sistema possui
+          // exploração: padrão, depois o que os sistemas registrados possuem, por fim a rota
+          ...exploracaoDefaults(),
           ...explor.snapshot(),
+          ...route.save(),
         },
       },
     };
@@ -912,6 +1050,7 @@ async function main(): Promise<void> {
   // Gatilhos de objetivo por proximidade na sala.
   const objectives = allObjectives();
   function checkObjectives(): void {
+    if (route.node) return; // os pontos de objetivo são coordenadas dos andares; a antecâmara tem outra planta
     const px = hero.position.x;
     const pz = hero.position.z;
     for (const o of objectives) {
@@ -939,7 +1078,7 @@ async function main(): Promise<void> {
     updateFagulhaHud();
     updatePotionHud(); // semeia o HUD de poções com as cargas atuais
     combat.wake(1.0); // despertar do andar atual ao (re)entrar no jogo
-    gameHud.say("eco", ECHOES[floorIndex] ?? "", floorIndex === 0 ? 5200 : 4200);
+    if (!route.node) gameHud.say("eco", ECHOES[floorIndex] ?? "", floorIndex === 0 ? 5200 : 4200); // a antecâmara não tem eco
   }
   function pauseGame(): void {
     if (pausedOpen) return;
@@ -1171,7 +1310,25 @@ async function main(): Promise<void> {
     }
     const hc = hero.combat;
     damageNumbers.update(dt / 1000, gameActive && !descending ? { hp: hc.healthFraction * hc.maxHealth, max: hc.maxHealth, x: hero.position.x, y: hero.position.y, z: hero.position.z } : null);
-    if (gameActive) updateIgnite(dt / 1000); // recuperar estilha / abrir passagem
+    if (gameActive) {
+      updateIgnite(dt / 1000); // recuperar estilha / abrir passagem
+      tryDescend(dt / 1000); // saídas: o compromisso de 0,6 s precisa do dt de cada quadro
+    }
+    if (exitMarkers.active) {
+      const cam = scene.activeCamera;
+      const show = gameActive && !descending && passageOpen && cam;
+      exitMarkers.update(
+        (x, y, z) => {
+          if (!show || !cam) return null;
+          reticleWorld.set(x, y, z);
+          const v = Vector3.Project(reticleWorld, Matrix.IdentityReadOnly, scene.getTransformMatrix(), cam.viewport.toGlobal(engine.getRenderWidth(), engine.getRenderHeight()));
+          const k = engine.getHardwareScalingLevel(); // render px -> px CSS
+          return v.z > 0 && v.z < 1 ? { x: v.x * k, y: v.y * k } : null;
+        },
+        hero.position,
+        commit
+      );
+    }
     if (gameActive && !descending && codexNews.length) {
       // Aviso "Nova página na Crônica" num momento calmo (nunca durante o fade entre andares).
       gameHud.notifyCodex(codexNews.splice(0).join(", "));
@@ -1204,7 +1361,6 @@ async function main(): Promise<void> {
           markCodex(MARK_BOSS_DOWN); // o Guardião sussurrou a verdade: a Primeira entra na Crônica
         }
       }
-      tryDescend();
       if (descentDone && !winShown) {
         winShown = true;
         setMusicState("quente"); // crossfade para o tema morno (reavivar)

@@ -151,6 +151,11 @@ ganho; a topologia métrica de cada sala é detalhe de montagem.
 
 ## 4. O laço de uma sala (contrato de cena)
 
+> **Atualização (exploração F1-A):** no código a estilha de Brasa é colhida no relicário e abre
+> as saídas do andar (alçapão da Brasa ou, nas passagens 2 a 6, uma porta lateral para uma
+> antecâmara que substitui a tela do braseiro). Não há braseiro aceso por sala. Ver
+> [`spec-exploracao-portas-e-salas.md`](spec-exploracao-portas-e-salas.md) seções 0 e 3.
+
 `[DESIGN]` `[NORMATIVO]` Toda sala 1 a 6 implementa a máquina de estados de sala definida em
 [`game-design-e-sistemas.md`](game-design-e-sistemas.md) 2.1, na ordem fixa
 `SELANDO -> COMBATE -> LIMPA -> ACESA -> SAINDO`. A sala 7 (Guardião) substitui o bloco
