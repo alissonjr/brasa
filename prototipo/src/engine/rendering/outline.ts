@@ -1,5 +1,5 @@
 import { Color3 } from "@babylonjs/core";
-import type { AbstractMesh, Node } from "@babylonjs/core";
+import type { AbstractMesh, Node, Scene } from "@babylonjs/core";
 
 /**
  * CAMADA ENGINE (genérica). Contorno de tinta (inverted-hull) via o OutlineRenderer NATIVO
@@ -30,6 +30,35 @@ export interface OutlineOptions {
 
 const DEFAULT_COLOR = Color3.FromHexString("#0b0e14"); // quase preto, leve azul (tom do breu)
 
+/**
+ * O OutlineRenderer nativo redesenha cada malha com contorno uma SEGUNDA vez depois dela ("Outline -
+ * step 2": só profundidade, com a cor desligada, para o casco expandido ocluir o que vem depois).
+ * Para o nosso uso (casco opaco escuro que só precisa aparecer ao redor da silhueta) essa segunda
+ * chamada não compra nada visível e dobrava o custo do contorno de cada ator. Pulamos o passo 2
+ * trocando `_savedDepthWrite` por false durante o `_afterRenderingMesh` (a condição do passo 2).
+ * O estágio da cena guarda a ação já com `bind`, então trocamos a entrada do estágio (por cena).
+ */
+interface OutlineInternals {
+  _savedDepthWrite: boolean;
+  _afterRenderingMesh(mesh: AbstractMesh, subMesh: unknown, batch: unknown): void;
+}
+const slimmedScenes = new WeakSet<Scene>();
+function slimOutlineRenderer(scene: Scene): void {
+  if (slimmedScenes.has(scene)) return;
+  slimmedScenes.add(scene);
+  const renderer = scene.getOutlineRenderer() as unknown as OutlineInternals;
+  const orig = renderer._afterRenderingMesh.bind(renderer);
+  const slim = (mesh: AbstractMesh, subMesh: unknown, batch: unknown): void => {
+    if (!mesh.renderOutline) return orig(mesh, subMesh, batch);
+    const saved = renderer._savedDepthWrite;
+    renderer._savedDepthWrite = false;
+    orig(mesh, subMesh, batch);
+    renderer._savedDepthWrite = saved;
+  };
+  const stage = (scene as unknown as { _afterRenderingMeshStage: { component?: unknown; action: unknown }[] })._afterRenderingMeshStage;
+  for (const step of stage) if (step.component === renderer) step.action = slim;
+}
+
 // Folga para o resto das uniformes do vertex shader do contorno (matrizes, luzes, morph, etc.).
 const VERTEX_UNIFORM_RESERVE = 96;
 const warned = new Set<string>();
@@ -56,6 +85,7 @@ function warnOnce(mesh: AbstractMesh): void {
 export function addOutline(mesh: AbstractMesh, opts: OutlineOptions = {}): void {
   if (mesh.getTotalVertices() <= 0) return;
   if ((mesh.metadata as { noOutline?: boolean } | null)?.noOutline) return;
+  slimOutlineRenderer(mesh.getScene());
   // O OutlineRenderer reaproveita as unidades de textura da malha. Com os ossos guardados
   // numa TEXTURA (padrão em malhas skinned), o contorno sobrescreve a unidade e a malha
   // inteira passa a amostrar a textura de ossos como se fosse o albedo (cores neon,
