@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brasa - Armário da ordem (página de teste)</title>
+<!-- PÁGINA DE DEV, não é código do jogo. Monta a UI REAL do armário (src/game/ui/armarioUi.ts) sobre o
+     modelo REAL (src/game/run/pocoes.ts) com dados falsos, sem a antessala nem o jogo.
+     Rodar com `npm run dev` e abrir /mocks/armario/index.html. Parâmetros: ?andar=2&fagulhas=12&lang=en
+     &contraste=1&sem-movimento=1&fechado=1&legado=1&cinto=cheio|vazio. A tecla R reabre o painel. -->
+<style>
+  html, body { margin: 0; min-height: 100%; background: #06080c; }
+  body { background: radial-gradient(ellipse at 50% -10%, #1a2030 0%, #0a0d13 55%); color: var(--text-mid); font-family: var(--font-text); font-size: var(--fs-md); }
+  .dev { max-width: 860px; margin: 0 auto; padding: var(--sp-5) var(--sp-4) 80px; }
+  .dev h1 { font-family: var(--font-display); color: var(--gold-200); font-size: var(--fs-xl); letter-spacing: var(--ls-title); margin: 0 0 var(--sp-2); }
+  .dev p { margin: var(--sp-2) 0 var(--sp-4); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; margin: var(--sp-3) 0; }
+  .tools label { display: inline-flex; gap: var(--sp-2); align-items: center; font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-lo); }
+  .tools input, .tools select { font: inherit; background: var(--ink-800); color: var(--text-hi); border: 1px solid var(--ink-500); border-radius: var(--radius-sm); padding: 4px 8px; width: 4.5em; }
+  .tools select { width: auto; }
+  pre { background: var(--ink-900); border: 1px solid var(--ink-600); border-radius: var(--radius-md); padding: var(--sp-3); overflow: auto; font-size: 12px; color: var(--text-mid); max-height: 320px; }
+  .hud-potions { position: static; display: inline-flex; margin: var(--sp-2) 0; }
+  #log { color: var(--life-400); }
+</style>
+</head>
+<body>
+<main class="dev">
+  <h1>Armário da ordem: página de teste</h1>
+  <p>Dados falsos sobre o modelo real. Abra o painel, mova frascos, compre, deixe para quem descer e veja o que seria gravado. Tecla <span class="ds-kbd">R</span> abre.</p>
+  <div class="tools" id="tools"></div>
+  <div>Contador do HUD (lê o cinto do modelo): <span class="hud-potions" id="hud"></span></div>
+  <p id="log" role="status"></p>
+  <pre id="save" aria-label="Estado gravável"></pre>
+</main>
+<script type="module" src="./dev.ts"></script>
+</body>
+</html>

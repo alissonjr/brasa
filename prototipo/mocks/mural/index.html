@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brasa - Murais (página de dev)</title>
+<!-- PÁGINA DE DEV, não é código do jogo. Monta a placa do mural (src/game/ui/muralPlate.ts) para os
+     7 andares nos dois estados (frio e aceso), sem o jogo, sem Babylon, sem Havok.
+     Rodar com `npm run dev` e abrir /mocks/mural/index.html. -->
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(ellipse at 50% -10%, #1a2030 0%, var(--ink-950) 55%); color: var(--text-mid); font-family: var(--font-text); font-size: var(--fs-md); }
+  body.gray .shot { filter: grayscale(1) contrast(1.05); }
+  .wrap { max-width: 1560px; margin: 0 auto; padding: var(--sp-6) var(--sp-4) 96px; }
+  h1, h2, h3 { font-family: var(--font-display); color: var(--gold-200); letter-spacing: var(--ls-title); margin: 0; }
+  h1 { font-size: var(--fs-2xl); }
+  h2 { font-size: var(--fs-lg); margin-top: var(--sp-7); }
+  p.lead { margin: var(--sp-2) 0 var(--sp-4); max-width: 80ch; }
+  .tools { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin: var(--sp-4) 0; align-items: center; }
+  .tog { font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text-mid); background: var(--ink-800); border: 1px solid var(--ink-500); border-radius: var(--radius-md); padding: var(--sp-2) var(--sp-3); cursor: pointer; }
+  .tog[aria-pressed="true"] { color: var(--ink-950); background: var(--metal-gold); border-color: var(--gold-300); }
+  .tog:focus-visible { outline: 2px solid var(--ember-300); outline-offset: 3px; }
+  .cap { font-family: var(--font-display); font-size: var(--fs-2xs); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text-lo); margin-bottom: var(--sp-2); }
+
+  /* Palco da placa interativa: faz o papel da camada de HUD do jogo (posicionada, cobre a tela) */
+  .stage { position: relative; height: min(100vh, 900px); min-height: 560px; border: 1px solid var(--ink-500); border-radius: var(--radius-md); overflow: hidden; background: linear-gradient(180deg, #11151d, #07090d); }
+  .stage .fake { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text-lo); font-style: italic; }
+  .zoomable { zoom: var(--ui-zoom, 1); }
+
+  /* Grade dos 7 andares x 2 estados: a placa estática (sem moldura de modal) */
+  .pairs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-5); }
+  .pairs .mural-plate { width: 100%; max-height: none; overflow: visible; animation: none; }
+  .pairs .mural-close { visibility: hidden; }
+
+  .alf { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--sp-3); }
+  .alf figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); padding: var(--sp-3); background: var(--surface-card); border: 1px solid var(--ink-500); border-radius: var(--radius-md); }
+  .alf .g { width: 110px; height: 110px; }
+  .alf .g.t { height: 36px; width: 110px; }
+  .alf figcaption { font-family: var(--font-display); font-size: var(--fs-2xs); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text-hi); text-align: center; }
+  .land { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-4); }
+  .land .box { aspect-ratio: 2 / 1; border: 1px solid var(--gold-600); overflow: hidden; position: relative; }
+  .land .box .gv { position: absolute; inset: 0; }
+  .land canvas { width: 100%; height: auto; display: block; border: 1px solid var(--gold-600); }
+  @media (max-width: 900px) { .pairs, .land { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Murais: a placa, o alfabeto e a textura</h1>
+  <p class="lead">Fase R5 do redesenho da descida (seção 5). A placa abre com <b>R</b> e fecha com <b>R</b> ou <b>Esc</b>. Frio: só "o que foi" se lê. Aceso: o painel "o que vem" acende de baixo para cima.</p>
+  <div class="tools" role="toolbar" aria-label="Opções da página">
+    <button class="tog" id="t-hc" aria-pressed="false">Alto contraste</button>
+    <button class="tog" id="t-rm" aria-pressed="false">Reduzir movimento</button>
+    <button class="tog" id="t-gray" aria-pressed="false">Cinza</button>
+    <button class="tog" id="t-zoom" aria-pressed="false">Zoom 200%</button>
+    <button class="tog" id="t-en" aria-pressed="false">English</button>
+  </div>
+
+  <h2>A placa ao vivo</h2>
+  <div class="tools">
+    <label class="cap" for="sel-andar" style="margin:0">Andar</label>
+    <select id="sel-andar" class="tog"></select>
+    <button class="tog" id="b-abrir">Abrir (R)</button>
+    <button class="tog" id="b-acender">Acender com a placa aberta</button>
+    <button class="tog" id="b-frio" aria-pressed="true">Braseiro apagado</button>
+    <span class="cap" id="log" style="margin:0"></span>
+  </div>
+  <div class="stage shot" id="stage"><div class="fake zoomable" id="fake">a placa abre aqui, sem tomar a câmera</div></div>
+
+  <h2>Os sete andares, frio e aceso</h2>
+  <div class="pairs shot zoomable" id="pairs"></div>
+
+  <h2>Alfabeto</h2>
+  <p class="lead">Bustos (o atributo diz o tipo), perigos e situações, marcas de contagem.</p>
+  <div class="alf shot" id="alf"></div>
+
+  <h2>Painéis em paisagem (2:1) e rasterizados como textura</h2>
+  <p class="lead">Acima, o SVG com a folha de estilos da página. Abaixo, o mesmo SVG como imagem autônoma (tokens embutidos) desenhada num canvas 1024 x 512, o que a DynamicTexture do painel 3D vai receber.</p>
+  <div class="land shot" id="land"></div>
+</div>
+<script type="module" src="./mural.ts"></script>
+</body>
+</html>

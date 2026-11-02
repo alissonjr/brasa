@@ -65,6 +65,10 @@ export { ExploracaoRegistry } from "./run/exploracao";
 export type { ExploracaoHooks } from "./run/exploracao";
 export { RouteState, ROTA, ANDARES, CHAMAS, formatNo, parseNo, stepCommit, resumePlace, retryPlace, floorOf, samePlace, braseirosPadrao } from "./run/rota";
 export type { Place, Chama, BraseiroAndar, RouteSave, Commit } from "./run/rota";
+export { Pocoes, POCOES, POCAO_DEF } from "./run/pocoes";
+export type { Pocao, PocoesSave, PocoesRunSave, LegadoSave } from "./run/pocoes";
+export { openArmario } from "./ui/armarioUi";
+export type { ArmarioHooks, ArmarioHandle } from "./ui/armarioUi";
 export { readLeaderboard, submitTime, formatTime } from "./content/leaderboard";
 export {
   CODEX_FLOORS,

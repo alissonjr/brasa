@@ -4,8 +4,11 @@ import type { IllustrationId } from "../ui/ds/illustrations";
  * CAMADA JOGO (Brasa). Crônica: o registro de lore que o jogador acumula, no formato "A Parede".
  * Está organizada POR ANDAR (andar 0 = a boca do poço, andares 1 a 7 = a descida, na ordem do
  * `DESCENT` de main.ts, onde o andar N é o índice N-1). Cada andar guarda:
- *  - o DECALQUE da inscrição daquele andar (a frotagem presa na laje), liberado ao LER a
- *    inscrição (aproximando-se do nicho ou com [R]);
+ *  - o DECALQUE da inscrição daquele andar (a frotagem presa na laje), em DOIS estados
+ *    (redesenho da descida 2.5 e 5.5): a GRAVURA, liberada ao ler o mural da antessala
+ *    (`mural:n`), e a gravura mais o TEXTO, liberada ao LER a inscrição dentro da câmara
+ *    (aproximando-se do nicho ou com [R], `leitura:n`). Quem lê só a inscrição (save antigo,
+ *    ou quem pulou o mural) já vê o decalque completo;
  *  - os NICHOS (personagens, lugares e relatos) que o jogo passa a dizer naquele andar.
  * O estado de "o que já foi visto" é um conjunto de MARCAS (ids de string) guardado no save
  * (`codex` em saveData.ts). Uma entrada está liberada se nasce assim ou se a sua marca já existe.
@@ -24,6 +27,15 @@ export const markFloor = (n: number): string => `andar:${n}`;
 export const markRead = (n: number): string => `leitura:${n}`;
 /** O Guardião caiu e sussurrou a verdade. */
 export const MARK_BOSS_DOWN = "guardiao:caiu";
+
+// Marcas novas da fase R5 (murais). Só strings dentro do `codex: string[]` que o save já guarda
+// (nenhum campo novo em saveData.ts); quem emite é a integração (eventos de R0).
+/** O jogador leu o mural da antessala do andar N (placa aberta com [R]). Libera a GRAVURA do decalque. */
+export const markMural = (n: number): string => `mural:${n}`;
+/** O jogador acendeu o braseiro da antessala do andar N. Registro; ainda não libera página. */
+export const markLit = (n: number): string => `acendeu:${n}`;
+/** O jogador limpou a câmara do andar N. Libera a linha "o que vem" (o que enfrentou) no decalque. */
+export const markCleared = (n: number): string => `limpou:${n}`;
 
 // --- Tipos ---
 
@@ -51,8 +63,16 @@ export interface CodexEntry extends Unlockable {
   art: IllustrationId;
 }
 
-/** Decalque: a frotagem da inscrição de um andar. */
+/** Decalque: a frotagem da inscrição de um andar. `unlock` (`leitura:n`) é o estado completo. */
 export interface CodexDecal extends Unlockable {
+  /** Libera só a gravura (`mural:n`): o decalque aparece sem o texto. */
+  sketch: { type: "mark"; id: string };
+  /**
+   * Gravura do estado "só mural" e do painel "o que foi" da antessala. Se ausente, é `art`.
+   * Existe porque o mural fala do que veio ANTES (A1: Marta na geada; A6: a forja) e o decalque
+   * completo ilustra a inscrição da câmara.
+   */
+  muralArt?: IllustrationId;
   title: string;
   /** O eco ouvido ao entrar no andar (legenda do HUD). */
   echo: string;
@@ -143,6 +163,7 @@ export const CODEX_FLOORS: CodexFloor[] = [
     layerShort: "De Cima",
     decal: {
       id: "decalque-1",
+      sketch: { type: "mark", id: markMural(1) },
       title: "Os nomes nos bancos",
       echo: "Lê os nomes gravados nos bancos. Foram teu povo, antes do frio.",
       inscription: "Aqui jaz a guarda da chama. Foram teu povo, antes do frio.",
@@ -151,6 +172,7 @@ export const CODEX_FLOORS: CodexFloor[] = [
         "Os selos nunca foram prisão: foram proteção, um gesto de amor. Um dos túmulos, porém, foi arrombado por dentro. É o ponto exato onde a luz recuou e os mortos começaram a despertar.",
       ],
       art: "mortos",
+      muralArt: "marta", // 5.3: A1 mostra Marta encolhida na geada (o que foi); os mortos vêm na câmara
       unlock: { type: "mark", id: markRead(1) },
     },
     entries: [
@@ -176,6 +198,7 @@ export const CODEX_FLOORS: CodexFloor[] = [
     layerShort: "De Cima",
     decal: {
       id: "decalque-2",
+      sketch: { type: "mark", id: markMural(2) },
       title: "O manto rasgado",
       echo: "Um manto rasgado. Uma fagulha apagada no chão. Alguém desceu antes de ti.",
       inscription: "Outra desceu por estas escadas. Não a vimos voltar.",
@@ -195,6 +218,7 @@ export const CODEX_FLOORS: CodexFloor[] = [
     layerShort: "Fundas",
     decal: {
       id: "decalque-3",
+      sketch: { type: "mark", id: markMural(3) },
       title: "A que já estava aqui",
       echo: "Dizem que ela foi a primeira. Dizem que já ardia aqui quando a primeira desceu.",
       inscription: "Quem acendeu a primeira Brasa? A pedra não responde.",
@@ -214,6 +238,7 @@ export const CODEX_FLOORS: CodexFloor[] = [
     layerShort: "Fundas",
     decal: {
       id: "decalque-4",
+      sketch: { type: "mark", id: markMural(4) },
       title: "O preço",
       echo: "A Brasa não pede lenha. Pede quem a alimente por dentro.",
       inscription: "A chama cobra em carne: uma vida por geração.",
@@ -233,6 +258,7 @@ export const CODEX_FLOORS: CodexFloor[] = [
     layerShort: "Fundas",
     decal: {
       id: "decalque-5",
+      sketch: { type: "mark", id: markMural(5) },
       title: "Duas que desceram",
       echo: "Dois conjuntos de ossos. Um voltou até a porta. O outro desceu mais fundo.",
       inscription: "Que descanses, tu que voltaste. E tu, que desceste mais.",
@@ -252,6 +278,7 @@ export const CODEX_FLOORS: CodexFloor[] = [
     layerShort: "Da Origem",
     decal: {
       id: "decalque-6",
+      sketch: { type: "mark", id: markMural(6) },
       title: "O peso",
       echo: "“Se não eu, então tu.” Era o que Marta dizia.",
       inscription: "Não temas o fundo. Teme ficar.",
@@ -260,6 +287,7 @@ export const CODEX_FLOORS: CodexFloor[] = [
         "Marta é a mentora que criou a Acendedora: desceu na geração passada e voltou gasta demais para descer de novo. “Se não eu, então tu” era o que ela dizia.",
       ],
       art: "poco",
+      muralArt: "brasa", // 5.3: A6 mostra a forja (o cadinho); a cisterna e o clarão vêm na câmara
       unlock: { type: "mark", id: markRead(6) },
     },
     entries: [
@@ -298,6 +326,7 @@ export const CODEX_FLOORS: CodexFloor[] = [
     layerShort: "A Brasa",
     decal: {
       id: "decalque-7",
+      sketch: { type: "mark", id: markMural(7) },
       title: "A que ficou",
       echo: "No fundo, a primeira Acendedora ainda arde. E te esperava.",
       inscription: "Ela ainda guarda o fogo. Liberta-a, ou toma seu lugar.",
@@ -351,6 +380,14 @@ export interface SeenMarks {
   has(id: string): boolean;
 }
 
+/** Estado de um decalque: nada, só a gravura (leu o mural) ou completo (leu a inscrição). */
+export type DecalState = "none" | "gravura" | "completo";
+
+export function decalState(d: CodexDecal, seen: SeenMarks): DecalState {
+  if (isCodexUnlocked(d, seen)) return "completo";
+  return seen.has(d.sketch.id) ? "gravura" : "none";
+}
+
 /** Liberado se nasce assim ou se a marca já está no save. */
 export function isCodexUnlocked(item: { unlock: CodexUnlock }, seen: SeenMarks): boolean {
   return item.unlock.type === "always" || seen.has(item.unlock.id);
@@ -359,7 +396,7 @@ export function isCodexUnlocked(item: { unlock: CodexUnlock }, seen: SeenMarks):
 /** Contagem de páginas liberadas, para o cabeçalho da Crônica. */
 export function codexProgress(seen: SeenMarks): { decals: number; entries: number } {
   return {
-    decals: CODEX_DESCENT.filter((f) => f.decal && isCodexUnlocked(f.decal, seen)).length,
+    decals: CODEX_DESCENT.filter((f) => f.decal && decalState(f.decal, seen) !== "none").length,
     entries: CODEX_ENTRIES.filter((e) => isCodexUnlocked(e, seen)).length,
   };
 }
@@ -415,18 +452,26 @@ export class CodexLog implements SeenMarks {
   }
 
   /**
-   * Registra uma marca. `added` diz se ela era nova (para gravar o save) e `titles` traz os
-   * títulos das páginas que ela acabou de liberar, para o aviso "Nova página na Crônica".
+   * Registra uma marca. `added` diz se ela era nova (para gravar o save), `titles` traz os
+   * títulos das páginas que ela acabou de abrir, para o aviso "Nova página na Crônica", e
+   * `upgraded` os dos decalques que já estavam como gravura e ganharam o texto (a inscrição
+   * lida dentro da câmara): o papel cai de novo, mas não é página nova.
    */
-  mark(id: string): { added: boolean; titles: string[] } {
-    if (this.seen.has(id)) return { added: false, titles: [] };
-    this.seen.add(id);
+  mark(id: string): { added: boolean; titles: string[]; upgraded: string[] } {
+    if (this.seen.has(id)) return { added: false, titles: [], upgraded: [] };
     const titles: string[] = [];
+    const upgraded: string[] = [];
     for (const f of CODEX_FLOORS) {
       const d = f.decal;
-      if (d && d.unlock.type === "mark" && d.unlock.id === id) {
-        this.fresh.add(d.id);
-        titles.push(d.title);
+      if (d) {
+        const before = decalState(d, this);
+        if (d.sketch.id === id && before === "none") {
+          this.fresh.add(d.id);
+          titles.push(d.title);
+        } else if (d.unlock.type === "mark" && d.unlock.id === id) {
+          this.fresh.add(d.id);
+          (before === "gravura" ? upgraded : titles).push(d.title);
+        }
       }
       for (const e of f.entries) {
         if (e.unlock.type === "mark" && e.unlock.id === id) {
@@ -435,7 +480,8 @@ export class CodexLog implements SeenMarks {
         }
       }
     }
-    return { added: true, titles };
+    this.seen.add(id);
+    return { added: true, titles, upgraded };
   }
 
   /** O que foi liberado desde a última abertura da Crônica (e zera a lista). */

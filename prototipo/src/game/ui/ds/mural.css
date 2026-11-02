@@ -1,0 +1,154 @@
+/* CAMADA JOGO (Brasa). A PLACA DO MURAL (muralPlate.ts): dois painéis de pedra e a inscrição.
+   Só tokens (tokens.css) e componentes .ds-*. Sem valor de cor solto.
+   Frio/aceso: o painel "o que vem" fica a 15% e sem cor até o braseiro acender; a luz sobe de baixo
+   para cima. Reduzir movimento (classe html.reduce-motion do jogo OU prefers-reduced-motion do
+   sistema) corta a animação e deixa a troca instantânea. */
+
+.mural-root {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: var(--sp-4);
+  pointer-events: none; /* não toma a câmera nem o mouse: só a placa recebe cliques */
+  background: radial-gradient(ellipse at 50% 50%, transparent 30%, color-mix(in srgb, var(--ink-950) 62%, transparent));
+}
+.mural-root[hidden] { display: none; }
+
+.mural-plate {
+  pointer-events: auto;
+  box-sizing: border-box;
+  /* a largura acompanha a altura da tela: a arte fica em ~1:1,15 e a placa inteira cabe sem rolar */
+  width: min(100%, 1040px, calc((100vh - 300px) * 1.74 + 88px));
+  max-height: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  padding: var(--sp-5) var(--sp-6) var(--sp-4);
+  animation: mural-in var(--dur-slow) var(--ease-out) both;
+}
+.mural-plate:focus { outline: none; }
+.mural-plate:focus-visible { outline: 2px solid var(--ember-300); outline-offset: -6px; }
+@keyframes mural-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.mural-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-4); }
+.mural-head__t { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
+.mural-head h2 { margin: 0; overflow-wrap: anywhere; }
+
+/* ---------- Os dois painéis ---------- */
+.mural-panes { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-5); }
+.mural-pane { margin: 0; display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.mural-pane__l { margin: 0; text-align: center; }
+
+.mural-art {
+  position: relative;
+  aspect-ratio: 4 / 4.6;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  border: var(--line) solid var(--gold-600);
+  background: var(--ink-950);
+  box-shadow: inset 0 0 0 3px var(--ink-900), inset 0 0 0 4px var(--gold-800), var(--shadow-2);
+}
+.mural-art .gv { position: absolute; inset: 0; transition: opacity 0.8s var(--ease-out), filter 0.8s var(--ease-out); }
+
+/* Frio: o painel direito mal se lê (traço a 15%, dessaturado). */
+.mural-pane--vem.is-cold .mural-art { border-color: var(--ink-500); box-shadow: inset 0 0 0 3px var(--ink-900), var(--shadow-2); }
+.mural-pane--vem.is-cold .mural-art .gv { opacity: 0.15; filter: grayscale(1) brightness(0.9); }
+.mural-pane--vem.is-lit .mural-art { border-color: var(--ember-500); box-shadow: inset 0 0 0 3px var(--ink-900), inset 0 0 0 4px var(--gold-800), var(--shadow-2), var(--glow-ember); }
+.mural-pane--vem.is-lit .mural-art .gv { opacity: 1; filter: none; }
+
+.mural-dark {
+  position: absolute;
+  left: var(--sp-4);
+  right: var(--sp-4);
+  bottom: var(--sp-5);
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-text);
+  font-style: italic;
+  font-size: var(--fs-md);
+  line-height: 1.35;
+  color: var(--frost-300);
+  text-shadow: 0 1px 0 var(--ink-950), 0 0 12px var(--ink-950);
+}
+.mural-dark[hidden] { display: none; }
+
+/* A luz que sobe: uma faixa quente varre o painel de baixo para cima, uma única vez. */
+.mural-art.is-rising::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(0deg, transparent 0%, color-mix(in srgb, var(--ember-400) 55%, transparent) 40%, transparent 70%) 0 100% / 100% 220% no-repeat;
+  mix-blend-mode: screen;
+  animation: mural-sobe 1.1s var(--ease-out) both;
+}
+@keyframes mural-sobe {
+  from { background-position: 0 100%; opacity: 1; }
+  to { background-position: 0 0; opacity: 0; }
+}
+
+/* A lista falada do estado aceso: só para leitor de tela. */
+.mural-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---------- A inscrição na verga ---------- */
+.mural-insc { margin: 0; text-align: center; display: flex; flex-direction: column; gap: var(--sp-2); }
+.mural-insc small { font-family: var(--font-display); font-size: var(--fs-2xs); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text-lo); }
+.mural-insc q {
+  quotes: none;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-md);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1.5;
+  color: var(--gold-100);
+  text-shadow: 0 1px 0 var(--ink-950), 0 0 8px color-mix(in srgb, var(--ember-500) 22%, transparent);
+  text-wrap: balance;
+}
+
+.mural-foot { display: flex; align-items: center; justify-content: center; gap: var(--sp-2); color: var(--text-lo); font-family: var(--font-text); font-size: var(--fs-sm); }
+.mural-foot__t { margin-left: var(--sp-1); }
+
+/* ---------- Celular (390 px): os painéis empilham e a placa rola ---------- */
+@media (max-width: 640px) {
+  .mural-root { padding: var(--sp-2); }
+  .mural-plate { padding: var(--sp-4) var(--sp-4) var(--sp-3); gap: var(--sp-3); width: 100%; }
+  .mural-panes { grid-template-columns: 1fr; gap: var(--sp-4); }
+  .mural-head { align-items: flex-start; }
+  .mural-head .ds-h2 { font-size: var(--fs-lg); }
+  .mural-insc q { font-size: var(--fs-sm); }
+}
+
+/* ---------- Alto contraste ----------
+   Os tokens já sobem (theme.css). Aqui: moldura em ouro pleno, pedra preta, e a frase que manda
+   acender em branco pleno. O painel frio continua a 15% de propósito: alto contraste não revela o
+   que a luz ainda não mostrou (o mural "só se lê com o braseiro aceso"). */
+html.high-contrast .mural-plate { background: var(--ink-950); border-color: var(--gold-300); }
+html.high-contrast .mural-art { border-color: var(--gold-300); }
+html.high-contrast .mural-dark { color: var(--text-hi); font-weight: 600; }
+html.high-contrast .mural-insc q { color: var(--text-hi); }
+
+/* ---------- Reduzir movimento ---------- */
+html.reduce-motion .mural-plate,
+html.reduce-motion .mural-art .gv,
+html.reduce-motion .mural-art.is-rising::after { animation: none; transition: none; }
+html.reduce-motion .mural-art.is-rising::after { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  .mural-plate,
+  .mural-art .gv,
+  .mural-art.is-rising::after { animation: none; transition: none; }
+  .mural-art.is-rising::after { display: none; }
+}
