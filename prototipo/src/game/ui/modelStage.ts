@@ -15,6 +15,7 @@ import {
 } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF"; // registra o loader glTF
 import { assetUrl, el } from "@engine";
+import { loadAnimLibrary, retargetClips } from "../actors/quaterniusRig";
 
 /**
  * CAMADA JOGO (Brasa). Vitrine 3D embutida nas telas de menu: um "nicho iluminado"
@@ -42,7 +43,7 @@ export interface ModelStageOptions {
   interactive?: boolean;
   /** Cor de destaque do nicho (luz de recorte + brilho do chão). Default: brasa. */
   accent?: string;
-  /** Atlas de albedo a aplicar no modelo (variante de manto do KayKit). Opcional. */
+  /** Atlas de albedo a aplicar na ROUPA do modelo (variante de manto). "" = atlas embutido no glb. */
   mantleTextureUrl?: string;
   /**
    * "niche": moldura compacta para dentro de um painel (Crônica, criação).
@@ -68,6 +69,9 @@ export class ModelStage {
   private resizeObs?: ResizeObserver;
   private disposed = false;
   private modelReady = false;
+  private mantleTex?: Texture;
+  // Albedo original por material (restaurado quando o manto volta ao atlas embutido).
+  private readonly baseAlbedo = new Map<object, unknown>();
 
   constructor(opts: ModelStageOptions) {
     this.opts = {
@@ -182,16 +186,24 @@ export class ModelStage {
   private applyMantleTexture(): void {
     const scene = this.scene;
     const url = this.opts.mantleTextureUrl;
-    if (!scene || !url || !this.modelReady) return;
+    if (!scene || !this.modelReady) return;
     // invertY=false: mesma convenção do atlas carregado pelo glTF (ver heroModel.applyMantle).
-    const tex = new Texture(assetUrl(url), scene, false, false);
+    const old = this.mantleTex;
+    const tex = url ? new Texture(assetUrl(url), scene, false, false) : undefined;
+    // Só a ROUPA troca de atlas (heroina.glb: malhas pele/roupa/olhos, como no jogo). Num glb sem
+    // malha "roupa" (KayKit), vale para todos os materiais com albedo.
+    const roupa = scene.meshes.filter((m) => /roupa/i.test(m.name));
+    const alvo = roupa.length ? roupa : scene.meshes;
     const seen = new Set<unknown>();
-    for (const m of scene.meshes) {
+    for (const m of alvo) {
       const mat = m.material as ({ albedoTexture?: unknown } & object) | null;
       if (!mat || seen.has(mat) || !("albedoTexture" in mat)) continue;
       seen.add(mat);
-      (mat as { albedoTexture: unknown }).albedoTexture = tex;
+      if (!this.baseAlbedo.has(mat)) this.baseAlbedo.set(mat, mat.albedoTexture ?? null);
+      (mat as { albedoTexture: unknown }).albedoTexture = tex ?? this.baseAlbedo.get(mat) ?? null;
     }
+    this.mantleTex = tex;
+    if (old && old !== tex) old.dispose();
   }
 
   private applyAccentToLight(hex: string): void {
@@ -229,7 +241,7 @@ export class ModelStage {
 
     const top = meshes.find((m) => m.name === "__root__") ?? meshes[0];
     if (top) this.fit(top);
-    this.playIdle(animationGroups);
+    this.playIdle(animationGroups, top);
     this.modelReady = true;
     this.applyMantleTexture();
     this.element.classList.add("model-stage-ready");
@@ -253,10 +265,20 @@ export class ModelStage {
     top.parent = fit;
   }
 
-  private playIdle(groups: AnimationGroup[]): void {
+  private playIdle(groups: AnimationGroup[], top?: AbstractMesh): void {
     for (const g of groups) g.stop();
-    // Personagens KayKit/Quaternius trazem o idle embutido; props não têm e só giram.
+    // Personagens KayKit trazem o idle embutido; props não têm e só giram.
     this.idle = groups.find((g) => /idle/i.test(g.name)) ?? groups[0];
-    this.idle?.play(true);
+    if (this.idle) { this.idle.play(true); return; }
+    // Corpo Quaternius (heroina.glb): os clipes vivem na biblioteca compartilhada (anim.glb) e são
+    // retargetados por osso; sem isto a figura ficaria na pose de descanso (braços abertos).
+    const skinned = top?.getChildMeshes(false).some((m) => !!m.skeleton);
+    if (!skinned || !this.scene) return;
+    const scene = this.scene;
+    void loadAnimLibrary(scene).then((lib) => {
+      if (this.disposed || this.scene !== scene || !top) return;
+      const g = retargetClips(lib, top as unknown as TransformNode, "vitrine", { idle: "Idle_Loop" }).idle;
+      if (g) { this.idle = g; g.start(true); }
+    });
   }
 }

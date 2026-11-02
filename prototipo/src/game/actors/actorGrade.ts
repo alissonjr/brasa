@@ -1,4 +1,4 @@
-import { ColorCurves, ImageProcessingConfiguration, PBRMaterial } from "@babylonjs/core";
+import { Color3, ColorCurves, ImageProcessingConfiguration, PBRMaterial } from "@babylonjs/core";
 import type { Material } from "@babylonjs/core";
 
 /**
@@ -7,10 +7,10 @@ import type { Material } from "@babylonjs/core";
  * material (não afeta a cena), compartilhada por exposição. Dessatura, escurece e esfria as
  * sombras. Adaptado do patch de coerência de atores da branch ambientacao.
  */
-const cache = new Map<number, ImageProcessingConfiguration>();
+const cache = new Map<string, ImageProcessingConfiguration>();
 
-function monsterGrade(exposureK: number): ImageProcessingConfiguration {
-  const key = Math.round(exposureK * 100);
+function monsterGrade(exposureK: number, saturation: number): ImageProcessingConfiguration {
+  const key = `${Math.round(exposureK * 100)}|${Math.round(saturation)}`;
   let cfg = cache.get(key);
   if (!cfg) {
     cfg = new ImageProcessingConfiguration();
@@ -18,7 +18,7 @@ function monsterGrade(exposureK: number): ImageProcessingConfiguration {
     cfg.exposure = 0.62 * exposureK;
     cfg.contrast = 1.04;
     const cc = new ColorCurves();
-    cc.globalSaturation = -50;
+    cc.globalSaturation = saturation;
     cc.shadowsHue = 214;
     cc.shadowsDensity = 22;
     cc.shadowsSaturation = 8;
@@ -29,8 +29,17 @@ function monsterGrade(exposureK: number): ImageProcessingConfiguration {
   return cfg;
 }
 
-/** Aplica a tinta de monstro aos materiais PBR (próprios da instância) de um ator não humanoide. */
-export function gradeMonsterMaterials(materials: Material[], exposureK = 1): void {
-  const cfg = monsterGrade(exposureK);
-  for (const m of materials) if (m instanceof PBRMaterial) m.imageProcessingConfiguration = cfg;
+/**
+ * Aplica a tinta de monstro aos materiais PBR (próprios da instância) de um ator não humanoide.
+ * `saturation`: curva global (-100..0); o padrão -50 mantém um resto de cor, -85 tira o monstro
+ * da paleta de pele (demônio rosado, yeti). `tint` (hex) multiplica o albedo (cinza/osso).
+ */
+export function gradeMonsterMaterials(materials: Material[], exposureK = 1, saturation = -50, tint?: string): void {
+  const cfg = monsterGrade(exposureK, saturation);
+  const t = tint ? Color3.FromHexString(tint) : null;
+  for (const m of materials) {
+    if (!(m instanceof PBRMaterial)) continue;
+    m.imageProcessingConfiguration = cfg;
+    if (t) m.albedoColor = m.albedoColor.multiply(t);
+  }
 }

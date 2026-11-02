@@ -1241,10 +1241,11 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   toonifyHierarchy(roomRoot, toonOpts); // kit que ficou independente (alcapao, vasos, cadeiras): materiais persistentes
   toonifyHierarchy(roomRoot, { skipDisableLighting: true, maxLights: 6 }); // o resto da sala: CellMaterial proprio
 
-  // Materiais aceitam ate 6 luzes (evita a ambiente ser descartada).
+  // Materiais aceitam ate 6 luzes (evita a ambiente ser descartada). Os atores pedem mais (8,
+  // heroModel/skeleton/guardiao: luz de aro + fagulha + tochas); nao rebaixar o que ja e maior.
   for (const m of scene.materials) {
     const mm = m as unknown as { maxSimultaneousLights?: number };
-    if (typeof mm.maxSimultaneousLights === "number") mm.maxSimultaneousLights = 6;
+    if (typeof mm.maxSimultaneousLights === "number" && mm.maxSimultaneousLights < 6) mm.maxSimultaneousLights = 6;
   }
 
   // Tremular das chamas (escala por `ignite`: apagada some, acesa tremula normal).

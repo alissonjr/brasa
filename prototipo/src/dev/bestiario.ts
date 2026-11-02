@@ -13,19 +13,20 @@ import { HeroModel, type HeroAction } from "../game/actors/heroModel";
  * coerencia de estilo (escala, paleta, contorno) sem precisar jogar ate cada inimigo.
  * Abre em /bestiario.html. Parametros: ?pose=0..N (rotacao), ?cam=perto|alta.
  */
-interface Cast { nome: string; model: string; height: number; face: number; humanoide?: boolean; heroi?: boolean; morto?: string; exp?: number; }
+interface Cast { nome: string; model: string; height: number; face: number; humanoide?: boolean; heroi?: boolean; morto?: string; exp?: number; guardia?: boolean; }
 const TODOS: Cast[] = [
   { nome: "Acendedora", model: "/models/personagens/heroina.glb", height: 1.8, face: Math.PI, humanoide: true, heroi: true },
   { nome: "Minion", model: "/models/personagens/morto_aldeao.glb", height: 1.8, face: Math.PI, humanoide: true, morto: "idle" },
   { nome: "Guerreiro", model: "/models/personagens/morto_guerreiro.glb", height: 1.85, face: Math.PI, humanoide: true, morto: "idle" },
   { nome: "Ladino", model: "/models/personagens/morto_ladino.glb", height: 1.78, face: Math.PI, humanoide: true, morto: "idle" },
-  { nome: "Pesado", model: "/models/personagens/morto_guerreiro.glb", height: 2.45, face: Math.PI, humanoide: true, morto: "idle" },
-  { nome: "Antigo", model: "/models/quaternius_monsters/orc_skull.glb", height: 2.0, face: Math.PI },
+  { nome: "Pesado", model: "/models/personagens/morto_sentinela.glb", height: 2.3, face: Math.PI, humanoide: true, morto: "idle" },
+  { nome: "Antigo", model: "/models/personagens/morto_antigo.glb", height: 2.3, face: Math.PI, humanoide: true, morto: "idle" },
+  { nome: "Sentinela", model: "/models/personagens/morto_sentinela.glb", height: 2.5, face: Math.PI, humanoide: true, morto: "idle" },
   { nome: "Demonio", model: "/models/quaternius_monsters/demon.glb", height: 1.95, face: Math.PI },
   { nome: "Brutamonte", model: "/models/quaternius_monsters/yeti.glb", height: 2.5, face: Math.PI, exp: 0.7 },
   { nome: "Espreitador", model: "/models/quaternius_monsters/ninja.glb", height: 1.8, face: Math.PI },
   { nome: "Conjurador", model: "/models/personagens/morto_conjurador.glb", height: 1.95, face: Math.PI, humanoide: true, morto: "idle" },
-  { nome: "Guardiao", model: "/models/quaternius_monsters/mushroomking.glb", height: 3.4, face: 0 },
+  { nome: "Guardia", model: "/models/personagens/guardia.glb", height: 2.2, face: Math.PI, humanoide: true, guardia: true },
 ];
 const GAP = 3.1;
 const q = new URLSearchParams(location.search);
@@ -101,9 +102,16 @@ floor.material = fm;
     semContornoNosOlhos(holder);
     if (q.get("sem") !== "contorno") outlineHierarchy(holder, { width: c.height * 0.018 });
     for (const g of r.animationGroups) g.stop();
+    if (c.guardia) {
+      // Guardia: fendas de carvao em brasa (textura de emissao em cinza; a cor vem do guardiao.ts)
+      for (const m of holder.getChildMeshes(false)) {
+        const mat = m.material as { emissiveColor?: Color3 } | null;
+        if (mat?.emissiveColor) mat.emissiveColor.set(1.0, 0.48, 0.14);
+      }
+    }
     if (c.humanoide) {
       const lib = await loadAnimLibrary(scene);
-      const nome = q.get("clip") ?? (c.morto ? "Zombie_Idle_Loop" : "Idle_Loop");
+      const nome = q.get("clip") ?? (c.morto ? "Zombie_Idle_Loop" : c.guardia ? "Sword_Idle" : "Idle_Loop");
       const g = retargetClips(lib, top as TransformNode, "b" + i, { x: nome }).x;
       if (g) {
         g.start(true);
