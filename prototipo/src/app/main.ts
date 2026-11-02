@@ -60,6 +60,7 @@ import {
   playStir,
   CombatDirector,
   CombatHud,
+  Onboarding,
   DamageNumbers,
   DIFFICULTY_DAMAGE_TAKEN,
   POTIONS,
@@ -985,8 +986,9 @@ async function main(): Promise<void> {
   combatHud.setVisible(false);
   platform.events.on("hero:hit", () => combatHud.flashDamage());
   // Feedback POSITIVO (W6): acerto sem bloqueio -> dourado; bloqueio/parry -> bronze; cura -> verde.
+  // Dicas curtas de controle nas duas primeiras salas da primeira partida (uma vez por instalação).
+  const onboarding = new Onboarding({ hud: combatHud, bindings: () => input.getBindings(), isActive: () => gameActive && !pausedOpen && !ui.hasScreens });
   platform.events.on<{ guarded?: boolean }>("combat:hit", ({ guarded }) => {
-    combatHud.dismissHint();
     if (!guarded) combatHud.flashHit();
   });
   platform.events.on("hero:block", () => combatHud.flashBlock());
@@ -1080,6 +1082,21 @@ async function main(): Promise<void> {
     combat.wake(1.0); // despertar do andar atual ao (re)entrar no jogo
     if (!route.node) gameHud.say("eco", ECHOES[floorIndex] ?? "", floorIndex === 0 ? 5200 : 4200); // a antecâmara não tem eco
   }
+  // Do título (ou de um save) para a descida SEM corte seco: escurece por cima do menu, monta a
+  // sala atrás do preto e revela com o herói já no quadro. A simulação só liga depois do preto.
+  let enteringGame = false;
+  const intoGame = async (setup?: () => void | Promise<void>): Promise<void> => {
+    if (enteringGame) return;
+    enteringGame = true;
+    try {
+      await fadeTo(1);
+      await setup?.();
+      startGame();
+      await fadeTo(0);
+    } finally {
+      enteringGame = false;
+    }
+  };
   function pauseGame(): void {
     if (pausedOpen) return;
     gameActive = false;
@@ -1113,22 +1130,22 @@ async function main(): Promise<void> {
     hasAutosave: carregado !== null,
     playtimeSec: () => loadedPlaytime + Math.round((performance.now() - startedAt) / 1000),
     character: () => character,
-    continueGame: () => startGame(),
+    continueGame: () => intoGame(),
     newGame: () => ui.push(new CharacterCreateScreen(ctx)),
-    startNewGame: (c) => {
-      character = c;
-      applyDifficulty();
-      // O nome da heroína (Cinza por padrão) é do personagem; o perfil do jogador fica como está.
-      rev = 0;
-      platform.score.reset(0);
-      platform.progression.load({ chapterId: DEFAULT_CHAPTER, checkpointId: "", objectivesDone: [] });
-      platform.achievements.load([]);
-      codex.load([]); // Crônica nova junto com a jornada nova
-      resetRun(); // descida do zero
-      announceNext = true;
-      enterRoom(0);
-      startGame();
-    },
+    startNewGame: (c) =>
+      intoGame(() => {
+        character = c;
+        applyDifficulty();
+        // O nome da heroína (Cinza por padrão) é do personagem; o perfil do jogador fica como está.
+        rev = 0;
+        platform.score.reset(0);
+        platform.progression.load({ chapterId: DEFAULT_CHAPTER, checkpointId: "", objectivesDone: [] });
+        platform.achievements.load([]);
+        codex.load([]); // Crônica nova junto com a jornada nova
+        resetRun(); // descida do zero
+        announceNext = true;
+        enterRoom(0);
+      }),
     relocalize: (reopen) => {
       ui.clear();
       ui.push(pausedOpen ? new PauseScreen(ctx) : new MainMenuScreen(ctx));
@@ -1139,27 +1156,28 @@ async function main(): Promise<void> {
     applyKeyBindings: (b) => input.setBindings(b),
     loadSlot: async (slot) => {
       const d = await platform.save.load(slot);
-      if (d) {
-        rev = d.rev;
-        platform.score.reset(d.points);
-        const g = readGameSave(d.game);
-        character = g.character;
-        applyDifficulty();
-        platform.progression.load({
-          chapterId: g.chapter || DEFAULT_CHAPTER,
-          checkpointId: g.checkpoint,
-          objectivesDone: g.objectives,
-        });
-        platform.achievements.load(g.achievements);
-        codex.load(g.codex);
-        if (g.run.active) restoreRun(g.run);
-        else {
-          resetRun();
-          announceNext = true;
-          enterRoom(0);
+      await intoGame(() => {
+        if (d) {
+          rev = d.rev;
+          platform.score.reset(d.points);
+          const g = readGameSave(d.game);
+          character = g.character;
+          applyDifficulty();
+          platform.progression.load({
+            chapterId: g.chapter || DEFAULT_CHAPTER,
+            checkpointId: g.checkpoint,
+            objectivesDone: g.objectives,
+          });
+          platform.achievements.load(g.achievements);
+          codex.load(g.codex);
+          if (g.run.active) restoreRun(g.run);
+          else {
+            resetRun();
+            announceNext = true;
+            enterRoom(0);
+          }
         }
-      }
-      startGame();
+      });
     },
     resume: () => {
       ui.clear();
@@ -1224,7 +1242,8 @@ async function main(): Promise<void> {
     if (gameActive) void doAutosave();
   });
 
-  loading.hidden = true;
+  loading.classList.add("ld-out"); // dissolve a tela de carregamento (index.html) em vez de cortá-la
+  window.setTimeout(() => { loading.hidden = true; }, 700);
   fpsEl.hidden = false;
   ui.replaceAll(new MainMenuScreen(ctx));
   startTitleAmbience(); // ambiente de brasa da tela-título (entra após o 1o gesto)
@@ -1251,7 +1270,7 @@ async function main(): Promise<void> {
     brasaWrap.style.display = gameActive && !descending ? "" : "none";
     const dropName = gameActive && !descending ? combat.nearbyDrop() : null;
     if (dropName) {
-      pickupEl.replaceChildren(Object.assign(document.createElement("span"), { className: "ds-kbd", textContent: "G" }), ` ${F("pegar", { nome: weaponName(dropName) })}`);
+      pickupEl.replaceChildren(Object.assign(document.createElement("span"), { className: onboarding.pending("pickup") ? "ds-kbd ob-pulse" : "ds-kbd", textContent: "G" }), ` ${F("pegar", { nome: weaponName(dropName) })}`);
       pickupEl.style.opacity = "1";
     } else {
       pickupEl.style.opacity = "0";
@@ -1307,6 +1326,7 @@ async function main(): Promise<void> {
     if (gameActive) {
       combatHud.update(hero.combat.healthFraction, hero.combat.staminaFraction, hero.combat.sparkCharges, hero.combat.sparkChargeMax, dt / 1000);
       combatHud.setResonance(hero.combat.resonanceStreak, hero.combat.resonanceActive);
+      onboarding.update(dt / 1000, { floor: floorIndex, enemiesAlive: combat.enemiesAlive, nearDrop: !!dropName, nearReadable: !!nearReadable });
     }
     const hc = hero.combat;
     damageNumbers.update(dt / 1000, gameActive && !descending ? { hp: hc.healthFraction * hc.maxHealth, max: hc.maxHealth, x: hero.position.x, y: hero.position.y, z: hero.position.z } : null);
@@ -1336,6 +1356,7 @@ async function main(): Promise<void> {
     if (gameActive) {
       updateReadables(); // ler inscrições/pergaminhos ([R] perto)
       if (nearReadable) { promptEl.textContent = T.promptLer; promptEl.style.opacity = "1"; }
+      promptEl.classList.toggle("ob-pulse", !!nearReadable && onboarding.pending("read"));
     }
     if (acc > 250) {
       fpsEl.textContent = `${engine.getFps().toFixed(0)} fps`;

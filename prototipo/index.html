@@ -56,6 +56,8 @@
         text-align: center;
         background: radial-gradient(ellipse at 50% 62%, rgba(217, 78, 10, 0.1), transparent 60%), var(--ink-950, #06080c);
       }
+      #loading { transition: opacity 0.6s ease; }
+      #loading.ld-out { opacity: 0; pointer-events: none; }
       #loading .ld-mark {
         font-family: var(--font-display, "Cinzel", Georgia, serif);
         font-weight: 700;
@@ -94,6 +96,7 @@
         font-style: normal;
       }
       @media (prefers-reduced-motion: reduce) {
+        #loading { transition: opacity 0.2s ease; }
         #loading .ld-ember {
           animation: none;
         }

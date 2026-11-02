@@ -89,11 +89,12 @@ function frostFern(x: number, y: number, len: number, dir: number): string {
 }
 
 const PLATES: Record<IllustrationId, () => string> = {
-  // A Acendedora: capuz, manto, cajado com a fagulha na ponta, degraus descendo.
+  // A Acendedora: capuz, manto, espada cravada no chão com a fagulha no pomo, degraus descendo.
   cinza: () =>
     rays(200, 285, 44, 30, 340, "gv-lh", 0.2) + glow(200, 285, 170) +
     '<path class="gv-l" d="M0 438 H150 V456 H96 V474 H40 V492 H0"/><path class="gv-lt" d="M0 456 H80 M0 474 H30"/>' +
-    '<path class="gv-l" d="M298 168 L308 450" style="stroke-width:5"/>' + glow(296, 150, 52) + star(296, 150, 20, "gv-e3") + star(296, 150, 20, "gv-elt") +
+    '<path class="gv-mid" d="M290 204 L302 204 L305 436 L296 458 L287 436Z"/><path class="gv-l" d="M290 204 L302 204 L305 436 L296 458 L287 436Z"/><path class="gv-lt" d="M296 212 V440"/>' +
+    '<path class="gv-l" d="M270 204 H322" style="stroke-width:6"/><path class="gv-l" d="M296 204 V170" style="stroke-width:5"/>' + glow(296, 158, 52) + star(296, 158, 20, "gv-e3") + star(296, 158, 20, "gv-elt") +
     '<path class="gv-mid" d="M200 140 C168 140 146 168 150 206 C146 236 118 276 104 446 L306 446 C 290 276 254 236 250 206 C254 168 232 140 200 140Z"/>' +
     `<path fill="${ref("hg")}" d="M200 140 C168 140 146 168 150 206 C146 236 118 276 104 446 L196 446 C 190 340 190 240 196 180Z"/>` +
     '<path class="gv-l" d="M200 140 C168 140 146 168 150 206 C146 236 118 276 104 446 L306 446 C 290 276 254 236 250 206 C254 168 232 140 200 140Z"/>' +

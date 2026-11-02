@@ -1004,6 +1004,26 @@ html.reduce-motion .title-cine-opt.primary { animation: none; }
 .title-cine-opt:disabled::before, .title-cine-opt:disabled::after { display: none; }
 .title-cine-verse { color: var(--text-lo); letter-spacing: 0.06em; }
 
+/* Telas largas: duas colunas, texto à esquerda e a Acendedora no terço direito (titleScene.frameHero).
+   Em telas quase quadradas ou altas, volta o layout centrado. */
+@media (min-aspect-ratio: 13/10) {
+  .title-cine-overlay {
+    align-items: flex-start;
+    padding-left: clamp(40px, 8vw, 150px);
+    padding-right: 40vw;
+  }
+  .title-cine-head { text-align: left; }
+  .title-cine-name { font-size: clamp(46px, 7.4vw, 112px); letter-spacing: clamp(6px, 1.1vw, 16px); }
+  .title-cine-div { margin-left: 0; margin-right: auto; }
+  .title-cine-menu { align-items: flex-start; margin-left: calc(-1 * var(--sp-5)); }
+  .title-cinematic::after {
+    background:
+      radial-gradient(ellipse at 68% 55%, transparent 38%, rgba(3, 5, 9, 0.7) 100%),
+      linear-gradient(90deg, rgba(3, 5, 9, 0.66) 0%, transparent 46%),
+      linear-gradient(180deg, rgba(3, 5, 9, 0.62) 0%, transparent 20%, transparent 66%, rgba(3, 5, 9, 0.82) 100%);
+  }
+}
+
 /* Contadores do canto superior direito (moeda e poções), alinhados ao botão Menu. */
 .hud-fagulha {
   position: fixed;

@@ -14,7 +14,7 @@ import type { AbstractMesh, Material, Node } from "@babylonjs/core";
  * Os vértices ficam no espaço LOCAL de cada parte (sem baixar a matriz de mundo para dentro
  * deles, como o Mesh.MergeMeshes faz, o que dobraria a transformação do esqueleto).
  *
- * LIMITE (medido em 2026-11): os GLB do KayKit (Rogue_Hooded, Skeleton_*) exportam UMA skin
+ * LIMITE (medido em 2026-11): os GLB do KayKit (hoje removidos) exportam UMA skin
  * por parte, cada qual com matrizes de bind-inverso DIFERENTES (o osso "hips" tem bind-inverso
  * distinto em cada skin). Essas partes têm Skeleton próprio, portanto NÃO são fundidas aqui
  * (fundir com o esqueleto de uma delas desmonta o personagem: braços e tronco colapsam). Já os

@@ -2,7 +2,7 @@
  * CAMADA ENGINE. Resolve um caminho de asset para uma URL que respeita ONDE a
  * pagina esta publicada.
  *
- * Os caminhos no codigo sao escritos com "/" inicial (ex.: "/models/Mage.glb"),
+ * Os caminhos no codigo sao escritos com "/" inicial (ex.: "/models/personagens/heroina.glb"),
  * que aponta para a RAIZ do dominio. Isso funciona em dev (servido na raiz), mas
  * quebra quando o jogo e publicado numa SUBPASTA (ex.: GitHub Pages em
  * https://usuario.github.io/brasa/play/): "/models/..." viraria

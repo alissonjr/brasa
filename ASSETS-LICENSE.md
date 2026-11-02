@@ -13,10 +13,9 @@ O arquivo de creditos vivo fica em
 
 | Pacote | Autor | Uso no Brasa | Fonte |
 |---|---|---|---|
-| Character Pack: Adventurers | Kay Lousberg (KayKit) | `Mage.glb` (Acendedora), `Rogue_Hooded.glb` | https://kaylousberg.itch.io/kaykit-adventurers |
-| Character Pack: Skeletons | Kay Lousberg (KayKit) | `Skeleton_Warrior/Minion/Rogue.glb` (os mortos) | https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0 |
 | Dungeon Pack (Remastered) | Kay Lousberg (KayKit) | `public/assets/dungeon_kit/` (sala-cripta modular) | https://kaylousberg.itch.io/kaykit-dungeon-remastered |
-| Universal Animation Library | Quaternius | `AnimationLibrary_Godot_Standard.gltf` (animacoes / manequim de fallback) | https://quaternius.com |
+| Universal Base Characters, Modular Character Outfits, Universal Animation Library 1 e 2 | Quaternius | `public/models/personagens/` (a Acendedora, o Guardiao e os mortos) | https://quaternius.itch.io/universal-base-characters |
+| Universal Animation Library (Godot) | Quaternius | `AnimationLibrary_Godot_Standard.gltf` (so como fonte de `tools/make_josue.py`; o jogo nao carrega) | https://quaternius.com |
 | Ultimate Monsters | Quaternius | `public/models/quaternius_monsters/` (variedade de inimigos: demonio, brutamonte, espreitador, conjurador) | https://quaternius.com/packs/ultimatemonsters.html |
 
 Todos os pacotes acima sao distribuidos sob CC0 1.0 Universal por seus autores.
