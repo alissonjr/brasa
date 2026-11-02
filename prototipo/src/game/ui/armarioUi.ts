@@ -15,8 +15,9 @@ import { POCAO_DEF, POCOES, type Frasco, type Motivo, type Pocao, type Pocoes } 
  *
  * O painel só ESCREVE no modelo puro (`Pocoes`); quem abre liga Fagulhas, HUD e save pelos ganchos.
  * Abrir: `interact` (R ou Enter) perto do armário; E é o golpe de fogo e NÃO serve. Enquanto aberto o
- * painel engole as teclas (o jogo não bebe com 1/2/3 nem abre o menu com Esc): quem abre pausa a
- * simulação (`gameActive = false`), como no relicário.
+ * painel engole as teclas PRESSIONADAS (o jogo não bebe com 1/2/3 nem abre o menu com Esc), mas deixa
+ * passar as SOLTAS (senão R ou W ficariam presas no InputState). Quem abre pausa a simulação
+ * (`gameActive = false`), como no relicário.
  *
  * Teclado: setas movem (esquerda/direita pela ordem, cima/baixo entre colunas), Home/End,
  * 1 a 3 escolhem o cinto, Enter ou Espaço fazem a ação principal, Tab chega aos botões, Esc fecha.
@@ -91,11 +92,17 @@ export function openArmario(h: ArmarioHooks): ArmarioHandle {
   let sel: Sel = { sec: "cinto", i: 0 };
   const firstFilled = p.nichos[andar]?.findIndex((n) => n !== null) ?? -1;
   if (firstFilled >= 0) sel = { sec: "nicho", i: firstFilled };
-  let status = "";
-  let statusWarn = false;
   const pops = new Set<string>(); // slots que acabaram de mudar (animação curta)
 
-  const panel = el("div", { class: "ds-frame arm-panel" });
+  // Esqueleto PERSISTENTE: só o conteúdo de cada região é refeito. A região de status (aria-live) fica
+  // viva o tempo todo; um leitor de tela só anuncia mudança de texto numa região que já existe.
+  const headEl = el("header", { class: "arm-head" });
+  const bodyEl = el("div", { class: "arm-body menu-body" });
+  const infoHost = el("div", { class: "arm-info-host" });
+  const actsHost = el("div", { class: "arm-acts-host" });
+  const statusEl = el("p", { class: "arm-status", role: "status" });
+  const footEl = el("footer", { class: "arm-foot" }, infoHost, actsHost, statusEl, el("p", { class: "arm-dica", id: "arm-dica" }));
+  const panel = el("div", { class: "ds-frame arm-panel" }, headEl, bodyEl, footEl);
   const overlay = el("div", { class: "menu-backdrop arm-backdrop", role: "dialog", "aria-modal": "true" }, panel);
   overlay.style.zIndex = "60";
 
@@ -113,17 +120,23 @@ export function openArmario(h: ArmarioHooks): ArmarioHandle {
   };
 
   // ------------------------------------------------------------------ ações
+  const setStatus = (msg: string, warn: boolean): void => {
+    statusEl.classList.toggle("is-warn", warn);
+    if (statusEl.textContent === msg && msg) {
+      // mesma frase de novo: esvazia antes, para o leitor de tela anunciar outra vez
+      statusEl.textContent = "";
+      requestAnimationFrame(() => (statusEl.textContent = msg));
+    } else statusEl.textContent = msg;
+  };
   const feito = (msg: string, ...chaves: string[]): void => {
-    status = msg;
-    statusWarn = false;
+    setStatus(msg, false);
     for (const c of chaves) pops.add(c);
     uiClick();
     h.onChange?.();
     render();
   };
   const negado = (why: string): void => {
-    status = why;
-    statusWarn = true;
+    setStatus(why, true);
     h.deny?.();
     render();
   };
@@ -209,8 +222,7 @@ export function openArmario(h: ArmarioHooks): ArmarioHandle {
 
   const escolher = (s: Sel, focar = true): void => {
     sel = s;
-    status = "";
-    statusWarn = false;
+    setStatus("", false);
     render();
     if (focar) slotEl(s)?.focus({ preventScroll: true });
   };
@@ -352,11 +364,11 @@ export function openArmario(h: ArmarioHooks): ArmarioHandle {
     saldo.insertAdjacentHTML("beforeend", icon("spark", 14));
     saldo.append(`${h.fagulhas()}`);
 
-    const head = el("header", { class: "arm-head" }, el("h2", { class: "menu-title arm-title", id: "arm-titulo", text: T.armTitulo }), saldo, fechar);
-    const body = el("div", { class: "arm-body menu-body" }, el("div", { class: "arm-cols" }, colCinto(), colNichos(), colReserva()));
-    const statusEl = el("p", { class: `arm-status${statusWarn ? " is-warn" : ""}`, role: "status", text: status });
-    const foot = el("footer", { class: "arm-foot" }, infoEl(), acts(), statusEl, el("p", { class: "arm-dica", text: T.armDica }));
-    panel.replaceChildren(head, body, foot);
+    headEl.replaceChildren(el("h2", { class: "menu-title arm-title", id: "arm-titulo", text: T.armTitulo }), saldo, fechar);
+    bodyEl.replaceChildren(el("div", { class: "arm-cols" }, colCinto(), colNichos(), colReserva()));
+    infoHost.replaceChildren(infoEl());
+    actsHost.replaceChildren(acts());
+    footEl.querySelector<HTMLElement>("#arm-dica")!.textContent = T.armDica;
     overlay.setAttribute("aria-labelledby", "arm-titulo");
     pops.clear();
     if (foco) panel.querySelector<HTMLElement>(foco)?.focus({ preventScroll: true });
@@ -415,7 +427,6 @@ export function openArmario(h: ArmarioHooks): ArmarioHandle {
       escolher(alvo);
     }
   });
-  overlay.addEventListener("keyup", (e) => e.stopPropagation());
   overlay.addEventListener("pointerdown", (e) => {
     if (e.target === overlay) close(); // clique fora do painel
   });

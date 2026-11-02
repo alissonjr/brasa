@@ -314,30 +314,31 @@ export class Pocoes {
   }
 
   /**
-   * Leitura DEFENSIVA (o blob vem de fora): campos ausentes viram o padrão de uma descida nova,
-   * tetos e tamanhos são respeitados, tipos desconhecidos somem. `run` ausente (save antigo) cai
-   * em `antigo` (os campos pocaoVida, pocaoFuria e unguento do RunSave de hoje). O legado vem do perfil.
+   * Leitura DEFENSIVA (o blob vem de fora), EM LUGAR: preserva a identidade de `cinto` (quem guarda
+   * a referência, como o alias `inv` do main.ts, continua válido). Campos ausentes viram o padrão de
+   * uma descida nova, tetos e tamanhos são respeitados, tipos desconhecidos somem. `run` ausente
+   * (save antigo) cai em `antigo` (os campos pocaoVida, pocaoFuria e unguento do RunSave de hoje).
+   * O legado vem do perfil.
    */
-  static fromSave(run?: unknown, legado?: unknown, antigo?: { pocaoVida?: unknown; pocaoFuria?: unknown; unguento?: unknown }): Pocoes {
-    const lg = Pocoes.lerLegado(legado);
+  carregar(run?: unknown, legado?: unknown, antigo?: { pocaoVida?: unknown; pocaoFuria?: unknown; unguento?: unknown }): void {
     const o = run && typeof run === "object" ? (run as Record<string, unknown>) : null;
-    const p = new Pocoes(lg, { marta: !o });
+    this.reiniciar(Pocoes.lerLegado(legado), { marta: !o });
     if (!o) {
       // save sem o campo novo: só as cargas antigas (nichos e reserva de descida nova)
-      p.cinto.vida = inteiro(antigo?.pocaoVida, 0, POCAO_DEF.vida.teto);
-      p.cinto.furia = inteiro(antigo?.pocaoFuria, 0, POCAO_DEF.furia.teto);
-      p.cinto.unguento = inteiro(antigo?.unguento, 0, POCAO_DEF.unguento.teto);
-      return p;
+      this.cinto.vida = inteiro(antigo?.pocaoVida, 0, POCAO_DEF.vida.teto);
+      this.cinto.furia = inteiro(antigo?.pocaoFuria, 0, POCAO_DEF.furia.teto);
+      this.cinto.unguento = inteiro(antigo?.unguento, 0, POCAO_DEF.unguento.teto);
+      return;
     }
     const cinto = Array.isArray(o.cinto) ? o.cinto : [];
-    POCOES.forEach((t, i) => (p.cinto[t] = inteiro(cinto[i], 0, POCAO_DEF[t].teto)));
+    POCOES.forEach((t, i) => (this.cinto[t] = inteiro(cinto[i], 0, POCAO_DEF[t].teto)));
     const nichos = Array.isArray(o.nichos) ? o.nichos : [];
     for (let a = 0; a < ANTESSALAS; a++) {
       const fila = Array.isArray(nichos[a]) ? (nichos[a] as unknown[]) : [];
-      for (let n = 0; n < NICHOS_POR_ANTESSALA; n++) p.nichos[a]![n] = Pocoes.lerNicho(fila[n]);
+      for (let n = 0; n < NICHOS_POR_ANTESSALA; n++) this.nichos[a]![n] = Pocoes.lerNicho(fila[n]);
       // reconcilia com o perfil: `gravado` só vale se o legado do andar ainda tem aquele frasco
-      const sobra = [...p.legado[a]!];
-      for (const f of p.nichos[a]!) {
+      const sobra = [...this.legado[a]!];
+      for (const f of this.nichos[a]!) {
         if (!f || !f.gravado) continue;
         const i = sobra.indexOf(f.tipo);
         if (i >= 0) sobra.splice(i, 1);
@@ -347,10 +348,16 @@ export class Pocoes {
     const reserva = Array.isArray(o.reserva) ? o.reserva : [];
     for (let a = 0; a < ANTESSALAS; a++) {
       const r = Array.isArray(reserva[a]) ? (reserva[a] as unknown[]) : [];
-      p.reserva[a] = Array.isArray(reserva[a])
+      this.reserva[a] = Array.isArray(reserva[a])
         ? { vida: inteiro(r[0], 0, RESERVA_ESTOQUE.vida), furia: inteiro(r[1], 0, RESERVA_ESTOQUE.furia) }
         : { ...RESERVA_ESTOQUE };
     }
+  }
+
+  /** Versão estática de `carregar` (instância nova). */
+  static fromSave(run?: unknown, legado?: unknown, antigo?: { pocaoVida?: unknown; pocaoFuria?: unknown; unguento?: unknown }): Pocoes {
+    const p = new Pocoes();
+    p.carregar(run, legado, antigo);
     return p;
   }
 

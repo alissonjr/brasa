@@ -315,4 +315,19 @@ test("save antigo (sem o campo novo): cargas de pocaoVida, pocaoFuria e unguento
   assert.deepEqual(z.cinto, { vida: 0, furia: 0, unguento: 0 });
 });
 
+test("carregar() e EM LUGAR: a identidade de cinto sobrevive (alias inv do main.ts)", () => {
+  const p = new Pocoes(undefined, { cinto: { vida: 1 } });
+  const alias = p.cinto;
+  p.comprar(2, "vida", 50);
+  const blob = JSON.parse(JSON.stringify(p.toSave()));
+  const q = new Pocoes(undefined, { cinto: { vida: 3, furia: 2 } });
+  const aq = q.cinto;
+  q.carregar(blob.run, blob.legado);
+  assert.equal(q.cinto, aq);
+  assert.deepEqual(q.toSave(), p.toSave());
+  p.carregar(undefined, undefined, { pocaoVida: 2 });
+  assert.equal(p.cinto, alias);
+  assert.deepEqual(alias, { vida: 2, furia: 0, unguento: 0 });
+});
+
 console.log(`\n${passed} testes ok` + (process.exitCode ? " (HA FALHAS)" : ""));
