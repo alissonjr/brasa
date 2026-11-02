@@ -1,5 +1,5 @@
 import { Mesh, MultiMaterial, VertexData } from "@babylonjs/core";
-import type { AbstractMesh, Material, Matrix, Node, Scene } from "@babylonjs/core";
+import type { AbstractMesh, Color3, Material, Matrix, Node, Scene } from "@babylonjs/core";
 
 /**
  * CAMADA JOGO (Brasa). Funde o cenário ESTÁTICO da sala (props avulsos clonados, bases de
@@ -16,8 +16,12 @@ import type { AbstractMesh, Material, Matrix, Node, Scene } from "@babylonjs/cor
 export interface StaticMergeOptions {
   /** A malha entra na fusão? (já filtrado: tem geometria e material). */
   eligible(m: AbstractMesh): boolean;
-  /** Material final de um material-fonte (ex.: o CellMaterial persistente), ou null para deixar a malha intacta. */
-  resolve(src: Material): Material | null;
+  /**
+   * Material final de um material-fonte (ex.: o CellMaterial persistente), ou null para deixar a
+   * malha intacta. Com `color`, o material é UM só (branco) para todas as cores: a cor vai nos
+   * vértices (vertex color), e peças de materiais-fonte diferentes caem na MESMA malha.
+   */
+  resolve(src: Material): { material: Material; color?: Color3 } | null;
   /** A malha projeta sombra? Fundem-se separadamente (sombra só dos que projetam). */
   casts(m: AbstractMesh): boolean;
   parent: Node;
@@ -36,6 +40,7 @@ interface Acc {
   pos: number[];
   nor: number[];
   uv: number[];
+  col: number[] | null;
   hasUv: boolean;
   /** Orientação de face das malhas de origem (o loader glTF marca as dele; o resto usa a padrão). */
   side: number | null;
@@ -43,7 +48,7 @@ interface Acc {
   vertexCount: number;
 }
 
-function pushTransformed(acc: Acc, vd: VertexData, m: Matrix, flip: boolean, range?: { start: number; count: number }): void {
+function pushTransformed(acc: Acc, vd: VertexData, m: Matrix, flip: boolean, color: Color3 | undefined, range?: { start: number; count: number }): void {
   const p = vd.positions!;
   const n = vd.normals;
   const mm = m.m;
@@ -78,6 +83,7 @@ function pushTransformed(acc: Acc, vd: VertexData, m: Matrix, flip: boolean, ran
     } else acc.nor.push(0, 1, 0);
     if (vd.uvs) acc.uv.push(vd.uvs[i * 2]!, vd.uvs[i * 2 + 1]!);
     else acc.uv.push(0, 0);
+    if (color && acc.col) acc.col.push(color.r, color.g, color.b, 1);
   }
   if (vd.uvs) acc.hasUv = true;
   // espelhamento da MALHA (determinante negativo do mundo) inverte o enrolamento; o das instâncias o Babylon ignora
@@ -96,6 +102,7 @@ export function mergeStaticByMaterial(scene: Scene, root: Node, opts: StaticMerg
     // resolve TODOS os (sub)materiais antes de tocar a malha: tudo ou nada
     const subs = multi ? (m.material as MultiMaterial).subMaterials : [m.material];
     const resolved = subs.map((sm) => (sm ? opts.resolve(sm) : null));
+    type Res = { material: Material; color?: Color3 };
     const usedSubs = multi ? m.subMeshes.map((sub) => sub.materialIndex) : [0];
     if (usedSubs.some((i) => !resolved[i])) continue;
     const vd = VertexData.ExtractFromMesh(m, false, false);
@@ -106,14 +113,14 @@ export function mergeStaticByMaterial(scene: Scene, root: Node, opts: StaticMerg
     const mats = inst && inst.length > 0 ? inst.map((im) => im.multiply(world)) : [world];
     const flip = world.determinant() < 0;
     const side = m.overrideMaterialSideOrientation ?? null;
-    const parts: { mat: Material; range?: { start: number; count: number } }[] = multi
-      ? m.subMeshes.map((sub) => ({ mat: resolved[sub.materialIndex]!, range: { start: sub.indexStart, count: sub.indexCount } }))
-      : [{ mat: resolved[0]! }];
+    const parts: { res: Res; range?: { start: number; count: number } }[] = multi
+      ? m.subMeshes.map((sub) => ({ res: resolved[sub.materialIndex]!, range: { start: sub.indexStart, count: sub.indexCount } }))
+      : [{ res: resolved[0]! }];
     for (const part of parts) {
-      const key = `${part.mat.uniqueId}|${casts ? 1 : 0}|${side}`;
+      const key = `${part.res.material.uniqueId}|${casts ? 1 : 0}|${side}`;
       let acc = accs.get(key);
-      if (!acc) accs.set(key, (acc = { material: part.mat, casts, side, pos: [], nor: [], uv: [], hasUv: false, idx: [], vertexCount: 0 }));
-      for (const mt of mats) pushTransformed(acc, vd, mt, flip, part.range);
+      if (!acc) accs.set(key, (acc = { material: part.res.material, casts, side, pos: [], nor: [], uv: [], col: part.res.color ? [] : null, hasUv: false, idx: [], vertexCount: 0 }));
+      for (const mt of mats) pushTransformed(acc, vd, mt, flip, part.res.color, part.range);
     }
     removed.push(m);
   }
@@ -124,9 +131,11 @@ export function mergeStaticByMaterial(scene: Scene, root: Node, opts: StaticMerg
     vd.positions = acc.pos;
     vd.normals = acc.nor;
     if (acc.hasUv) vd.uvs = acc.uv;
+    if (acc.col) vd.colors = acc.col;
     vd.indices = acc.vertexCount > 65535 ? new Uint32Array(acc.idx) : new Uint16Array(acc.idx);
     const mesh = new Mesh(`cenario_${acc.material.name}_${acc.casts ? "c" : "n"}_${k++}`, scene);
     vd.applyToMesh(mesh, false);
+    mesh.hasVertexAlpha = false;
     mesh.material = acc.material;
     if (acc.side !== null) mesh.overrideMaterialSideOrientation = acc.side;
     mesh.parent = opts.parent;

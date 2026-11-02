@@ -20,7 +20,7 @@ import {
   Vector4,
 } from "@babylonjs/core";
 import type { AbstractMesh, AssetContainer, Camera, IDisposable, Material, Node as BNode, Observer, Scene } from "@babylonjs/core";
-import { createLightPool, isCachedToon, loadContainer, toonifyHierarchy, toonMaterialFor } from "@engine";
+import { createLightPool, flatColorOf, isCachedToon, loadContainer, toonifyHierarchy, toonMaterialFor } from "@engine";
 import { CellMaterial } from "@babylonjs/materials/cell";
 import { mergeStaticByMaterial } from "./staticMerge";
 import { pickLayout } from "./cryptLayouts";
@@ -149,6 +149,20 @@ function kitRecolor(name: string, c0: Color3): Color3 {
     return new Color3(c.r * 0.45 + l * 0.55, c.g * 0.45 + l * 0.55, c.b * 0.45 + l * 0.55).scale(0.62);
   }
   return c;
+}
+
+/** Material UNICO e branco do cenario de cor chapada: a cor de cada peca vai nos vertices, entao
+ *  pedra, madeira, metal e ouro caem na mesma malha fundida (2 malhas em vez de ~12 por sala). */
+function kitFlatMaterial(scene: Scene): CellMaterial {
+  let m = KIT_TOON.get("__flat");
+  if (!m) {
+    m = new CellMaterial("kitFlat", scene);
+    m.computeHighLevel = true;
+    m.diffuseColor = Color3.White();
+    m.maxSimultaneousLights = 6;
+    KIT_TOON.set("__flat", m);
+  }
+  return m;
 }
 
 // Containers do kit (carregados uma vez, compartilhados por todos os andares).
@@ -1261,7 +1275,13 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     const res = mergeStaticByMaterial(scene, roomRoot, {
       parent: roomRoot,
       eligible: (m) => !isDyn(m),
-      resolve: (src) => (kitMats.has(src) ? toonMaterialFor(scene, src, toonOpts) : null),
+      resolve: (src) => {
+        if (!kitMats.has(src)) return null;
+        const flat = flatColorOf(src);
+        if (flat) return { material: kitFlatMaterial(scene), color: kitRecolor(src.name, flat) }; // cor chapada: 1 material, cor nos vertices
+        const mt = toonMaterialFor(scene, src, toonOpts); // com textura (HalloweenBits): CellMaterial proprio
+        return mt ? { material: mt } : null;
+      },
       casts: (m) => casterSet.has(m),
     });
     for (const r of res.removed) {

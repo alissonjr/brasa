@@ -126,6 +126,13 @@ export function toonMaterialFor(scene: Scene, src: Material | null, opts: ToonOp
   return sharedCell(scene, src, opts.cache, { highLevel: opts.highLevel ?? true, maxLights: opts.maxLights ?? 6 }, opts.recolor);
 }
 
+/** Cor difusa de um material-fonte LIT SEM textura (cor chapada do kit), ou null se tem textura/não é Standard/PBR. */
+export function flatColorOf(src: Material): Color3 | null {
+  if (!(src instanceof StandardMaterial || src instanceof PBRMaterial) || !isLit(src)) return null;
+  const { tex, color } = readDiffuse(src);
+  return tex ? null : color;
+}
+
 /** true se o material é um CellMaterial de um cache persistente (não pode ser descartado com a sala). */
 export function isCachedToon(mat: Material | null | undefined, cache: Map<string, CellMaterial>): boolean {
   if (!mat) return false;
