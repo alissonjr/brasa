@@ -40,7 +40,7 @@ export { configureMusic, startMusic, stopMusic, setMusicState } from "./audio/mu
 export { configureStingers, playStinger } from "./audio/stingers";
 export { configureAmbience, startAmbience, setAmbience, updateAmbience, playWhisper, playStir, stopAmbience } from "./audio/adaptiveAmbience";
 export {
-  playFootstep, playJump, playLand, playSwing, playHit, playBlock, playDodge, playHeroHurt, playPotion, playPickup,
+  playFootstep, playJump, playLand, playSwing, playHit, playBlock, playDodge, playHeroHurt, playPickup,
   playDoor, playBrazierLit, playStairs, playEnemyDeath, playGuardianVoice, playGuardianPulse, surfaceForFloor,
 } from "./audio/sfx";
 export type { Surface, HitMaterial } from "./audio/sfx";
@@ -92,8 +92,10 @@ export type { CodexEntry, CodexCategory, CodexFloor, CodexDecal } from "./conten
 export { DEFAULT_CHARACTER, readCharacter, MANTOS, DONS, DIFFICULTIES, mantoColor } from "./content/character";
 export type { CharacterSave, Difficulty } from "./content/character";
 export { CombatDirector } from "./combat/combatDirector";
-export { configureCombatSound, healChime, denyBlip } from "./combat/combatSound";
-export { DIFFICULTY_DAMAGE_TAKEN, POTIONS, ABSORB } from "./combat/tuning";
+export { configureCombatSound, healChime, denyBlip, playDrink } from "./combat/combatSound";
+export { DIFFICULTY_DAMAGE_TAKEN, POTIONS, ABSORB, DRINK } from "./combat/tuning";
+export type { PotionKind } from "./combat/tuning";
+export { DrinkFx } from "./combat/drinkFx";
 export { CombatHud } from "./ui/combatHud";
 export { Onboarding } from "./ui/onboarding";
 export { DamageNumbers } from "./ui/damageNumbers";

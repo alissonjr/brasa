@@ -80,7 +80,14 @@ def({ name: "sfx_esquiva_bloqueio", seconds: 5, kind: "sfx", run: (h) => {
   h.at(3.0, () => sfx.playBlock(true));
   h.at(4.0, () => perfectDodgeChime());
 } });
-def({ name: "sfx_pocao", seconds: 3, kind: "sfx", run: (h) => h.at(0.1, () => sfx.playPotion()) });
+def({ name: "sfx_pocao", seconds: 4, kind: "sfx", run: (h) => {
+  h.at(0.1, () => sfx.playDrink("vida", "cork"));
+  h.at(0.4, () => sfx.playDrink("vida", "sip"));
+  h.at(1.6, () => sfx.playDrink("furia", "cork"));
+  h.at(1.9, () => sfx.playDrink("furia", "sip"));
+  h.at(2.8, () => sfx.playDrink("unguento", "cork"));
+  h.at(3.0, () => sfx.playDrink("unguento", "sip"));
+} });
 def({ name: "sfx_item", seconds: 3, kind: "sfx", run: (h) => {
   h.at(0.1, () => sfx.playPickup("item"));
   h.at(1.0, () => sfx.playPickup("essencia"));

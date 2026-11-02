@@ -224,24 +224,60 @@ export function playHeroHurt(): void {
 }
 
 // --- itens e poções ---------------------------------------------------------------------
-/** Beber poção: três goles, estalo de vidro e brilho de cura. */
-export function playPotion(): void {
+export type DrinkKind = "vida" | "furia" | "unguento";
+
+/**
+ * SOM DO GOLE (redesenho 4.1), em duas pontas porque o gesto tem duas:
+ *  - "cork" no INÍCIO (o frasco aparece na mão): rolha (clique de 8 ms) ou pop grave do unguento.
+ *  - "sip" no COMMIT (a carga foi gasta), cabendo em ~0,35 s: Recuperação = 3 goles + estalo de vidro +
+ *    brilho de cura; Fúria = 1 gole + sibilo agudo + "whoomp" grave; Unguento = esfregar + crepitar.
+ * O cancelamento NÃO chama isto (usa denyBlip).
+ */
+export function playDrink(kind: DrinkKind, part: "cork" | "sip" = "sip"): void {
   const v = begin();
   if (!v) return;
   const { a, out, t } = v;
-  for (let k = 0; k < 3; k++) {
-    const at = t + k * 0.16 + rr(0, 0.02);
+  const gulp = (at: number, g: number): void => {
     const f = rr(150, 210);
-    tone(a, out, at, { f, f1: f * 0.7, dur: 0.11, gain: 0.07, attack: 0.02, type: "sine" });
-    noise(a, out, at, { dur: 0.1, gain: 0.03, kind: "pink", attack: 0.02, filters: [{ type: "bandpass", f: 420 * jit(0.2), f1: 620, q: 1.4 }] });
+    tone(a, out, at, { f, f1: f * 0.7, dur: 0.09, gain: 0.07 * g, attack: 0.02 });
+    noise(a, out, at, { dur: 0.09, gain: 0.04 * g, kind: "pink", attack: 0.02, filters: [{ type: "bandpass", f: 420 * jit(0.2), f1: 620, q: 1.4 }] });
     const b = rr(380, 520);
-    tone(a, out, at + 0.04, { f: b, f1: b * 2, dur: 0.05, gain: 0.014 }); // bolha
+    tone(a, out, at + 0.03, { f: b, f1: b * 2, dur: 0.05, gain: 0.014 * g }); // bolha
+  };
+  if (part === "cork") {
+    if (kind === "unguento") {
+      tone(a, out, t, { f: 240, f1: 130, dur: 0.1, gain: 0.09 }); // destampar: pop
+      noise(a, out, t, { dur: 0.05, gain: 0.03, kind: "pink", filters: [{ type: "bandpass", f: 700, q: 0.9 }] });
+    } else {
+      noise(a, out, t, { dur: 0.012, gain: 0.12, filters: [{ type: "bandpass", f: 2600 * jit(0.1), q: 1.2 }] }); // rolha
+      tone(a, out, t, { f: 900, f1: 380, dur: 0.03, gain: 0.05 });
+    }
+    return;
   }
-  const g = t + 0.54;
-  noise(a, out, g, { dur: 0.012, gain: 0.05, filters: [{ type: "highpass", f: 5200 }] });
-  tone(a, out, g, { f: 3300 * jit(0.04), dur: 0.16, gain: 0.025, attack: 0.001 });
-  tone(a, out, g, { f: 4720 * jit(0.04), dur: 0.1, gain: 0.014, attack: 0.001 });
-  [784, 1175, 1568].forEach((f, i) => tone(a, out, g + 0.04 + i * 0.06, { f, dur: 0.9, gain: 0.03, attack: 0.08 })); // brilho
+  if (kind === "vida") {
+    gulp(t, 1);
+    gulp(t + 0.09, 0.9);
+    gulp(t + 0.18, 0.8);
+    const g = t + 0.25;
+    noise(a, out, g, { dur: 0.012, gain: 0.05, filters: [{ type: "highpass", f: 5200 }] }); // estalo de vidro
+    tone(a, out, g, { f: 3300 * jit(0.04), dur: 0.14, gain: 0.025, attack: 0.001 });
+    tone(a, out, g, { f: 4720 * jit(0.04), dur: 0.1, gain: 0.014, attack: 0.001 });
+    [784, 1175, 1568].forEach((f, i) => tone(a, out, g + 0.03 + i * 0.05, { f, dur: 0.8, gain: 0.03, attack: 0.06 })); // brilho de cura
+  } else if (kind === "furia") {
+    gulp(t, 1);
+    noise(a, out, t + 0.1, { dur: 0.15, gain: 0.07, attack: 0.02, filters: [{ type: "highpass", f: 2000 }] }); // sibilo
+    tone(a, out, t + 0.1, { f: 62, f1: 42, dur: 0.4, gain: 0.12, attack: 0.02 }); // whoomp
+    tone(a, out, t + 0.1, { f: 190, f1: 100, dur: 0.25, gain: 0.07, attack: 0.02 }); // corpo do whoomp
+    duckPulse(0.3);
+  } else {
+    noise(a, out, t, { dur: 0.2, gain: 0.1, attack: 0.04, filters: [{ type: "bandpass", f: 1400, q: 1.2 }] }); // esfregar
+    for (let i = 0; i < 3; i++) noise(a, out, t + 0.12 + i * 0.06 + rr(0, 0.02), { dur: 0.012, gain: 0.045, filters: [{ type: "bandpass", f: 3200 + i * 500, q: 1 }] }); // crepitar
+  }
+}
+
+/** Compatibilidade: o gole de Recuperação completo (antigo playPotion). */
+export function playPotion(): void {
+  playDrink("vida", "sip");
 }
 
 /** Pegar item. kind: "item" (brilho), "essencia" (mais quente e grave), "chave" (metálico). */

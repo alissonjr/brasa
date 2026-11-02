@@ -129,3 +129,10 @@ export function heroHurt(blocked = false): void {
   if (blocked) playBlock(false);
   else playHeroHurt();
 }
+
+/**
+ * SOM DO GOLE (redesenho 4.1): a implementação vive em audio/sfx.ts (playDrink) no estilo do
+ * barramento; aqui só se mantém a assinatura exportada que o main.ts e o index usam.
+ *  - "cork": início do gesto (frasco na mão): rolha e pop. "sip": no commit (a carga foi gasta).
+ */
+export { playDrink } from "../audio/sfx";
