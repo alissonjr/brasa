@@ -29,6 +29,8 @@ export interface ToonOptions {
    * com materiais (ver isCachedToon).
    */
   cache?: Map<string, CellMaterial>;
+  /** Só converte materiais-fonte que passam neste filtro (ex.: só os do kit compartilhado). */
+  accept?: (src: Material) => boolean;
   /** Tinta por material (só com `cache`): devolve a cor final do material (unifica paleta entre pacotes). */
   recolor?: (name: string, color: Color3) => Color3;
 }
@@ -69,12 +71,26 @@ export function toonifyHierarchy(root: Node, opts: ToonOptions = {}): CellMateri
     // blank-white se uma malha mesclada trouxe submateriais).
     if (!(src instanceof StandardMaterial || src instanceof PBRMaterial)) continue;
     if (skipDL && !isLit(src)) continue; // emissivos (chamas/feixe/decalque): deixa liso
+    if (opts.accept && !opts.accept(src)) continue;
     let cell = cache.get(src);
     if (!cell) {
       cell = shared ? sharedCell(scene, src, shared, { highLevel, maxLights }, opts.recolor) : makeCell(scene, src, { highLevel, maxLights });
       cache.set(src, cell);
     }
     mesh.material = cell;
+  }
+  // Os materiais-fonte trocados ficam ÓRFÃOS (nenhuma malha os usa mais) e vazavam a cada sala
+  // (material + textura, ex.: a textura do piso pintado). Descarta-os, poupando a textura difusa
+  // que o CellMaterial reaproveita. Só no modo sem cache persistente (no modo compartilhado a
+  // fonte é do container em cache e nunca é descartada).
+  if (!shared) {
+    for (const [src, cell] of cache) {
+      if (src.getBindedMeshes().length > 0) continue;
+      if (src instanceof StandardMaterial) src.diffuseTexture = null;
+      else if (src instanceof PBRMaterial) src.albedoTexture = null;
+      void cell;
+      src.dispose(false, true);
+    }
   }
   return [...new Set(cache.values())];
 }

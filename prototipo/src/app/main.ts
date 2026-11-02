@@ -1,5 +1,5 @@
 import { Matrix, Scene, Vector3 } from "@babylonjs/core";
-import { addFinishingPass, addSceneOutline, createEngine, el, enableHavokPhysics, enableSsao, InputState, ThirdPersonCamera, Tweens, UiManager } from "@engine";
+import { addFinishingPass, addSceneOutline, createEngine, disposeOrphanSkeletons, el, enableHavokPhysics, enableSsao, InputState, ThirdPersonCamera, Tweens, UiManager } from "@engine";
 import type { KeyBindings } from "@engine";
 import {
   WORLD_GRAVITY,
@@ -408,6 +408,7 @@ async function main(): Promise<void> {
     currentRoom?.dispose();
     currentBoss = null;
     combat.clearEnemies();
+    disposeOrphanSkeletons(scene); // esqueletos/texturas de ossos dos mortos descartados (vazavam por sala)
     const def = DESCENT[i]!;
     currentRoom = buildCryptRoom(scene, cryptCtx, def);
     perf.logRoom(i, def.kind); // mede draw calls da sala recem-montada (gate de performance)

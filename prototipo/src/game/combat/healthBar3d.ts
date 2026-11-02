@@ -41,7 +41,7 @@ export class HealthBar3D {
 
   /** Libera a malha e a textura (ao descartar o inimigo). */
   dispose(): void {
-    this.plane.dispose();
+    this.plane.dispose(false, true); // libera tambem o material (antes vazava 1 hpbarMat por morto)
     this.tex.dispose();
   }
 

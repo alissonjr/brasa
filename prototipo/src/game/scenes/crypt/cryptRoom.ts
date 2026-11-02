@@ -959,6 +959,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     makeFlame(new Vector3(cxp, ringY + 0.2, czp), 0.8, 0, false); // brilho central (emissivo; sem point-light p/ não estourar a sala)
   };
   // Eixo central, espaçados; densidade cresce com a profundidade da sala.
+  if (ALTA) chandMat.dispose(); // sem candelabros na camera alta: o material nao seria usado (vazava 1 por sala)
   if (!ALTA) {
     hangChandelier(0, -(HALFZ - 6));
     hangChandelier(0, Math.min(2, AZ - 4));
@@ -1246,7 +1247,11 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // Materiais do kit PERSISTENTES (KIT_TOON) e cenario estatico fundido por material: a sala
   // inteira (props avulsos + bases de thin instances) vira ~1 malha por material em vez de
   // dezenas de props. Alcapao, vasos, cadeiras e bichos (metadata.dyn) ficam independentes.
-  const toonOpts = { skipDisableLighting: true, maxLights: 6, cache: KIT_TOON, recolor: kitRecolor };
+  // So os materiais que VEM dos glb do kit (compartilhados entre salas) entram no cache persistente;
+  // piso pintado, caverna, nicho etc. sao da sala e seguem com CellMaterial proprio (descartado com ela).
+  const kitMats = new Set<Material>();
+  for (const c of Object.values(P)) for (const mt of c.materials) kitMats.add(mt);
+  const toonOpts = { skipDisableLighting: true, maxLights: 6, cache: KIT_TOON, recolor: kitRecolor, accept: (m: Material) => kitMats.has(m) };
   {
     const casterSet = new Set<AbstractMesh>(casters);
     const isDyn = (m: AbstractMesh): boolean => {
@@ -1256,7 +1261,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     const res = mergeStaticByMaterial(scene, roomRoot, {
       parent: roomRoot,
       eligible: (m) => !isDyn(m),
-      resolve: (src) => toonMaterialFor(scene, src, toonOpts),
+      resolve: (src) => (kitMats.has(src) ? toonMaterialFor(scene, src, toonOpts) : null),
       casts: (m) => casterSet.has(m),
     });
     for (const r of res.removed) {
@@ -1268,7 +1273,8 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     }
     for (const mm of res.merged) if (mm.casts) { ctx.shadow.addShadowCaster(mm.mesh); casters.push(mm.mesh); }
   }
-  toonifyHierarchy(roomRoot, toonOpts);
+  toonifyHierarchy(roomRoot, toonOpts); // kit que ficou independente (alcapao, vasos, cadeiras): materiais persistentes
+  toonifyHierarchy(roomRoot, { skipDisableLighting: true, maxLights: 6 }); // o resto da sala: CellMaterial proprio
 
   // Materiais aceitam ate 6 luzes (evita a ambiente ser descartada).
   for (const m of scene.materials) {
