@@ -1,4 +1,4 @@
-import { CharacterController, createLightPool, type CombatInputSource, type InputSource, type ThirdPersonCamera } from "@engine";
+import { CharacterController, createLightPool, getContactShadows, type CombatInputSource, type InputSource, type ThirdPersonCamera } from "@engine";
 import { Color3, PointLight, Quaternion, Vector3 } from "@babylonjs/core";
 import type { Scene } from "@babylonjs/core";
 import { HeroModel, type HeroAction } from "./heroModel";
@@ -6,17 +6,15 @@ import { HeroCombat } from "../combat/heroCombat";
 
 /**
  * CAMADA JOGO (Brasa). A Acendedora: a heroína jogável da cripta. Compõe o
- * CharacterController genérico (engine), o HeroModel (visual) apontado para um KayKit
- * Adventurer CC0 (Mage.glb, já em disco e autossuficiente em animação) e o HeroCombat
+ * CharacterController genérico (engine), o HeroModel (visual) apontado para o corpo
+ * Quaternius CC0 vestido de Acendedora (heroina.glb) e o HeroCombat
  * (moveset). É aqui, no jogo, que a engine encontra o herói: a engine NÃO importa o
  * HeroModel nem o combate.
  */
 
-// KayKit - Adventurers: Rogue_Hooded (CC0). Silhueta ENCAPUZADA (lê como a Acendedora,
-// melhor que o Mage genérico) e, crucial p/ jogo, com rig/pesos/animações LIMPOS. O
-// modelo próprio do Tripo fica só nos menus (estático): o auto-rig dele deforma como
-// gelatina e a malha saiu com defeito, inadequado para o personagem jogável.
-const ACENDEDORA_MODEL = "/models/Rogue_Hooded.glb";
+// Corpo Quaternius (Universal Base Characters + Modular Outfits Fantasy, CC0) em preto, bronze e
+// ouro de brasa: heroina.glb (ver heroModel.ts). O modelo estatico do Tripo fica so nos menus.
+const ACENDEDORA_MODEL = "/models/personagens/heroina.glb";
 const FORWARD = new Vector3(0, 0, 1); // eixo local "frente" do modelo (para getFacing)
 
 /** Input de locomoção zerado: usado enquanto o combate trava o ator (golpe comprometido). */
@@ -34,6 +32,8 @@ export class Acendedora {
   private readonly aimQuat = new Quaternion();
   private readonly aimTarget = new Vector3(); // alvo de mira (lock-on / soft-target)
   private hasAim = false;
+  private readonly spark: PointLight;
+  private sparkOnHand = false;
 
   constructor(scene: Scene, spawn: Vector3, gravity: Vector3) {
     this.model = new HeroModel(scene, { modelUrl: ACENDEDORA_MODEL, name: "acendedora" });
@@ -47,10 +47,13 @@ export class Acendedora {
     spark.intensity = 1.0;
     spark.range = 9;
     spark.shadowEnabled = false;
-    spark.parent = this.model.root;
+    spark.parent = this.model.root; // ao carregar o modelo, passa para a mão (brasa), ver update()
+    this.spark = spark;
     // Halo quente no chão sob a Acendedora: a lanterna dela e o ponto de luz da cena fria.
     const pool = createLightPool(scene, { radius: 3.4, color: "#ffa63d", alpha: 0.4, y: -0.84 });
     pool.parent = this.model.root;
+    // Aterramento: sombra de contato (1 draw call para todos os atores; lê da câmera alta).
+    getContactShadows(scene).add(this.model.root, 0.6);
   }
 
   get position(): Vector3 {
@@ -94,6 +97,13 @@ export class Acendedora {
 
   /** Chamar de scene.onAfterPhysicsObservable. */
   update(deltaSeconds: number, input: CombatInputSource, camera: ThirdPersonCamera): void {
+    if (!this.sparkOnHand && this.model.emberNode) {
+      // A luz-fagulha passa a viver na brasa da mão esquerda: a única luz quente da sala fria
+      // acompanha o gesto (ataque, esquiva, bloqueio), em vez de ficar parada no tronco.
+      this.spark.parent = this.model.emberNode;
+      this.spark.position.set(0, 0.05, 0);
+      this.sparkOnHand = true;
+    }
     this.combat_.update(deltaSeconds, input);
     // Animação dominante a partir do estado de combate (bloqueio > esquiva > golpe > idle).
     const action: HeroAction = this.combat_.isBlocking

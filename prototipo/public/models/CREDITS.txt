@@ -31,3 +31,15 @@ Quaternius - Universal Animation Library
   Arquivo: AnimationLibrary_Godot_Standard.gltf (biblioteca de animacao / manequim de
            fallback do HeroModel).
   Fonte: https://quaternius.com  /  https://github.com/J-Ponzo/gltf-universal-animation-library
+
+Quaternius - Universal Base Characters (Standard, gratuita), Modular Character Outfits - Fantasy
+(Standard, gratuita), Universal Animation Library 1 e 2 (Standard)  [CC0 1.0, todos]
+  Arquivos derivados em public/models/personagens/: heroina.glb, morto_*.glb (corpo + roupa Ranger/
+  Peasant, texturas reduzidas e recoloridas, ossos dos dedos podados, malhas juntas por material),
+  anim.glb (23 clipes das UAL1/UAL2, so os ossos usados), manto_*.jpg (variantes de cor do manto).
+  Fontes: https://quaternius.itch.io/universal-base-characters
+          https://quaternius.itch.io/modular-character-outfits-fantasy
+          https://quaternius.itch.io/universal-animation-library
+          https://opengameart.org/content/universal-animation-library-2
+  Receita reproduzivel: tools/personagens/gerar.py (Blender 4.5 + Pillow). Os pacotes brutos NAO
+  estao no repositorio. O pacote "Bestiary - Dungeon Monsters" (licenca QAL, nao CC0) NAO e usado.

@@ -1,64 +1,68 @@
-import { ImportMeshAsync, Texture, TransformNode } from "@babylonjs/core";
-import type { AnimationGroup, BaseTexture, Material, Scene } from "@babylonjs/core";
+import { Color3, ImportMeshAsync, MeshBuilder, StandardMaterial, Texture, TransformNode } from "@babylonjs/core";
+import type { AnimationGroup, BaseTexture, Material, Mesh, Scene } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF"; // registra o loader glTF
 import { assetUrl, outlineHierarchy, type CharacterVisual } from "@engine";
+import { buildSword } from "./weapons";
+import { loadAnimLibrary, PERSONAGENS_DIR, retargetClips, semContornoNosOlhos } from "./quaterniusRig";
 
 /**
- * CAMADA JOGO (Brasa). Modelo visual do herói: um KayKit Adventurer (CC0) rigado, com
- * a roupa skinned ao esqueleto (deforma com o corpo, parece tecido de verdade; ver
- * docs/tecnica-deformacao-de-tecidos.md). Os personagens de Brasa compartilham o mesmo
- * esqueleto e a mesma biblioteca de animação KayKit (Idle/Walking/Running embutidos).
+ * CAMADA JOGO (Brasa). Modelo visual da heroína: corpo Universal Base Characters + roupa
+ * Modular Outfits Fantasy (Ranger, recolorida para preto fuligem, bronze e ouro de brasa) num
+ * GLB único (heroina.glb, 3 malhas: pele, roupa, olhos; 23 ossos sem dedos). As animações vêm
+ * da biblioteca Universal Animation Library 1 e 2 (anim.glb), retargetadas por nome de osso
+ * (quaterniusRig.ts). Tudo CC0; ver public/models/CREDITS.txt e tools/personagens/.
  *
- * Genérico por construção: a Acendedora passa o glb dela (Mage.glb) via opts.modelUrl;
- * sem URL, cai no default abaixo. Implementa CharacterVisual: o CharacterController
- * (engine) posiciona root e chama animate(dt, speed, grounded). Carregamento assíncrono;
- * root existe de imediato.
+ * A lâmina de weapons.ts fica na mão direita (nó do osso hand_r); na mão esquerda arde a
+ * brasa da Acendedora (pequena esfera emissiva; a luz-fagulha da heroína é parentada nela por
+ * acendedora.ts via emberNode). Implementa CharacterVisual: o CharacterController (engine)
+ * posiciona root e chama animate(dt, speed, grounded). Carregamento assíncrono; root existe
+ * de imediato.
  */
 
-// Default: KayKit Mage (Adventurers, CC0), autossuficiente em animação. Se faltar, cai
-// no placeholder (a própria biblioteca de animação serve de manequim).
-const DEFAULT_MODEL_URL = "/models/Mage.glb";
-const PLACEHOLDER_URL = "/models/AnimationLibrary_Godot_Standard.gltf";
+const DEFAULT_MODEL_URL = PERSONAGENS_DIR + "heroina.glb";
 const TARGET_HEIGHT = 1.8; // metros
 const CAPSULE_HALF = 0.9; // metade da cápsula de 1.8 m (pés ficam em root.y - 0.9)
-const FACING_OFFSET = 0; // ajustar para Math.PI se o modelo andar de costas
-const WALK_SPEED = 4;
-const RUN_SPEED = 8;
+const FACING_OFFSET = 0; // o loader já converte a mão-dupla do glTF: o corpo Quaternius olha para +Z (frente do jogo)
+const OUTLINE_WORLD = 0.03; // espessura do contorno em metros de mundo (~2 px na câmera do jogo)
+// Âncoras de velocidade (m/s) em que cada clipe de locomoção está "em fase" com o chão.
+const ANCHOR = { walk: 1.6, run: 4.2, sprint: 8 } as const;
+const BLOCK_HOLD = 0.5; // fração do clipe de bloqueio em que a guarda fica parada
+
+/** Nomes dos clipes na biblioteca (anim.glb) para cada ação do herói. */
+const CLIPES = {
+  idle: "Idle_Loop", walk: "Walk_Loop", run: "Jog_Fwd_Loop", sprint: "Sprint_Loop",
+  light: "Sword_Regular_A", heavy: "Sword_Regular_B", dodge: "Roll", block: "Sword_Block",
+  hit: "Hit_Chest", ember: "Spell_Simple_Shoot",
+} as const;
+type ClipeKey = keyof typeof CLIPES;
 
 /** Ação one-shot/hold do herói, sobreposta à locomoção. */
 export type HeroAction = "idle" | "light" | "heavy" | "dodge" | "block" | "hit" | "ember";
 
 export class HeroModel implements CharacterVisual {
   readonly root: TransformNode;
+  /** Nó da brasa na mão esquerda (existe depois do modelo carregar); a luz-fagulha pode ser parentada nele. */
+  emberNode: TransformNode | null = null;
   private readonly scene: Scene;
   private readonly modelUrl: string;
 
-  private idle?: AnimationGroup;
-  private walk?: AnimationGroup;
-  private run?: AnimationGroup;
-  // Camada de ação (ataque/esquiva/bloqueio): clipes embutidos do KayKit Adventurer.
-  private attackA?: AnimationGroup;
-  private attackB?: AnimationGroup;
-  private dodgeG?: AnimationGroup;
-  private blockG?: AnimationGroup;
-  private hitG?: AnimationGroup;
-  private emberG?: AnimationGroup;
+  private clips: Partial<Record<ClipeKey, AnimationGroup>> = {};
   private actionKind: HeroAction = "idle";
   private actionGroup?: AnimationGroup;
-  private wIdle = 1;
-  private wWalk = 0;
-  private wRun = 0;
+  // Pesos suavizados da locomoção (idle/walk/run/sprint somam ~1).
+  private w = { idle: 1, walk: 0, run: 0, sprint: 0 };
   private loaded = false;
-  // Manto escolhido na criação: troca o ATLAS de albedo por uma variante recolorida
-  // (public/models/rogue_<id>.png), gerada a partir do atlas verde base por hue-shift só
-  // na região do manto. Aplicada ao carregar e a cada começo de jogo. Sem id, fica o atlas
-  // base do KayKit (verde).
+  private emberT = 0;
+  private emberMat?: StandardMaterial;
+  // Manto escolhido na criação: o atlas da roupa é trocado por uma variante recolorida
+  // (public/models/personagens/manto_<id>.jpg; "brasa" é o atlas embutido no glb). Aplicado ao
+  // carregar e a cada começo de jogo.
   private mantleId?: string;
   private mantleTex?: Texture;
+  private baseAlbedo = new Map<Material, BaseTexture | null>();
 
   /**
-   * @param opts.modelUrl glb do herói (default: KayKit Mage). A Acendedora passa o
-   *   modelo dela aqui.
+   * @param opts.modelUrl glb do herói (default: heroina.glb).
    * @param opts.name nome do TransformNode raiz (default: "heroi").
    */
   constructor(scene: Scene, opts?: { modelUrl?: string; name?: string }) {
@@ -69,14 +73,11 @@ export class HeroModel implements CharacterVisual {
   }
 
   private async load(): Promise<void> {
-    // Usa o modelo pedido se existir; senão, o placeholder (biblioteca de animação).
-    let result;
-    try {
-      result = await ImportMeshAsync(assetUrl(this.modelUrl), this.scene, { pluginExtension: ".glb" });
-    } catch {
-      result = await ImportMeshAsync(assetUrl(PLACEHOLDER_URL), this.scene);
-    }
-    const top = result.meshes.find((m) => m.name === "__root__") ?? result.meshes[0];
+    const [result, lib] = await Promise.all([
+      ImportMeshAsync(assetUrl(this.modelUrl), this.scene, { pluginExtension: ".glb" }),
+      loadAnimLibrary(this.scene),
+    ]);
+    const top = result.meshes.find((m) => m.name === "__root__") ?? result.meshes[0]!;
 
     // Encaixe: medir o modelo e ajustá-lo a ~1.8 m, pés no chão, centrado.
     const { min, max } = top.getHierarchyBoundingVectors(true);
@@ -91,19 +92,60 @@ export class HeroModel implements CharacterVisual {
     fit.scaling.setAll(scale);
     fit.position.set(-cx * scale, -CAPSULE_HALF - min.y * scale, -cz * scale);
     top.parent = fit;
+    for (const g of result.animationGroups) g.stop();
 
+    // Acessórios nos ossos: lâmina de bronze na mão direita, brasa na esquerda.
+    const nos = new Map<string, TransformNode>();
+    for (const n of top.getChildTransformNodes(false)) nos.set(n.name, n as TransformNode);
+    this.attachProps(nos);
+
+    semContornoNosOlhos(this.root);
     // ESTILO (Bloco 1, spec-estilo-visual-render §4.1b): contorno de tinta na heroína.
-    outlineHierarchy(this.root, { width: 0.03 });
+    top.computeWorldMatrix(true);
+    outlineHierarchy(this.root, { worldWidth: OUTLINE_WORLD });
 
-    this.setupAnimations(result.animationGroups);
+    this.setupAnimations(retargetClips(lib, top as TransformNode, this.root.name, CLIPES));
     this.loaded = true;
     this.applyMantle(); // aplica a variante de manto se já escolhida quando o modelo terminou
   }
 
+  /** Lâmina (weapons.ts) em hand_r e brasa em hand_l. Offsets ajustados contra o osso do rig Quaternius. */
+  private attachProps(nos: Map<string, TransformNode>): void {
+    const handR = nos.get("hand_r");
+    if (handR) {
+      const sword = buildSword(this.scene);
+      sword.parent = handR;
+      // No osso da mão do rig UE (medido): +X local sobe pelo antebraço, +Z local é a frente da
+      // palma e -X aponta para os dedos. A lâmina (+Y do weapons.ts) deita para a frente (+Z).
+      sword.position.set(-0.035, 0.01, 0);
+      sword.rotation.set(Math.PI / 2, 0, 0);
+      sword.scaling.setAll(1);
+      for (const m of sword.getChildMeshes(false)) (m as Mesh).metadata = { ...(m.metadata ?? {}), noOutline: true };
+    }
+    const handL = nos.get("hand_l");
+    if (handL) {
+      const holder = new TransformNode("brasa_mao", this.scene);
+      holder.parent = handL;
+      holder.position.set(0.09, 0.0, 0.0);
+      const mat = new StandardMaterial("brasa_mao_mat", this.scene);
+      mat.disableLighting = true;
+      mat.diffuseColor = Color3.Black();
+      mat.specularColor = Color3.Black();
+      mat.emissiveColor = Color3.FromHexString("#ffa63d");
+      const orb = MeshBuilder.CreateSphere("brasa_mao_orb", { diameter: 0.1, segments: 6 }, this.scene);
+      orb.material = mat;
+      orb.parent = holder;
+      orb.isPickable = false;
+      orb.metadata = { noOutline: true };
+      this.emberMat = mat;
+      this.emberNode = holder;
+    }
+  }
+
   /**
-   * Define o manto (id da escolha: brasa/cinza/noite/ferro). Troca o atlas de albedo do
-   * KayKit pela variante recolorida correspondente (mesmo layout/UV, só o matiz do manto
-   * muda), preservando a sombra. Pode ser chamada antes do modelo carregar (fica pendente).
+   * Define o manto (id da escolha: brasa/cinza/noite/ferro). Troca o atlas de albedo da roupa
+   * pela variante recolorida correspondente (mesmo layout/UV), preservando a sombra. Pode ser
+   * chamada antes do modelo carregar (fica pendente).
    */
   setMantle(id: string): void {
     this.mantleId = id;
@@ -112,46 +154,32 @@ export class HeroModel implements CharacterVisual {
 
   private applyMantle(): void {
     if (!this.mantleId) return;
-    const url = assetUrl(`/models/rogue_${this.mantleId}.png`);
-    // invertY=false: casa com a convenção do atlas carregado pelo loader glTF (origem
-    // topo-esquerda); senão o atlas sai espelhado em V e o manto pega o swatch errado.
-    const tex = new Texture(url, this.scene, false, false);
-    tex.name = `manto_${this.mantleId}`;
     const old = this.mantleTex;
-    const seen = new Set<Material>();
+    let tex: Texture | undefined;
+    if (this.mantleId !== "brasa") {
+      // invertY=false: casa com a convenção do atlas carregado pelo loader glTF.
+      tex = new Texture(assetUrl(`${PERSONAGENS_DIR}manto_${this.mantleId}.jpg`), this.scene, false, false);
+      tex.name = `manto_${this.mantleId}`;
+    }
     for (const m of this.root.getChildMeshes(false)) {
+      if (!/roupa/i.test(m.name)) continue;
       const mat = m.material as (Material & { albedoTexture?: BaseTexture | null }) | null;
-      if (!mat || seen.has(mat) || !("albedoTexture" in mat)) continue;
-      seen.add(mat);
-      mat.albedoTexture = tex;
+      if (!mat || !("albedoTexture" in mat)) continue;
+      if (!this.baseAlbedo.has(mat)) this.baseAlbedo.set(mat, mat.albedoTexture ?? null);
+      mat.albedoTexture = tex ?? this.baseAlbedo.get(mat) ?? null;
     }
     this.mantleTex = tex;
     if (old && old !== tex) old.dispose(); // libera a variante anterior ao trocar
   }
 
-  private setupAnimations(groups: AnimationGroup[]): void {
-    // Casa por padrão de nome (funciona com Quaternius, KayKit, Mixamo renomeado, etc.).
-    const find = (re: RegExp) => groups.find((g) => re.test(g.name));
-    for (const g of groups) g.stop();
-
-    this.idle = find(/idle/i);
-    this.walk = find(/walk/i);
-    this.run = find(/sprint|running|jog|(^|[^a-z])run/i);
-
-    // Ações: ataque leve (golpe diagonal), pesado (chop a 2 mãos), esquiva, bloqueio, dano.
-    this.attackA = find(/1H_Melee_Attack_Slice_Diagonal/i) ?? find(/1H_Melee_Attack/i) ?? find(/Spellcast_Shoot/i);
-    this.attackB = find(/2H_Melee_Attack_Chop/i) ?? find(/1H_Melee_Attack_Stab/i) ?? this.attackA;
-    this.dodgeG = find(/Dodge_Forward/i) ?? find(/dodge/i);
-    this.blockG = find(/^Blocking$/i) ?? find(/block/i);
-    this.hitG = find(/^Hit_A$/i) ?? find(/hit/i);
-    this.emberG = find(/Spellcast_Shoot/i) ?? find(/Spellcasting/i) ?? find(/Throw/i) ?? this.attackA;
-
-    for (const g of [this.idle, this.walk, this.run]) {
+  private setupAnimations(clips: Partial<Record<ClipeKey, AnimationGroup>>): void {
+    this.clips = clips;
+    for (const k of ["idle", "walk", "run", "sprint"] as const) {
+      const g = clips[k];
       if (!g) continue;
-      g.play(true);
-      g.weight = 0;
+      g.start(true);
+      g.weight = k === "idle" ? 1 : 0;
     }
-    if (this.idle) this.idle.weight = 1;
   }
 
   /**
@@ -165,21 +193,22 @@ export class HeroModel implements CharacterVisual {
     this.actionGroup?.stop();
     this.actionGroup = undefined;
     if (kind === "idle") return;
-    const g =
-      kind === "light" ? this.attackA :
-      kind === "heavy" ? this.attackB :
-      kind === "dodge" ? this.dodgeG :
-      kind === "block" ? this.blockG :
-      kind === "ember" ? this.emberG : this.hitG;
+    const g = this.clips[kind];
     if (!g) {
       this.actionKind = "idle";
       return;
     }
-    for (const lg of [this.idle, this.walk, this.run]) if (lg) lg.weight = 0;
+    for (const k of ["idle", "walk", "run", "sprint"] as const) { const lg = this.clips[k]; if (lg) lg.weight = 0; }
+    // Velocidade de cada clipe ajustada à temporização do combate (tuning.ts).
+    const speed = kind === "light" ? 1.0 : kind === "heavy" ? 0.7 : kind === "dodge" ? 2.5 : kind === "ember" ? 0.7 : kind === "block" ? 1.6 : 1.0;
     g.reset();
-    g.play(kind === "block");
+    if (kind === "block") {
+      // Sobe a guarda e SEGURA a pose (não repete o clipe inteiro).
+      g.start(false, speed, g.from, g.from + (g.to - g.from) * BLOCK_HOLD);
+    } else {
+      g.start(false, speed, g.from, g.to);
+    }
     g.weight = 1;
-    g.speedRatio = kind === "light" ? 1.45 : kind === "dodge" ? 1.3 : 1.0;
     this.actionGroup = g;
   }
 
@@ -187,39 +216,45 @@ export class HeroModel implements CharacterVisual {
 
   animate(dt: number, speed: number, grounded: boolean): void {
     if (!this.loaded || dt <= 0) return;
+    this.flickerEmber(dt);
     if (this.actionKind !== "idle") {
       // A ação domina; mantém a locomoção zerada para não vazar pose.
-      if (this.idle) this.idle.weight = 0;
-      if (this.walk) this.walk.weight = 0;
-      if (this.run) this.run.weight = 0;
+      for (const k of ["idle", "walk", "run", "sprint"] as const) { const lg = this.clips[k]; if (lg) lg.weight = 0; }
       return;
     }
     this.blendLocomotion(dt, grounded ? speed : 0);
   }
 
-  /** Mescla idle/andar/correr por velocidade (pesos somando ~1). */
+  /** A brasa da mão pulsa de leve (e a luz-fagulha, que é filha dela, acompanha a posição). */
+  private flickerEmber(dt: number): void {
+    this.emberT += dt;
+    const f = 0.9 + 0.1 * Math.sin(this.emberT * 9) + 0.05 * Math.sin(this.emberT * 23.7);
+    if (this.emberMat) this.emberMat.emissiveColor.set(1 * f, 0.62 * f, 0.24 * f);
+  }
+
+  /** Mescla idle/andar/correr/sprint por velocidade (pesos somando ~1) e ajusta o ritmo de cada passada. */
   private blendLocomotion(dt: number, speed: number): void {
-    let ti = 0;
-    let tw = 0;
-    let tr = 0;
+    const t = { idle: 0, walk: 0, run: 0, sprint: 0 };
     if (speed < 0.2) {
-      ti = 1;
-    } else if (speed <= WALK_SPEED) {
-      const t = speed / WALK_SPEED;
-      ti = 1 - t;
-      tw = t;
+      t.idle = 1;
+    } else if (speed <= ANCHOR.walk) {
+      const k = speed / ANCHOR.walk;
+      t.idle = 1 - k; t.walk = k;
+    } else if (speed <= ANCHOR.run) {
+      const k = (speed - ANCHOR.walk) / (ANCHOR.run - ANCHOR.walk);
+      t.walk = 1 - k; t.run = k;
     } else {
-      const t = clamp((speed - WALK_SPEED) / (RUN_SPEED - WALK_SPEED), 0, 1);
-      tw = 1 - t;
-      tr = t;
+      const k = clamp((speed - ANCHOR.run) / (ANCHOR.sprint - ANCHOR.run), 0, 1);
+      t.run = 1 - k; t.sprint = k;
     }
     const k = 1 - Math.exp(-12 * dt);
-    this.wIdle += (ti - this.wIdle) * k;
-    this.wWalk += (tw - this.wWalk) * k;
-    this.wRun += (tr - this.wRun) * k;
-    if (this.idle) this.idle.weight = this.wIdle;
-    if (this.walk) this.walk.weight = this.wWalk;
-    if (this.run) this.run.weight = this.wRun;
+    for (const n of ["idle", "walk", "run", "sprint"] as const) {
+      this.w[n] += (t[n] - this.w[n]) * k;
+      const g = this.clips[n];
+      if (!g) continue;
+      g.weight = this.w[n];
+      if (n !== "idle") g.speedRatio = clamp(speed / ANCHOR[n], 0.7, 1.4);
+    }
   }
 }
 
