@@ -478,7 +478,7 @@ export function cascade(c: CaveCtx, side: "n" | "s" | "e" | "w", along: number, 
     const z = top.z + (bot.z - top.z) * u + Math.cos(u * 6 + along) * 0.18;
     pts.push({ x, y: Math.max(c.surf(x, z) + 0.1, WATER_Y + 0.02), z, w: w0 * (0.7 + 0.8 * u) });
   }
-  c.geoWater.strip(pts, [0.45, 0.78, 0.9, 0.82], [0.8, 0.95, 1.0, 0.9]);
+  c.geoWater.strip(pts, [0.3, 0.6, 0.72, 0.6], [0.5, 0.78, 0.88, 0.7]);
   const last = pts[pts.length - 1]!;
   c.geoWater.quad(last.x, WATER_Y + 0.02, last.z, 1.1, 1.1, 0.4, [0.8, 0.95, 1, 0.45]);
 }
@@ -671,7 +671,7 @@ export function lightShafts(c: CaveCtx, n: number): void {
     const y = c.surf(p.x, p.z) - 0.2;
     const w = 1.1 + c.rnd() * 0.9;
     const ry = c.rnd() * Math.PI;
-    for (const a of [0, Math.PI / 2]) c.geoWater.vquad(p.x, y, p.z, w, 8.5, ry + a, [0.72, 0.86, 1, 0.16], [0.72, 0.86, 1, 0]);
+    for (const a of [0, Math.PI / 2]) c.geoWater.vquad(p.x, y, p.z, w, 8.5, ry + a, [0.72, 0.86, 1, 0.1], [0.72, 0.86, 1, 0]);
     c.geoWater.quad(p.x, y + 0.08, p.z, w * 1.1, w * 0.8, ry, [0.72, 0.86, 1, 0.13]);
   }
 }
@@ -797,7 +797,7 @@ export function crown(c: CaveCtx, tint: Color3): void {
       }
       case "brasa":
       case "obsidiana": {
-        if (rnd() < (kind === "brasa" ? 0.4 : 0.22)) {
+        if (rnd() < (kind === "brasa" ? 0.28 : 0.13)) {
           // rachadura incandescente atravessando o topo do muro e descendo a face interna
           const len = 0.5 + rnd() * 0.5;
           const pts = [-0.45, -0.1, 0.18, 0.45].map((o, k) => ({
