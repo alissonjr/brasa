@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brasa - Redesenho da descida (as 7 câmaras)</title>
+<!-- MOCK DE DECISÃO, não é código do jogo. Plantas vistas de cima, em metros (1 ladrilho = 6 m),
+     geradas por planos.js a partir de dados. Só tokens do DS. -->
+<link rel="stylesheet" href="/src/game/ui/ds/tokens.css">
+<link rel="stylesheet" href="base.css">
+</head>
+<body>
+<div class="wrap">
+  <div class="cap">Redesenho da descida: mock de leitura 2 de 3</div>
+  <h1>As 7 câmaras, cada uma com a sua antessala</h1>
+  <nav class="nav"><a href="index.html">Laço</a><a href="camaras.html" aria-current="page">As 7 câmaras</a><a href="antessala.html">Antessala, mural, armário, gole</a></nav>
+  <p class="lead">Vista de cima, norte para cima: a Acendedora chega pela escada à antessala (embaixo), cruza a porta de pedra e entra na câmara (em cima). A faixa tracejada é a faixa de combate; os mortos estão onde acordam; os marcos são o que a sala conta. Dimensões múltiplas de 12 m (ladrilho de 6 m, parede de 4 m), como a convenção de <code>cryptLayouts.ts</code>. Letras: M Manso, G Guerreiro, L Ladino, A Arqueiro, J Conjurador, E Espreitador, D Demônio, N Antigo, B Brutamonte, S Sentinela, Gd Guardiã.</p>
+  <div id="cards" class="grid"></div>
+  <section class="panel" style="margin-top: var(--sp-5)"><h3>Legenda</h3><div id="legend"></div></section>
+</div>
+<script src="planos.js"></script>
+<script>
+  const P = window.PLANOS;
+  document.getElementById("cards").innerHTML = P.CAMARAS.map(P.card).join("");
+  document.getElementById("legend").innerHTML = P.legend();
+</script>
+</body>
+</html>
