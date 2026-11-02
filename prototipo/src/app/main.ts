@@ -825,7 +825,6 @@ async function main(): Promise<void> {
   const ui = new UiManager();
   const prefs = platform.settings.get();
   ui.setUiScale(prefs.uiScale);
-  ui.setReducedMotion(prefs.reducedMotion);
   ui.setHighContrast(prefs.highContrast);
   const applyQuality = (q: Quality): void => {
     engine.setHardwareScalingLevel(q === "alto" ? 1 : q === "medio" ? 1.25 : 1.6);
@@ -842,7 +841,14 @@ async function main(): Promise<void> {
   gameHud.setVisible(false);
 
   const combatHud = new CombatHud();
-  combatHud.setReducedFlashes(prefs.reducedMotion); // acessibilidade: sem molduras de flash
+  // Acessibilidade: "reduzir movimento" vale para a UI (classe no <html>), o shake da câmera e
+  // as molduras de flash do combate, no boot e ao vivo (Opções).
+  const applyReducedMotion = (on: boolean): void => {
+    ui.setReducedMotion(on);
+    camera.setShakeEnabled(!on);
+    combatHud.setReducedFlashes(on);
+  };
+  applyReducedMotion(prefs.reducedMotion);
   ui.hudLayer.appendChild(combatHud.vignette);
   ui.hudLayer.appendChild(combatHud.feedback);
   ui.hudLayer.appendChild(combatHud.root);
@@ -991,6 +997,7 @@ async function main(): Promise<void> {
       enterRoom(0);
       startGame();
     },
+    setReducedMotion: (on) => applyReducedMotion(on),
     setQuality: (q) => applyQuality(q),
     applyKeyBindings: (b) => input.setBindings(b),
     loadSlot: async (slot) => {

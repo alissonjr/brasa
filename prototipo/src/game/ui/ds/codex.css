@@ -380,26 +380,26 @@ button.codex-niche:focus-visible .codex-niche__arch { outline: 2px solid var(--e
 }
 
 /* ---------- Alto contraste (opção do jogador) ---------- */
-.ui-root.high-contrast .codex-wall { background: var(--ink-950); border-color: var(--gold-300); }
-.ui-root.high-contrast .codex-slab { background: var(--ink-900); border-color: var(--gold-300); }
-.ui-root.high-contrast .codex-paper,
-.ui-root.high-contrast .codex-folheto { --paper-hi: var(--ink-950); --paper-lo: var(--ink-950); --paper-ink: var(--gold-100); --paper-ink-soft: var(--gold-100); --paper-label: var(--gold-200); }
-.ui-root.high-contrast .codex-paper { border: var(--line) solid var(--gold-300); background: var(--ink-950); }
-.ui-root.high-contrast .codex-folheto { background: var(--ink-950); box-shadow: 0 0 0 2px var(--gold-300); }
-.ui-root.high-contrast .codex-niche__t,
-.ui-root.high-contrast .codex-niche__s,
-.ui-root.high-contrast .codex-faixa__r,
-.ui-root.high-contrast .codex-vago span { color: var(--gold-100); }
-.ui-root.high-contrast .codex-niche.is-empty .codex-niche__arch .gv { filter: brightness(0.35); }
+html.high-contrast .codex-wall { background: var(--ink-950); border-color: var(--gold-300); }
+html.high-contrast .codex-slab { background: var(--ink-900); border-color: var(--gold-300); }
+html.high-contrast .codex-paper,
+html.high-contrast .codex-folheto { --paper-hi: var(--ink-950); --paper-lo: var(--ink-950); --paper-ink: var(--gold-100); --paper-ink-soft: var(--gold-100); --paper-label: var(--gold-200); }
+html.high-contrast .codex-paper { border: var(--line) solid var(--gold-300); background: var(--ink-950); }
+html.high-contrast .codex-folheto { background: var(--ink-950); box-shadow: 0 0 0 2px var(--gold-300); }
+html.high-contrast .codex-niche__t,
+html.high-contrast .codex-niche__s,
+html.high-contrast .codex-faixa__r,
+html.high-contrast .codex-vago span { color: var(--gold-100); }
+html.high-contrast .codex-niche.is-empty .codex-niche__arch .gv { filter: brightness(0.35); }
 
 /* Reduzir movimento: o papel já nasce no lugar e o nicho já nasce aceso.
    (Dentro do jogo a opção vem como .reduce-motion; a media query cobre o sistema.) */
-.ui-root.reduce-motion .codex-slab.is-new .codex-paper,
-.ui-root.reduce-motion .codex-slab.is-new .codex-paper q,
-.ui-root.reduce-motion .codex-niche.is-new .codex-niche__arch { animation: none; }
-.ui-root.reduce-motion .codex-slab.is-new .codex-paper q { -webkit-mask-image: none; mask-image: none; }
-.ui-root.reduce-motion button.codex-slab:hover,
-.ui-root.reduce-motion button.codex-niche:hover .codex-niche__arch { transform: none; }
+html.reduce-motion .codex-slab.is-new .codex-paper,
+html.reduce-motion .codex-slab.is-new .codex-paper q,
+html.reduce-motion .codex-niche.is-new .codex-niche__arch { animation: none; }
+html.reduce-motion .codex-slab.is-new .codex-paper q { -webkit-mask-image: none; mask-image: none; }
+html.reduce-motion button.codex-slab:hover,
+html.reduce-motion button.codex-niche:hover .codex-niche__arch { transform: none; }
 @media (prefers-reduced-motion: reduce) {
   .codex-slab.is-new .codex-paper,
   .codex-slab.is-new .codex-paper q,
@@ -421,4 +421,4 @@ button.codex-niche:focus-visible .codex-niche__arch { outline: 2px solid var(--e
 .hud-codex-toast.show { opacity: 1; transform: none; }
 .hud-codex-toast b { font-family: var(--font-display); font-size: var(--fs-sm); letter-spacing: 0.08em; color: var(--gold-200); }
 .hud-codex-toast__glyph { display: inline-flex; color: var(--ember-300); }
-.ui-root.high-contrast .hud-codex-toast { background: var(--ink-950); border-color: var(--gold-300); }
+html.high-contrast .hud-codex-toast { background: var(--ink-950); border-color: var(--gold-300); }

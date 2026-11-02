@@ -239,39 +239,41 @@
 }
 
 /* --- Acessibilidade: reduzir movimento --- */
-.ui-root.reduce-motion *,
-.ui-root.reduce-motion *::before,
-.ui-root.reduce-motion *::after {
+html.reduce-motion *,
+html.reduce-motion *::before,
+html.reduce-motion *::after {
   animation-duration: 0.001ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 0.001ms !important;
 }
 
-/* --- Acessibilidade: alto contraste (só tokens: texto pleno, bordas e fundos de ouro sobre preto) --- */
-.ui-root.high-contrast {
-  --texto: var(--gold-100);
-  --texto-suave: var(--gold-100);
-  --ouro: var(--gold-200);
-  --ouro-claro: var(--gold-100);
-  --borda: var(--gold-500);
+/* --- Acessibilidade: alto contraste ---
+   Vale nos TOKENS do design system (tokens.css): texto pleno, bordas e molduras em ouro
+   sobre preto. Os tokens compostos (painel, cartas, gradientes) releem estes valores, então
+   tudo acompanha, inclusive o que fica fora do .ui-root (HUD, derrota, braseiro). */
+html.high-contrast {
+  --ink-950: #000000;
+  --ink-900: #000000;
+  --ink-850: #05070b;
+  --ink-800: #080b11;
+  --ink-700: #0d1119;
+  --ink-600: var(--gold-600);
+  --ink-500: var(--gold-500);
+  --gold-800: var(--gold-600);
+  --gold-700: var(--gold-500);
+  --text-hi: #ffffff;
+  --text-mid: var(--gold-100);
+  --text-lo: var(--gold-200);
 }
-.ui-root.high-contrast .menu-backdrop {
-  --texto-suave: var(--gold-100);
+html.high-contrast .menu-backdrop {
   background: var(--ink-950);
 }
-.ui-root.high-contrast .menu-panel {
+html.high-contrast .menu-panel {
   background: var(--ink-950);
   border-color: var(--gold-300);
 }
-.ui-root.high-contrast .ds-btn {
+html.high-contrast .ds-btn {
   border-color: var(--gold-300);
-}
-.ui-root.high-contrast .menu-subtitle,
-.ui-root.high-contrast .stat-row .k,
-.ui-root.high-contrast .opt-note,
-.ui-root.high-contrast .ds-row,
-.ui-root.high-contrast .slot-info span {
-  color: var(--gold-100);
 }
 
 /* --- Botão Menu no HUD do jogo --- */
@@ -728,7 +730,7 @@ html.ui-open .brasa-bar { visibility: hidden; }
   opacity: 0.7;
   text-transform: uppercase;
 }
-.ui-root.reduce-motion .model-stage-canvas {
+html.reduce-motion .model-stage-canvas {
   /* Sem auto-rotação implícita aqui (o JS respeita), mas suaviza o fade. */
   transition: none;
 }
@@ -1050,10 +1052,10 @@ html.ui-open .brasa-bar { visibility: hidden; }
   0%, 100% { text-shadow: 0 0 14px rgba(255, 150, 70, 0.55); }
   50% { text-shadow: 0 0 22px rgba(255, 170, 90, 0.95); }
 }
-.ui-root.reduce-motion .title-cine-overlay,
-.ui-root.reduce-motion .title-cine-name,
-.ui-root.reduce-motion .title-cine-opt { animation: none; }
-.ui-root.reduce-motion .title-cine-opt.primary { animation: none; }
+html.reduce-motion .title-cine-overlay,
+html.reduce-motion .title-cine-name,
+html.reduce-motion .title-cine-opt { animation: none; }
+html.reduce-motion .title-cine-opt.primary { animation: none; }
 
 .menu-backdrop.cinematic {
   /* Base escura de poço-cripta. O diorama 3D vivo (a Acendedora girando) entra por

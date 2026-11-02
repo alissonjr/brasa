@@ -81,12 +81,16 @@ export class UiManager {
     this.screenLayer.style.setProperty("zoom", s);
   }
 
-  /** Liga/desliga classes genéricas de acessibilidade no root (estilizadas pelo tema). */
+  /**
+   * Liga/desliga classes genéricas de acessibilidade no <html> (estilizadas pelo tema). Ficam
+   * no documento, e não no root da UI, para alcançar também o que o jogo anexa ao body
+   * (derrota, braseiro, texto de história, fade, botão de mudo).
+   */
   setReducedMotion(on: boolean): void {
-    this.root.classList.toggle("reduce-motion", on);
+    this.root.ownerDocument.documentElement.classList.toggle("reduce-motion", on);
   }
   setHighContrast(on: boolean): void {
-    this.root.classList.toggle("high-contrast", on);
+    this.root.ownerDocument.documentElement.classList.toggle("high-contrast", on);
   }
 
   get hasScreens(): boolean {

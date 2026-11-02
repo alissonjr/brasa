@@ -40,6 +40,8 @@ export interface UiContext {
   newGame(): void | Promise<void>;
   /** Confirma a criação e começa uma campanha nova. */
   startNewGame(character: CharacterSave): void | Promise<void>;
+  /** Liga/desliga "reduzir movimento" ao vivo: animações da UI, shake da câmera e molduras de flash. */
+  setReducedMotion(on: boolean): void;
   /** Aplica a qualidade gráfica ao vivo (resolução de render + sombras). */
   setQuality(q: Quality): void;
   /** Reaplica o remapeamento de teclas ao input em jogo. */

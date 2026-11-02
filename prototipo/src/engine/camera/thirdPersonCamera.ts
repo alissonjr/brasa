@@ -25,7 +25,7 @@ export class ThirdPersonCamera {
   private readonly altaAlpha = -Math.PI / 2 - Math.PI / 5; // diagonal: duas paredes à vista
   private readonly altaBeta = 0.82; // ~47 graus da vertical: vê o chão, esconde menos
   private readonly altaBetaMin = 0.7;
-  private readonly altaBetaMax = 0.95;
+  private readonly altaBetaMax = 0.9;
   private readonly altaRadius = 15;
   private readonly defaultRadius = 6; // distância padrão (reaplicada a cada sala, view consistente)
   // Raio "desejado" (o que o jogador pediu via zoom/sala); o raio EFETIVO encurta sozinho
@@ -42,6 +42,7 @@ export class ThirdPersonCamera {
 
   // Screen shake (kick de impacto): amplitude que decai + buffer do alvo perturbado.
   private shakeAmp = 0;
+  private shakeEnabled = true; // acessibilidade: "reduzir movimento" desliga o kick de câmera
   private readonly _shakeTarget = new Vector3();
 
   // Limites de inclinação vertical da câmera (não olha de baixo do chão nem
@@ -69,7 +70,7 @@ export class ThirdPersonCamera {
     if (this.alta) {
       this.camera.fov = 0.62; // lente mais longa: menos distorção, leitura de diorama
       this.camera.lowerRadiusLimit = 9;
-      this.camera.upperRadiusLimit = 24;
+      this.camera.upperRadiusLimit = 20;
       this.camera.alpha = this.altaAlpha;
       this.camera.beta = this.altaBeta;
       this.camera.radius = this.altaRadius;
@@ -216,8 +217,15 @@ export class ThirdPersonCamera {
     this.camera.radius += (goalRadius - this.camera.radius) * k;
   }
 
+  /** Liga/desliga o screen shake (opção "Reduzir movimento"); desligado, zera o que estava em curso. */
+  setShakeEnabled(on: boolean): void {
+    this.shakeEnabled = on;
+    if (!on) this.shakeAmp = 0;
+  }
+
   /** Dispara um kick de câmera (impacto). Amplitude em unidades de mundo; pega o maior pedido. */
   shake(amplitude: number): void {
+    if (!this.shakeEnabled) return;
     this.shakeAmp = Math.max(this.shakeAmp, amplitude);
   }
 

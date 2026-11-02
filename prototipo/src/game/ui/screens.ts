@@ -535,7 +535,7 @@ export class OptionsScreen implements Screen {
       el("label", { class: "opt-row" }, el("span", { text: T.escalaInterface }), scaleSel),
       toggle(T.reduzirMovimento, s.reducedMotion, (v) => {
         ctx.settings.set({ reducedMotion: v });
-        ctx.ui.setReducedMotion(v);
+        ctx.setReducedMotion(v);
       }),
       toggle(T.altoContraste, s.highContrast, (v) => {
         ctx.settings.set({ highContrast: v });
