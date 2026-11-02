@@ -13,7 +13,7 @@ export const CRITERIA = {
   /** ambiência: loudness integrada (LUFS aprox.) por andar */
   ambLufsI: [-34, -28],
   /** música (cada estado): loudness integrada */
-  musLufsI: [-28, -20],
+  musLufsI: [-29, -22],
   /** efeitos: momentânea máxima (400 ms) */
   sfxLufsM: [-34, -12],
   /** música tem de ficar abaixo dos efeitos no jogo (dB mínimos de folga entre SFX momentâneo médio e música) */
@@ -22,8 +22,13 @@ export const CRITERIA = {
   ambAmplitudeMaxDb: 14,
   /** fontes vivas ao descer: o último andar não pode ter mais que o primeiro + folga */
   vazamentoFolga: 6,
+  /** efeitos de leitura (passos, golpes, itens...): % da energia acima de 150 Hz, para soar em alto-falante de notebook */
+  sfxAcima150Min: 35,
+  /** ducking sustentado de música+ambiência em combate pesado (queda em dB, LUFS-I antes vs depois) */
+  duckingDb: [2.5, 7],
+  /** mudo: nada sai (verificado no teste de integração, play_audio_check.cjs) */
   /** mix de jogo: loudness integrada alvo */
-  mixLufsI: [-24, -14],
+  mixLufsI: [-28, -20],
 };
 
 const lo = (r) => r[0], hi = (r) => r[1];
@@ -49,6 +54,14 @@ export function evaluate(rep) {
     }
     if (c.kind === "sfx" && !name.startsWith("stingers")) {
       ok(name, "momentânea na faixa", w.lufsM >= lo(CRITERIA.sfxLufsM) && w.lufsM <= hi(CRITERIA.sfxLufsM), `${w.lufsM.toFixed(1)} LUFS-M`);
+    }
+    const profundos = ["sfx_porta_pedra", "sfx_braseiro", "sfx_guardiao", "sfx_alcapao", "stingers"];
+    if (c.kind === "sfx" && !profundos.includes(name)) {
+      ok(name, "legível em notebook (>150 Hz)", w.above150 >= CRITERIA.sfxAcima150Min, `${w.above150.toFixed(0)}% da energia`);
+    }
+    if (name === "ducking_combate") {
+      const d = c.segs.antes.lufsI - c.segs.depois.lufsI;
+      ok(name, "ducking de combate", d >= lo(CRITERIA.duckingDb) && d <= hi(CRITERIA.duckingDb), `queda de ${d.toFixed(1)} dB`);
     }
     if (name === "descida_7_andares") {
       const p = c.probes;

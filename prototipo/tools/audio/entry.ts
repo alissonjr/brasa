@@ -180,6 +180,23 @@ def({
   },
 });
 
+// --- ducking sustentado: música/ambiência abaixam quando o combate pesa -----------------------
+def({
+  name: "ducking_combate",
+  seconds: 40,
+  kind: "mix",
+  ticks: true,
+  run: (h) => {
+    setFloorAudio(3);
+    startMusic();
+    startAmbience();
+    setAmbience({ floor: 3, danger: 0, urgency: 0 });
+    h.mark("antes", 8, 18);
+    h.mark("depois", 26, 38);
+    h.at(20, () => setCombatWeight(1));
+  },
+});
+
 // --- pior caso e mix de jogo -------------------------------------------------------------
 def({
   name: "mix_pior_caso",

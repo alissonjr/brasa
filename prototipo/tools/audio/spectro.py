@@ -63,7 +63,7 @@ for fn in sorted(os.listdir(src)):
     nper = 2048
     f, t, S = spectrogram(mono, fs, window="hann", nperseg=nper, noverlap=nper * 3 // 4, scaling="spectrum")
     Sdb = 10 * np.log10(np.maximum(S, 1e-14))
-    fig, ax = plt.subplots(figsize=(6.4, 2.3), dpi=80)
+    fig, ax = plt.subplots(figsize=(6.4, 2.3))
     ax.pcolormesh(t, f, Sdb, vmin=-110, vmax=-30, cmap="magma", shading="auto", rasterized=True)
     ax.set_yscale("symlog", linthresh=200, linscale=0.6)
     ax.set_ylim(20, 12000)
@@ -74,6 +74,11 @@ for fn in sorted(os.listdir(src)):
     ax.tick_params(labelsize=6)
     ax.set_title(f"{name}  pico {peak:.1f} dBFS  LUFS-I {li:.1f}", fontsize=8)
     fig.tight_layout(pad=0.4)
-    fig.savefig(os.path.join(dst, name + ".png"))
+    import io
+    from PIL import Image
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=64)
     plt.close(fig)
+    buf.seek(0)
+    Image.open(buf).convert("RGB").quantize(colors=48).save(os.path.join(dst, name + ".png"), optimize=True)
 print("\n".join(rows))

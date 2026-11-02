@@ -305,6 +305,7 @@ export function analyze(L, R, fs, t0 = 0, t1 = Infinity) {
     lufsS: ld.shortTerm,
     momRange: ld.momRange,
     bands: be.pct,
+    above150: 100 - be.pct["<60"] - be.pct["60-150"],
     rough: ro.rough,
     lowBandDb: ro.bandDb,
     tonalProm: tp.prominence,

@@ -23,7 +23,7 @@ export type AudioGroup = "music" | "ambience" | "stinger" | "sfx" | "ui";
 
 /** Ganho de calibragem por grupo (loudness relativo; ver docs/brasa/biblia-audio.md §Mixagem). */
 export const GROUP_TRIM: Record<AudioGroup, number> = {
-  music: 0.8,
+  music: 0.7,
   ambience: 1.4,
   stinger: 1,
   sfx: 1.4,
@@ -171,7 +171,7 @@ export function buildBus(ctx: BaseAudioContext): Bus {
   const wetAmount: Record<AudioGroup, number> = { music: 0.45, ambience: 0.3, stinger: 0.5, sfx: 0.22, ui: 0.08 };
   const mk = (g: AudioGroup): GroupNodes => {
     const input = ctx.createGain();
-    input.gain.value = 0.0001;
+    input.gain.value = 0;
     const duck = ctx.createGain();
     duck.gain.value = 1;
     const wet = ctx.createGain();
@@ -249,12 +249,17 @@ export function groupVolume(g: AudioGroup): number {
 function syncVolumes(instant = false): void {
   if (!bus) return;
   const t = bus.ctx.currentTime;
+  let any = false;
   for (const g of Object.keys(bus.groups) as AudioGroup[]) {
-    const target = Math.max(0.0001, groupVolume(g) * GROUP_TRIM[g]);
+    const vol = groupVolume(g);
+    if (vol > 0) any = true;
+    const target = vol * GROUP_TRIM[g];
     const p = bus.groups[g].input.gain;
     if (instant) p.setValueAtTime(target, t);
     else p.setTargetAtTime(target, t, 0.06);
   }
+  // Mudo total (tecla M ou volumes em zero): corta também a cauda da reverberação.
+  bus.master.gain.setTargetAtTime(any ? 1 : 0, t, any ? 0.03 : 0.05);
 }
 
 // --- ducking ----------------------------------------------------------------------------
