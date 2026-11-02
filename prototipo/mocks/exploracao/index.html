@@ -222,7 +222,7 @@
   const tog = (id, cb) => { const b = $(id); b.addEventListener("click", () => { const on = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", String(on)); cb(on); }); };
   tog("#tgGray", (on) => document.body.classList.toggle("gray", on));
   tog("#tgRm", (on) => document.body.classList.toggle("rm", on));
-  tog("#tgText", (on) => { document.documentElement.style.fontSize = on ? "200%" : ""; });
+  tog("#tgText", (on) => { document.querySelector(".wrap").style.zoom = on ? "2" : ""; }); // os tokens --fs-* são em px: zoom escala tudo
 
   // ---------- 1. Portas ----------
   const DOORS = [
