@@ -310,24 +310,26 @@ Instabilidade, arena que encolhe) ainda não existem; as antecâmaras são salas
 - A porta fica no segmento de parede mais próximo de `halfZ - 9` (z = 2, 2 ou 10, 14 conforme a
   planta), o que dá 11,8 m a 12,3 m do alçapão em todas as plantas (teste: R4 pede 9 m).
 
-**Linha de base de draw calls em GPU real** (`node tools/perf_rooms.cjs <porta>`, Chromium com
-`--use-angle=gl-egl`, 1280x900, 9 s por sala; o contador inclui sombra e contorno; a medição varia
-cerca de 2 a 4 entre execuções). Base = `integracao` com `personagens-c`; "depois" = `explor-f0`:
+**Linha de base de draw calls em GPU real** (`node tools/perf_rooms.cjs <porta> 9000 nos`, Chromium
+com `--use-angle=gl-egl`, 1280x900, 9 s por sala; o contador inclui sombra e contorno; varia 2 a 4
+entre execuções e depende do ponto de vista da câmera). Medido duas vezes em cada base:
 
-| Andar | Tipo | Antes (2 execuções) | Depois (2 execuções) |
+| Andar | Tipo | `integracao` + perf90 (antes) | `explor-f0` (depois) |
 |---|---|---|---|
-| 1 | guarda | 105, 105 | 99, 99 |
-| 2 | salão | 122, 122 | 116, 116 |
-| 3 | cisterna | 81, 83 | 85, 83 |
-| 4 | salão | 145, 145 | 139, 139 |
-| 5 | santuário | 134, 134 | 125, 125 |
-| 6 | cisterna | 127, 127 | 127, 124 |
-| 7 | Guardião | 85, 85 | 85, 85 |
+| 1 | guarda | 54, 54 | 54, 54 |
+| 2 | salão | 65, 65 | 65, 65 |
+| 3 | cisterna | 56, 58 | 58, 56 |
+| 4 | salão | 80, 80 | 80, 80 |
+| 5 | santuário | 72, 72 | 72, 72 |
+| 6 | cisterna | 78, 75 | 74, 78 |
+| 7 | Guardião | 50, 50 | 50, 50 |
+| antecâmara Estante ou Bancada, origem em qualquer andar | | não existia | 41 a 43 |
 
-A queda vem de fundir as 4 vigas da borda do alçapão em uma malha (vale para toda sala). A porta
-aberta custa de 0 a 4 draw calls (só quando está no quadro; medido ligando e desligando o véu e a
-poça). Antecâmaras (`... nos`): 55 a 58 em Estante e Bancada, com origem em qualquer andar.
-Os números absolutos dependem do ponto de vista da câmera e de o pós-processo ter carregado.
+Antes do perf90 (base com `personagens-c` só), a mesma medição deu 99 a 139 nos andares 1 a 6 e
+55 a 58 nas antecâmaras; o corte de 6 a 9 draw calls por sala que a fusão da borda do alçapão
+dava naquela base agora vem do perf90. A porta aberta custa de 0 a 4 draw calls (só quando está
+no quadro; medido ligando e desligando o véu e a poça): dentro do delta de +6 da decisão D7.
+Antecâmaras ficam em 41 a 43, bem abaixo do teto de 60.
 
 **Como testar**
 
