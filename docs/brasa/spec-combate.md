@@ -163,8 +163,9 @@ Sobre a fagulha como recurso, ver §5.
 dano, em combo de até 3, a 3a com empurrão. Já implementado em `HeroCombat`: `light`
 e `lightFinisher`, buffer de combo por `comboQueued`, reset por `comboResetSec`
 (`heroCombat.ts`:190-208, `tuning.ts`:28-32, [CÓDIGO]). Números atuais: leve
-startup 0,12 / ativo 0,06 / recovery 0,22 / dano 10 / knockback 2 / 4 frames de hit
-stop; finalizadora dano 12 / knockback 6 / 7 frames.
+startup 0,10 / ativo 0,05 / recovery 0,23 / dano 9 / knockback 2 / 3 frames de hit
+stop; finalizadora startup 0,14 / ativo 0,06 / recovery 0,30 / dano 11 / knockback 6 / 6 frames
+(números de 2026-11, ver §3.2.1).
 
 `[DESIGN]` Re-tema: a arma é uma lâmina fria (ferro) da Acendedora, não a espada de
 bronze de Josué (`buildSword` reaproveitado como graybox, depois trocar por arma
@@ -174,10 +175,72 @@ KayKit). A faísca do impacto é a fagulha tocando o osso.
 
 `[NORMATIVO]` Golpe pesado: antecipação longa, knockback forte, hit stop alto, custa
 stamina, quebra a guarda frontal do esqueleto. Já implementado: `heavy` (startup 0,32
-/ ativo 0,08 / recovery 0,4 / dano 26 / knockback 6 / 10 frames de hit stop / custo
+/ ativo 0,08 / recovery 0,4 / dano 26 / knockback 6 / 8 frames de hit stop / custo
 35 de stamina, `tuning.ts`:35-43, [CÓDIGO]). O `CombatDirector` trata >= 8 frames de
 hit stop como golpe que QUEBRA guarda (`heavy = tuning.hitStopFrames >= 8`,
 `combatDirector.ts`:95, [CÓDIGO]).
+
+### 3.2.1 Ritmo, sincronia clipe x mecânica e cancelamento `[CÓDIGO]` (2026-11)
+
+`[NORMATIVO]` Queixa de playtest: "os golpes do herói estão muito lentos". Medido no jogo
+real (Chrome com GPU, 800x450 para os tempos; entradas por `KeyboardEvent`, tempos em ms
+desde o toque; a máquina compartilhada tem travadas de GPU, então vale a mediana dos
+quadros sem travada). Causas encontradas, em ordem de peso:
+
+1. **O 2o e o 3o golpe do combo (e a finalizadora) NÃO tocavam animação.** `setAction` ignorava
+   "light" -> "light" e o clipe de 0,42 s já tinha acabado: a heroína ficava congelada na pose de
+   fim de golpe enquanto o dano saía.
+2. **O contato do clipe vinha ~130 ms depois do dano.** Na `Sword_Regular_A` a lâmina só cruza a
+   frente no quadro ~15 (263 ms), mas a janela ativa abria aos 133 ms (a pose ali é o braço
+   aberto, armando). Pesado já estava alinhado (cruza em 376 ms, ativo 334 a 395 ms).
+3. **Hit stop congelava a mecânica mas não o clipe**: o golpe terminava visualmente durante o
+   congelamento e a heroína ficava parada na última pose até a recuperação acabar.
+4. **Sem cancelamento e fila sem validade**: esquiva ou bloqueio pedidos no meio do golpe só
+   saíam no fim dele (leve: +180 a +400 ms depois do toque; pesado: +240 ms), e um toque dado
+   cedo demais ficava guardado indefinidamente.
+5. Sem lunge (deslocamento 0 m em todo golpe), mistura abrupta (pose "pula" ao entrar e ao sair
+   de qualquer ação) e o combo reiniciava no 1o golpe se o toque caísse logo depois da recuperação
+   (a janela `comboResetSec` não era usada).
+
+Correções: (a) o clipe passa a ser posicionado pela mecânica (`PLANO` em `heroModel.ts`: quadros
+do clipe no começo e no fim de cada fase), então o contato cai no começo da janela ativa, o clipe
+congela junto com o hit stop e o rabo parado é cortado com mistura de volta ao idle; (b) buffer de
+entrada de 0,15 s em `HeroCombat`, cancelamento da recuperação por esquiva (`cancelAt` do golpe) e
+por bloqueio segurado, esquiva que cancela em ataque a partir de 0,32 s, chamada do próximo golpe
+no mesmo quadro em que o anterior acaba; (c) lunge curto na direção do alvo/mira (para a 1,1 m do
+alvo, via controlador, sem atravessar parede); (d) o acerto não pode mais ser "pulado" por um
+quadro longo (um passo que atravessa a janela ativa inteira vale o acerto naquele quadro).
+
+Tempos medidos (ms; antes -> depois; "contato" = lâmina cruzando a frente do alvo; janela ativa
+relativa ao começo do golpe; mediana de 4 a 6 repetições limpas):
+
+| Verbo | Toque até andar | Contato do clipe | Janela ativa | Fim da recuperação |
+|---|---|---|---|---|
+| Leve (1o) | 14 -> 8 a 14 | 263 -> 112 | 133-166 -> 117-150 | 406 -> 374 |
+| Leve (2o, encadeado) | clipe não tocava -> 8 | clipe não tocava -> 116 | 133-165 -> 118-150 | 391 -> 374 |
+| Finalizadora (3o) | clipe não tocava | clipe não tocava -> 157 | 166-217 -> 150-200 | 525 -> 507 |
+| Pesado | 16 -> 14 | 376 -> 369 | 334-395 -> 334-400 | 806 -> 808 |
+| Esquiva (i-frames) | 13 -> 11 | - | 103-285 -> 67-299 | 546 -> 458 |
+| Fogo (ativo) | 12 -> 12 | - | 266-366 -> 200-300 | 825 -> 741 |
+| Esquiva pedida na recuperação do leve (toque em 250) | saía em +183 a +400 -> +13 | - | - | - |
+| Esquiva pedida cedo (toque em 120, leve) | saía em +316 -> sai no ponto de cancelamento (~246) | - | - | - |
+| Esquiva pedida na recuperação do pesado (toque em 600) | +238 -> +16 | - | - | - |
+| Bloqueio pedido na recuperação do leve (toque em 250) | +191 -> +10 | - | - | - |
+
+Com acerto (alvo de treino à frente): leve 458 ms (3 fr de hit stop + cauda de 80 ms), pesado
+~960 ms; o clipe congela no acerto (antes seguia andando durante o hit stop).
+
+Metas: leve do
+toque ao contato <= 130 a 160 ms, ciclo 0,35 a 0,45 s; finalizadora 0,5 a 0,6 s; pesado contato
+em 0,35 a 0,42 s e ciclo ~0,8 s; esquiva com i-frames de 0,24 s logo no começo.
+
+`[NORMATIVO]` Equilíbrio: o ciclo e o hit stop mais curtos subiam o DPS em ~9% (leve) e ~6%
+(finalizadora). Compensado com dano 10 -> 9 (leve) e 12 -> 11 (finalizadora) e poise 10 -> 9 e
+14 -> 13, para o DPS do combo de 3 ficar em ~-1,5% do anterior e o poise por segundo igual.
+Pesado: ciclo igual, hit stop 10 -> 8 frames (+3,6% de DPS, travado pelo custo de stamina 35, sem
+mudança). Como o combo agora continua pela janela de 0,45 s, quem bate no ritmo chega mais vezes
+à finalizadora (12 -> 11 de dano com cleave e knockback): isso é intencional, mas vale reavaliar no
+playtest. Esquiva: 0,55 -> 0,46 s com mais i-frames (0,20 -> 0,24 s) e custo igual (25).
 
 ### 3.3 Esquiva / recuo `[CÓDIGO]`
 
@@ -185,7 +248,7 @@ hit stop como golpe que QUEBRA guarda (`heavy = tuning.hitStopFrames >= 8`,
 início e no fim, custa stamina. Sem direção de input, vira RECUO (dash para trás,
 `f = -1`, `heroCombat.ts`:230-233, [CÓDIGO]). Números: duração 0,55 s (~30-36 frames),
 i-frames de 0,1 s a 0,3 s (~10-12 frames no miolo), custo 25 de stamina
-(`tuning.ts`:45-51, [CÓDIGO]). É a defesa principal da Acendedora (ver §2 sobre
+(`tuning.ts`; números de 2026-11: duração 0,46 s, i-frames 0,06 a 0,30 s). É a defesa principal da Acendedora (ver §2 sobre
 aposentar o bloqueio).
 
 ### 3.4 Golpe de fogo da fagulha `[DESIGN]` (novo)
@@ -391,18 +454,19 @@ para Brasa):
 | Vida da Acendedora | 100 (morre em ~5-6 golpes) | `HERO.maxHealth` [CÓDIGO] |
 | Stamina máx / regen | 100 / 40 por s, atraso 1 s | `HERO` [CÓDIGO] |
 | Vida do esqueleto de guarda | 60 (~4-5 golpes leves) | `DEFENDER.maxHealth` [CÓDIGO] |
-| Golpe leve | startup 0,12 / ativo 0,06 / recovery 0,22 / dano 10 / kb 2 / hitstop 4 fr | `HERO.light` [CÓDIGO] |
-| Finalizadora do combo (3a) | startup 0,16 / ativo 0,07 / recovery 0,3 / dano 12 / kb 6 / hitstop 7 fr | `HERO.lightFinisher` [CÓDIGO] |
-| Janela de combo | 0,45 s | `HERO.comboResetSec` [CÓDIGO] |
-| Golpe pesado | startup 0,32 / ativo 0,08 / recovery 0,4 / dano 26 / kb 6 / hitstop 10 fr / stamina 35 | `HERO.heavy` [CÓDIGO] |
-| Esquiva / recuo | duração 0,55 s; i-frames 0,1-0,3 s (miolo); stamina 25 | `HERO.dodge` [CÓDIGO] |
+| Golpe leve | startup 0,10 / ativo 0,05 / recovery 0,23 (ciclo 0,38) / dano 9 / kb 2 / poise 9 / hitstop 3 fr / cancela esquiva e bloqueio a partir de 30% da recovery / lunge 0,35 m | `HERO.light` [CÓDIGO] |
+| Finalizadora do combo (3a) | startup 0,14 / ativo 0,06 / recovery 0,30 (ciclo 0,50) / dano 11 / kb 6 / poise 13 / hitstop 6 fr / cancela a partir de 40% / lunge 0,5 m | `HERO.lightFinisher` [CÓDIGO] |
+| Janela de combo | 0,45 s (agora vale de fato: um toque dentro dela continua a cadeia; antes só encadeava se o toque caísse DENTRO do golpe) | `HERO.comboResetSec` [CÓDIGO] |
+| Buffer de entrada | 0,15 s (em tempo de jogo; leve, pesado, esquiva e fogo) | `HERO.inputBufferSec` [CÓDIGO] |
+| Golpe pesado | startup 0,32 / ativo 0,08 / recovery 0,40 (ciclo 0,80) / dano 26 / kb 6 / hitstop 8 fr / stamina 35 / cancela a partir de 50% da recovery / lunge 0,6 m | `HERO.heavy` [CÓDIGO] |
+| Esquiva / recuo | duração 0,46 s; i-frames 0,06-0,30 s (0,24 s, logo no começo); a partir de 0,32 s cancela em ataque/esquiva; stamina 25 | `HERO.dodge` [CÓDIGO] |
 | Golpe de fogo (fagulha) | dano alto, área, knockback alto, custo de FAGULHA | `[A DEFINIR]` novo bloco `EMBER` [DESIGN] |
 | Fagulha (recurso) | cargas máx; custo por golpe de fogo; recarrega no braseiro | `[A DEFINIR]` novo bloco `SPARK` [DESIGN] |
 | Golpe de cima do esqueleto | tell 0,6 s / ativo 0,12 / recovery 0,75 / dano 16 / hitstop 6 fr; cooldown 0,5 s | `DEFENDER.overhead` [CÓDIGO] |
-| Hit stop leve / pesado | ~4 fr (~67 ms) / ~10 fr (~167 ms; teto ~0,25 s) | `tuning.ts` [CÓDIGO] |
+| Hit stop leve / finalizadora / pesado | 3 fr (50 ms) / 6 fr (100 ms) / 8 fr (133 ms; teto ~0,25 s); +4 fr se o golpe MATA; depois uma cauda de 80 ms em que o tempo volta de 30% a 100% | `tuning.ts`, `HitStop` [CÓDIGO] |
 | Multiplicador de dano por dificuldade | 0,6 (fácil) / 1,0 (normal) / 1,25 (difícil) | `DIFFICULTY_DAMAGE_TAKEN` [CÓDIGO] |
 | Screen shake | amplitude pequena (~0,04-0,1), decay rápido | `combatDirector`/`thirdPersonCamera` [CÓDIGO] |
-| Latência de input crítico | < 100 ms | `tuning.ts` nota [CÓDIGO] |
+| Latência de input crítico | < 100 ms (medida: toque até o golpe começar a andar 8 a 16 ms, um quadro) | `tuning.ts` nota [CÓDIGO] |
 
 `[DESIGN]` Re-ratificar para Brasa: confirmar se a Acendedora reusa exatamente os
 números do `HERO` de Josué ou se o feel da cripta pede ajuste (ex.: golpe mais lento

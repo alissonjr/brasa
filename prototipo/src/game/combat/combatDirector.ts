@@ -9,7 +9,7 @@ import { Guardiao } from "../actors/enemies/guardiao";
 import { ABSORB, BURN } from "./tuning";
 import type { CombatTarget } from "./combatTarget";
 import { ImpactFx } from "./impactFx";
-import { hitThunk, heroHurt, shieldClank, healChime, perfectDodgeChime } from "./combatSound";
+import { hitThunk, swingWhoosh, heroHurt, shieldClank, healChime, perfectDodgeChime } from "./combatSound";
 import type { DamageKind } from "../ui/damageNumbers";
 
 /**
@@ -30,7 +30,10 @@ const HIT_RADIUS = 0.7; // raio da hitbox à frente do herói (alcance generoso,
 export type WeaponKind = "clava" | "cajado" | "espada";
 
 export class CombatDirector {
-  private readonly hitStop = new HitStop();
+  // Cauda do hit stop: após o congelamento o tempo volta de 30% a 100% em 80 ms (sem tranco na retomada).
+  private readonly hitStop = new HitStop({ tailSec: 0.08, tailScale: 0.3 });
+  private prevSwing = false;
+  private readonly fxPoint = new Vector3();
   private readonly fx: ImpactFx;
   private readonly dummies: TrainingDummy[] = [];
   private readonly enemies: Skeleton[] = [];
@@ -577,6 +580,10 @@ export class CombatDirector {
 
     this.detectHeroHits();
     this.detectEmber();
+    // Golpe que ERRA: o giro do ativo sem acerto ganha um whoosh (o que acerta já tem o baque).
+    const swinging = this.hero.combat.swingActive;
+    if (swinging && !this.prevSwing && this.hero.combat.canHit) swingWhoosh(this.hero.combat.heavyAttack);
+    this.prevSwing = swinging;
 
     for (const d of this.dummies) d.update(combatDt);
 
@@ -631,6 +638,17 @@ export class CombatDirector {
     else this.hero.setAimTarget(null);
 
     return combatDt;
+  }
+
+  /** Ponto da faísca de impacto: na ALTURA DO TRONCO do alvo, na face voltada ao herói (antes: ponto baixo à frente). */
+  private torsoFx(hb: { center: Vector3; radius: number }, fallback: Vector3): Vector3 {
+    const hp = this.hero.position;
+    const dx = hp.x - hb.center.x;
+    const dz = hp.z - hb.center.z;
+    const d = Math.hypot(dx, dz);
+    if (d < 1e-3) return this.fxPoint.copyFrom(fallback);
+    const k = hb.radius * 0.7 / d;
+    return this.fxPoint.set(hb.center.x + dx * k, hb.center.y, hb.center.z + dz * k);
   }
 
   /** Acerto da arma do herói contra os alvos (um alvo por golpe). */
@@ -708,12 +726,15 @@ export class CombatDirector {
         // Bloqueado pela guarda: feedback metálico curto (ensina a flanquear / usar o pesado).
         this.hitStop.trigger(2 / 60);
         this.camera.shake(0.04);
-        this.fx.burst(point, 8);
+        this.fx.burst(this.torsoFx(hb, point), 8);
         shieldClank();
       } else {
-        this.hitStop.trigger(tuning.hitStopFrames / 60);
-        this.camera.shake(0.05 + tuning.hitStopFrames * 0.004);
-        this.fx.burst(point, heavy ? 26 : 16);
+        // Morte confirmada: congela um pouco mais, chacoalha mais e solta mais faísca.
+        const killed = !target.health.alive;
+        this.hitStop.trigger((tuning.hitStopFrames + (killed ? 4 : 0)) / 60);
+        // Kick de câmera proporcional ao dano causado (respeita "reduzir movimento" via setShakeEnabled).
+        this.camera.shake((0.035 + Math.min(dealt, 40) * 0.0035) * (killed ? 1.6 : 1));
+        this.fx.burst(this.torsoFx(hb, point), (heavy ? 26 : 16) + (killed ? 14 : 0));
         hitThunk(heavy);
         hc.lifestealHeal(tuning.damage * hc.damageMul); // "Sede da Brasa": golpe rouba vida
         // CAJADO capturado: cada acerto lança uma bola de fogo (amiga) no alvo (3 cargas).
@@ -746,7 +767,7 @@ export class CombatDirector {
             this.hitTracked(o, "hit", tuning.damage * dmgMul * 2, this.tmpDir, kb, true, tuning.poise ?? 0, false, true);
           }
         }
-        this.fx.burst(point, 30);
+        this.fx.burst(this.torsoFx(hb, point), 30);
         this.camera.shake(0.1);
       }
       // CLEAVE (finalizadora/pesado): respinga nos inimigos próximos do impacto (resposta de
@@ -764,7 +785,7 @@ export class CombatDirector {
           this.tmpDir.normalize();
           this.hitTracked(o, "hit", tuning.damage * hc.damageMul * 0.55, this.tmpDir, tuning.knockback, heavy, (tuning.poise ?? 0) * 0.5);
         }
-        this.fx.burst(point, heavy ? 20 : 12);
+        this.fx.burst(this.fxPoint, heavy ? 20 : 12);
       }
       break;
     }

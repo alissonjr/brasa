@@ -66,6 +66,16 @@ export function hitThunk(heavy = false): void {
   noiseBurst(a, t, 0.06, (heavy ? 0.18 : 0.1) * vol, heavy ? 1800 : 2600);
 }
 
+/** Whoosh do golpe que ERRA (ar cortado): ruído filtrado curto; o pesado é mais grave e longo. */
+export function swingWhoosh(heavy = false): void {
+  const vol = getVolume();
+  if (vol <= 0) return;
+  const a = audio();
+  if (!a) return;
+  const t = a.currentTime;
+  noiseBurst(a, t, heavy ? 0.2 : 0.11, (heavy ? 0.16 : 0.1) * vol, heavy ? 520 : 1300);
+}
+
 /**
  * SOM DE TELL por arquétipo de inimigo (W6). A câmara é escura/azul: a leitura do golpe
  * não pode depender só da cor, então cada perfil telegrafa com uma assinatura sonora ao
