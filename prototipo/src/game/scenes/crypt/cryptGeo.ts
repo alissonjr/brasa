@@ -4,10 +4,10 @@ import type { Layout } from "./cryptLayouts";
 
 /**
  * CAMADA JOGO (Brasa). Ferramentas de GEOMETRIA FACETADA low-poly para a cenografia do piso:
- * um acumulador (Facet) que junta triangulos de face chapada (normal por face, cor por vertice)
- * e primitivas por codigo (prisma, caixa, tubo, rocha, cacos, laminas) para montar o chao como
+ * um acumulador (Facet) que junta triângulos de face chapada (normal por face, cor por vértice)
+ * e primitivas por código (prisma, caixa, tubo, rocha, cacos, lâminas) para montar o chão como
  * OBJETOS 3D em vez de pintura. Tudo vira UMA malha por material (poucas chamadas de desenho).
- * Texturas do piso/agua sao pequenas e TILEAVEIS (densidade constante em unidades de mundo).
+ * Texturas do piso/água são pequenas e TILEAVEIS (densidade constante em unidades de mundo).
  */
 
 export type V3 = [number, number, number];
@@ -47,13 +47,13 @@ export const hex = (s: string): RGB => {
 export const shade = (c: RGB, k: number): RGB => [c[0] * k, c[1] * k, c[2] * k];
 export const mix = (a: RGB, b: RGB, t: number): RGB => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
 
-/** Acumulador de triangulos de face chapada com cor por vertice e UV planar em unidades de mundo. */
+/** Acumulador de triângulos de face chapada com cor por vértice e UV planar em unidades de mundo. */
 export class Facet {
   readonly pos: number[] = [];
   readonly nor: number[] = [];
   readonly col: number[] = [];
   readonly uv: number[] = [];
-  /** deslocamento do grao no UV (varia de laje a laje: some a repeticao do tile). */
+  /** deslocamento do grão no UV (varia de laje a laje: some a repetição do tile). */
   uvU = 0;
   uvV = 0;
 
@@ -63,7 +63,7 @@ export class Facet {
     return this.pos.length / 9;
   }
 
-  /** Triangulo; `hint` e a direcao aproximada da face (a ordem dos vertices se ajusta sozinha). */
+  /** Triângulo; `hint` é a direção aproximada da face (a ordem dos vértices se ajusta sozinha). */
   tri(a: V3, b: V3, c: V3, col: RGB, hint?: V3): void {
     const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
     const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
@@ -91,12 +91,12 @@ export class Facet {
     this.tri(a, c, d, col, hint);
   }
 
-  /** Poligono convexo (leque a partir do 1o vertice). */
+  /** Polígono convexo (leque a partir do 1o vértice). */
   fan(pts: V3[], col: RGB, hint?: V3): void {
     for (let i = 1; i < pts.length - 1; i++) this.tri(pts[0]!, pts[i]!, pts[i + 1]!, col, hint);
   }
 
-  /** Funde outra malha (ja em coordenadas de mundo). */
+  /** Funde outra malha (já em coordenadas de mundo). */
   append(o: Facet): void {
     for (const k of ["pos", "nor", "col", "uv"] as const) for (const v of o[k]) this[k].push(v);
   }
@@ -143,13 +143,13 @@ export interface PrismOpts {
   drop?: number;
   colBevel?: RGB;
   colSide?: RGB;
-  /** nao emite as faces laterais (peca apoiada no chao). */
+  /** não emite as faces laterais (peça apoiada no chão). */
   noSides?: boolean;
 }
 
 /**
  * Prisma convexo (laje, caco, degrau): topo na altura yTop(x,z) (permite inclinar), chanfro e laterais
- * ate yBot. O poligono pode ser dado em qualquer ordem de volta (so precisa ser convexo).
+ * até yBot. O polígono pode ser dado em qualquer ordem de volta (só precisa ser convexo).
  */
 export function prism(f: Facet, poly: [number, number][], yTop: number | ((x: number, z: number) => number), yBot: number, colTop: RGB, o: PrismOpts = {}): void {
   const yt = typeof yTop === "number" ? (): number => yTop : yTop;
@@ -198,7 +198,7 @@ export function tube(f: Facet, pts: V3[], radii: number[], sides: number, col: R
     let tx = b[0] - a[0], ty = b[1] - a[1], tz = b[2] - a[2];
     const tl = Math.hypot(tx, ty, tz) || 1;
     tx /= tl; ty /= tl; tz /= tl;
-    // vetor de referencia nao paralelo ao tangente
+    // vetor de referência não paralelo ao tangente
     const ref: V3 = Math.abs(ty) < 0.9 ? [0, 1, 0] : [1, 0, 0];
     let n1x = ty * ref[2] - tz * ref[1], n1y = tz * ref[0] - tx * ref[2], n1z = tx * ref[1] - ty * ref[0];
     const nl = Math.hypot(n1x, n1y, n1z) || 1;
@@ -242,7 +242,7 @@ const ICO_F: [number, number, number][] = [
   [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
 ];
 
-/** Rocha irregular de 20 faces (entulho, pedregulho), achatada e com a base no chao em y0. */
+/** Rocha irregular de 20 faces (entulho, pedregulho), achatada e com a base no chão em y0. */
 export function rock(f: Facet, cx: number, y0: number, cz: number, size: number, squash: number, r: Rng, col: RGB, yaw = 0): void {
   const pts: V3[] = ICO_V.map(([x, y, z]) => {
     const k = 0.72 + r() * 0.5;
@@ -252,7 +252,7 @@ export function rock(f: Facet, cx: number, y0: number, cz: number, size: number,
   });
   let minY = Infinity;
   for (const p of pts) minY = Math.min(minY, p[1]);
-  const lift = y0 - minY - size * 0.06; // afunda um tico: assenta no chao
+  const lift = y0 - minY - size * 0.06; // afunda um tico: assenta no chão
   for (const [a, b, c] of ICO_F) {
     const A = pts[a]!, B = pts[b]!, C = pts[c]!;
     const tone = 0.86 + r() * 0.28;
@@ -274,7 +274,7 @@ export function knob(f: Facet, c: V3, rad: number, col: RGB, sy = 1): void {
 }
 
 
-/** Cranio low-poly (~70 triangulos): calota achatada, mandibula e orbitas escuras. y0 = chao. */
+/** Crânio low-poly (~70 triângulos): calota achatada, mandíbula e órbitas escuras. y0 = chão. */
 export function skullProc(f: Facet, x: number, y0: number, z: number, yaw: number, sc: number, col: RGB, pitch = 0, roll = 0): void {
   const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
   const tf = (lx: number, ly: number, lz: number): V3 => {
@@ -289,7 +289,7 @@ export function skullProc(f: Facet, x: number, y0: number, z: number, yaw: numbe
     const tone = 0.92 + ((i * 7) % 5) * 0.035;
     f.tri(tf(...A), tf(...B), tf(...C), shade(col, tone), [A[0] + B[0] + C[0], A[1] + B[1] + C[1] - 0.39, A[2] + B[2] + C[2]]);
   }
-  // mandibula/face: caixa na frente e embaixo
+  // mandíbula/face: caixa na frente e embaixo
   const bx = 0.055, by0 = 0.0, by1 = 0.085, bz0 = 0.07, bz1 = 0.165;
   const Bv: V3[] = [[-bx, by0, bz0], [bx, by0, bz0], [bx, by1, bz0], [-bx, by1, bz0], [-bx, by0, bz1], [bx, by0, bz1], [bx, by1, bz1], [-bx, by1, bz1]];
   const faces: [number, number, number, number][] = [[0, 1, 2, 3], [4, 5, 6, 7], [0, 4, 7, 3], [1, 5, 6, 2], [3, 2, 6, 7], [0, 1, 5, 4]];
@@ -297,7 +297,7 @@ export function skullProc(f: Facet, x: number, y0: number, z: number, yaw: numbe
     const mid: V3 = [(Bv[a]![0] + Bv[c]![0]) / 2, (Bv[a]![1] + Bv[c]![1]) / 2 - 0.042, (Bv[a]![2] + Bv[c]![2]) / 2 - 0.118];
     f.quad(tf(...Bv[a]!), tf(...Bv[b]!), tf(...Bv[c]!), tf(...Bv[d]!), shade(col, 0.84), mid);
   }
-  // orbitas e nariz (escuros), na face frontal
+  // órbitas e nariz (escuros), na face frontal
   const dark: RGB = [0.05, 0.045, 0.04];
   for (const sx of [-1, 1]) {
     const cx = sx * 0.06;
@@ -320,7 +320,7 @@ export function bone(f: Facet, x: number, y0: number, z: number, yaw: number, le
   }
 }
 
-/** Caixa toracica deitada: coluna + costelas em arco (tubos), de lado para o ceu. */
+/** Caixa torácica deitada: coluna + costelas em arco (tubos), de lado para o céu. */
 export function ribcage(f: Facet, x: number, y0: number, z: number, yaw: number, sc: number, col: RGB): void {
   const c = Math.cos(yaw), s = Math.sin(yaw);
   const to = (lx: number, ly: number, lz: number): V3 => [x + lx * c - lz * s, y0 + ly, z + lx * s + lz * c];
@@ -336,7 +336,7 @@ export function ribcage(f: Facet, x: number, y0: number, z: number, yaw: number,
         const t = (k / seg) * Math.PI * 0.82;
         pts.push(to(u * sc, 0.05 * sc + Math.sin(t) * len * 0.9, side * (0.03 * sc + (1 - Math.cos(t)) * len * 0.55)));
       }
-      // as costelas apoiam no chao: sem nada abaixo de y0
+      // as costelas apoiam no chão: sem nada abaixo de y0
       const rr = Array.from({ length: seg + 1 }, (_, k) => (0.024 - k * 0.0022) * sc);
       tube(f, pts, rr, 4, col, true);
     }
@@ -357,7 +357,7 @@ export function shard(f: Facet, x: number, y0: number, z: number, size: number, 
   prism(f, poly, (px, pz) => y0 + thick + (px - x) * tx * 0.4 + (pz - z) * tz * 0.4, y0 - 0.02, col, { bevel: Math.min(0.03, size * 0.1), drop: 0.02 });
 }
 
-/** Tufo de musgo/capim: lâminas (piramides finas) inclinadas para fora. */
+/** Tufo de musgo/capim: lâminas (pirâmides finas) inclinadas para fora. */
 export function tuft(f: Facet, x: number, y0: number, z: number, size: number, blades: number, r: Rng, col: RGB): void {
   for (let i = 0; i < blades; i++) {
     const an = r() * Math.PI * 2;
@@ -379,7 +379,7 @@ export function tuft(f: Facet, x: number, y0: number, z: number, size: number, b
   }
 }
 
-/** Fita larga ao longo de uma polilinha no chao (rachadura, trilho, entalhe). `lift` em y. */
+/** Fita larga ao longo de uma polilinha no chão (rachadura, trilho, entalhe). `lift` em y. */
 export function ribbon(f: Facet, pts: [number, number][], widths: number[], y: number | ((x: number, z: number) => number), col: RGB): { left: [number, number][]; right: [number, number][] } {
   const yy = typeof y === "number" ? (): number => y : y;
   const left: [number, number][] = [], right: [number, number][] = [];
@@ -405,7 +405,7 @@ export function ribbon(f: Facet, pts: [number, number][], widths: number[], y: n
   return { left, right };
 }
 
-/** Desloca uma polilinha para o lado (positivo = esquerda do sentido de percurso), com distancia por ponto. */
+/** Desloca uma polilinha para o lado (positivo = esquerda do sentido de percurso), com distância por ponto. */
 export function offs(pts: [number, number][], d: number | number[]): [number, number][] {
   return pts.map((p, i) => {
     const a = pts[Math.max(0, i - 1)]!, b = pts[Math.min(pts.length - 1, i + 1)]!;
@@ -431,7 +431,7 @@ export function slope(f: Facet, a: [number, number][], ya: number, b: [number, n
 let grainCanvas: HTMLCanvasElement | null = null;
 const GRAIN = 256;
 
-/** Grao de pedra: ruido fino + poucos veios/poros, tileavel (tudo desenhado com wrap). Luminancia ~0.78..1. */
+/** Grão de pedra: ruído fino + poucos veios/poros, tileável (tudo desenhado com wrap). Luminância ~0.78..1. */
 function getGrainCanvas(): HTMLCanvasElement {
   if (grainCanvas) return grainCanvas;
   const c = document.createElement("canvas");
@@ -439,7 +439,7 @@ function getGrainCanvas(): HTMLCanvasElement {
   const g = c.getContext("2d")!;
   const img = g.createImageData(GRAIN, GRAIN);
   const r = mulberry32(31337);
-  // valor-ruido em 3 oitavas, periodico (grade com wrap)
+  // valor-ruído em 3 oitavas, periódico (grade com wrap)
   const octave = (cells: number): Float32Array => {
     const grid = new Float32Array(cells * cells);
     for (let i = 0; i < grid.length; i++) grid[i] = r();
@@ -465,7 +465,7 @@ function getGrainCanvas(): HTMLCanvasElement {
     img.data[i * 4] = L; img.data[i * 4 + 1] = L; img.data[i * 4 + 2] = L; img.data[i * 4 + 3] = 255;
   }
   g.putImageData(img, 0, 0);
-  // poros e riscos finos com wrap (desenha 9 copias deslocadas)
+  // poros e riscos finos com wrap (desenha 9 cópias deslocadas)
   const wrap = (fn: (ox: number, oy: number) => void): void => {
     for (const ox of [-GRAIN, 0, GRAIN]) for (const oy of [-GRAIN, 0, GRAIN]) fn(ox, oy);
   };
@@ -489,7 +489,7 @@ function getGrainCanvas(): HTMLCanvasElement {
   return c;
 }
 
-/** Textura de grao (uma por sala: o dispose da sala leva os materiais e texturas junto). */
+/** Textura de grão (uma por sala: o dispose da sala leva os materiais e texturas junto). */
 export function makeGrainTexture(scene: Scene): DynamicTexture {
   const tex = new DynamicTexture("graoPedra", { width: GRAIN, height: GRAIN }, scene, true);
   const ctx = tex.getContext() as CanvasRenderingContext2D;
@@ -501,7 +501,7 @@ export function makeGrainTexture(scene: Scene): DynamicTexture {
   return tex;
 }
 
-/** Ondulacao da agua: filamentos de caustica (tileavel por construcao: ondas com numero inteiro de ciclos). */
+/** Ondulação da água: filamentos de cáustica (tileável por construcao: ondas com número inteiro de ciclos). */
 export function makeWaterTexture(scene: Scene): DynamicTexture {
   const N = 256;
   const tex = new DynamicTexture("ondasAgua", { width: N, height: N }, scene, true);
@@ -534,24 +534,24 @@ export function makeWaterTexture(scene: Scene): DynamicTexture {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Pecas do kit (cores planas -> cor por vertice) para fundir na malha de detalhes
+// Peças do kit (cores planas -> cor por vértice) para fundir na malha de detalhes
 // ---------------------------------------------------------------------------------------------
 
 export interface KitGeo {
   pos: Float32Array; // base em y=0, centrada em xz
   nor: Float32Array;
-  col: Float32Array; // rgb por vertice
+  col: Float32Array; // rgb por vértice
   idx: Uint32Array;
   size: { x: number; y: number; z: number };
-  /** false apos decimar: as normais nao valem como dica de face (a ordem dos vertices ja esta certa). */
+  /** false apos decimar: as normais não valem como dica de face (a ordem dos vértices já está certa). */
   hinted: boolean;
 }
 
 type ColorMat = { albedoColor?: { r: number; g: number; b: number }; diffuseColor?: { r: number; g: number; b: number } };
 
 /**
- * Extrai geometria de uma peca do kit (so cores planas) sem passar por MergeMeshes: le cada malha,
- * aplica a matriz de mundo, e guarda a cor do material por vertice. Base em y=0, centrada em xz.
+ * Extrai geometria de uma peça do kit (só cores planas) sem passar por MergeMeshes: le cada malha,
+ * aplica a matriz de mundo, e guarda a cor do material por vértice. Base em y=0, centrada em xz.
  */
 export function bakeKitPiece(container: AssetContainer | undefined, cell = 0): KitGeo | null {
   if (!container) return null;
@@ -598,7 +598,7 @@ export function bakeKitPiece(container: AssetContainer | undefined, cell = 0): K
   const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
   for (let i = 0; i < P.length; i += 3) { P[i] = P[i]! - cx; P[i + 1] = P[i + 1]! - minY; P[i + 2] = P[i + 2]! - cz; }
   if (cell > 0) {
-    // decimacao por agrupamento de vertices (grade): colapsa detalhe fino que nao se le a 15 m de camera
+    // decimação por agrupamento de vértices (grade): colapsa detalhe fino que não se le a 15 m de câmera
     const key = new Map<string, number>();
     const np: number[] = [], nc: number[] = [], cnt: number[] = [];
     const remap: number[] = [];
@@ -634,7 +634,7 @@ export function bakeKitPiece(container: AssetContainer | undefined, cell = 0): K
   };
 }
 
-/** Coloca uma peca do kit na malha (escala uniforme, giro em y, inclinacao leve, tintura). */
+/** Coloca uma peça do kit na malha (escala uniforme, giro em y, inclinação leve, tintura). */
 export function placeKit(f: Facet, k: KitGeo, x: number, y: number, z: number, scale: number, yaw: number, tint: RGB, pitch = 0, roll = 0): void {
   const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
   const tf = (vx: number, vy: number, vz: number): V3 => {

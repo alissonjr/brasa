@@ -1,4 +1,4 @@
-import { Color3, Mesh, MeshBuilder, StandardMaterial } from "@babylonjs/core";
+import { Color3, Mesh, StandardMaterial } from "@babylonjs/core";
 import type { AssetContainer, DynamicTexture, Scene } from "@babylonjs/core";
 import type { Layout } from "./cryptLayouts";
 import type { RoomKind } from "./cryptRoom";
@@ -10,18 +10,18 @@ import {
 /**
  * CAMADA JOGO (Brasa). CENOGRAFIA DO PISO COMO OBJETOS 3D (substitui o piso pintado em canvas).
  *
- *  - O chao e feito de LAJES reais (prismas com chanfro, juntas fundas, altura e inclinacao proprias,
- *    algumas erguidas/afundadas/lascadas), numa malha so com cor por vertice + um grao de pedra
- *    pequeno e TILEAVEL em unidades de mundo (a densidade da textura e a mesma em x e z, em qualquer
- *    sala; nada e esticado).
- *  - Os detalhes sao geometria de apoio: rachaduras em fenda (faixa escura com borda erguida), ossos,
- *    costelas, cranios (peca do kit), entulho, cacos de laje, ralo de ferro, musgo em tufos, tapete,
- *    palha, gravura ritual, e AGUA de verdade (plano rebaixado translucido com ondulacao por UV,
+ *  - O chão é feito de LAJES reais (prismas com chanfro, juntas fundas, altura e inclinação próprias,
+ *    algumas erguidas/afundadas/lascadas), numa malha só com cor por vértice + um grão de pedra
+ *    pequeno e TILEÁVEL em unidades de mundo (a densidade da textura é a mesma em x e z, em qualquer
+ *    sala; nada é esticado).
+ *  - Os detalhes são geometria de apoio: rachaduras em fenda (faixa escura com borda erguida), ossos,
+ *    costelas, crânios, entulho (peça do kit), cacos de laje, ralo de ferro, musgo em tufos, tapete,
+ *    palha, gravura ritual, e ÁGUA de verdade (plano rebaixado translúcido com ondulação por UV,
  *    bacias de pedra com borda molhada).
- *  - Orcamento de desenho: underlay + laje + detalhes (+ agua, + emissivo) = no maximo 5 malhas.
+ *  - Orçamento de desenho: laje+detalhes fundidos (+ água, + emissivo) = no máximo 3 malhas.
  *
- * Leitura de combate: a faixa central (Layout.calm) so recebe peca baixa (<= ~3 cm); a cenografia
- * alta vive fora dela. Nada passa de ~0,4 m (a camera e orbital: nada deve tapar o heroi).
+ * Leitura de combate: a faixa central (Layout.calm) só recebe peça baixa (<= ~3 cm); a cenografia
+ * alta vive fora dela. Nada passa de ~0,4 m (a câmera é orbital: nada deve tapar o herói).
  */
 
 export interface Spot { x: number; z: number; r: number }
@@ -31,14 +31,14 @@ export interface FloorScape {
   meshes: Mesh[];
   /** Laje + tapete + bacias (recebe sombra). */
   floor: Mesh;
-  /** Detalhes em relevo (projetam sombra). */
-  details: Mesh | null;
   /** Rachaduras com brasa / gravura dourada (emissivos, com choreografia de luz). */
   emissive: { mesh: Mesh; mat: StandardMaterial } | null;
-  puddles: Spot[]; // agua (a luz fria se apoia nelas)
-  candles: Spot[]; // velas do santuario
-  embers: Spot[]; // brasas das fendas do guardiao
-  /** Anima a agua (chamar todo frame com o tempo em segundos). */
+  /** Retângulos de água (bacias e lagoa) para colisores invisíveis: o chão físico é plano. */
+  colliders: { x0: number; z0: number; x1: number; z1: number }[];
+  puddles: Spot[]; // água (a luz fria se apoia nelas)
+  candles: Spot[]; // velas do santuário
+  embers: Spot[]; // brasas das fendas do guardião
+  /** Anima a água (chamar todo frame com o tempo em segundos). */
   update(t: number): void;
   stats: { slabs: number; tris: number };
 }
@@ -46,7 +46,7 @@ export interface FloorScape {
 const KIND_SALT: Record<RoomKind, number> = { guarda: 11, salao: 23, cisterna: 37, santuario: 53, guardiao: 71 };
 
 interface Pal {
-  slabs: [number, number, number][]; // [matiz, saturacao %, luminosidade %]
+  slabs: [number, number, number][]; // [matiz, saturação %, luminosidade %]
   joint: string;
   moss: [number, number, number];
 }
@@ -63,7 +63,7 @@ type SlabKind = "flat" | "raised" | "sunk";
 interface Slab extends Rect { h: number; tx: number; tz: number; kind: SlabKind; col: RGB }
 
 const Y_JOINT = -0.3; // fundo das juntas (topo do underlay)
-const Y_WATER_SUNK = -0.18; // agua das bacias (rebaixada)
+const Y_WATER_SUNK = -0.18; // água das bacias (rebaixada)
 const Y_BASIN = -0.78; // fundo das bacias
 
 function cutRect(s: Rect, h: Rect): Rect[] {
@@ -96,49 +96,50 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
   const calmArea = Math.PI * L.calm.rx * L.calm.rz;
   const rimArea = Math.max(40, area - calmArea);
 
-  // --- zonas proibidas para peca em relevo ---
+  // --- zonas proibidas para peça em relevo ---
   const taken: Spot[] = [];
   for (const p of L.pillars) taken.push({ x: p.x, z: p.z, r: 1.5 });
-  const wTaken: Spot[] = [...L.pillars.map((p) => ({ x: p.x, z: p.z, r: 0.95 })), { x: EX, z: EZ, r: 3.6 }];
+  const wTaken: Spot[] = [...L.pillars.map((p) => ({ x: p.x, z: p.z, r: 1.4 })), { x: EX, z: EZ, r: 3.6 }];
   taken.push({ x: EX, z: EZ, r: 3.6 });
   const NICHE_Z = -(HZ - 5);
   const zS = -(HZ - 4);
   const zb = Math.min(AZ - 3.7, HZ - 4.5);
-  // retangulos de mobilia fixa (cryptRoom): so as bacias de agua os evitam
+  // retangulos de mobilia fixa (cryptRoom): só as bacias de água os evitam
   const propRects: Rect[] = [
     { x0: -HX, x1: -HX + 3.1, z0: zS - 1.8, z1: zS + 3.4 }, // barris
     { x0: HX - 3.1, x1: HX, z0: zS - 2.2, z1: zS + 2.4 }, // caixas
     { x0: -HX, x1: -HX + 3.1, z0: -2.9, z1: 2.9 }, // caixoes
-    { x0: -HX, x1: -HX + 3.1, z0: AZ - 1.8, z1: AZ + 3 }, // lapide
+    { x0: -HX, x1: -HX + 3.1, z0: AZ - 1.8, z1: AZ + 3 }, // lápide
     { x0: HX - 3.1, x1: HX, z0: zb - 4.6, z1: zb + 3.4 }, // estantes
-    { x0: -9.9, x1: -5.2, z0: -5.4, z1: -0.6 }, // refeitorio
+    { x0: -9.9, x1: -5.2, z0: -5.4, z1: -0.6 }, // refeitório
     { x0: HX - 3.2, x1: HX, z0: NICHE_Z - 1.9, z1: NICHE_Z + 1.9 }, // nicho
     { x0: -5.6, x1: 5.6, z0: AZ - 4.0, z1: HZ }, // estrado
     { x0: -4, x1: 5.5, z0: -HZ, z1: -HZ + 2.8 }, // porta
     { x0: 5.0, x1: 9.0, z0: 1.0, z1: 5.0 }, { x0: -9.0, x1: -5.0, z0: 1.0, z1: 5.0 }, // potes
     { x0: 1.4, x1: 4.6, z0: 2.4, z1: 5.6 }, { x0: -4.6, x1: -1.4, z0: 2.4, z1: 5.6 },
   ];
+  // a mobília é espelhada em x por andar (dressMirror em cryptRoom): vale para os dois lados
+  propRects.push(...propRects.map((p) => ({ x0: -p.x1, x1: -p.x0, z0: p.z0, z1: p.z1 })));
   const inRect = (x: number, z: number, m: number, rc: Rect): boolean => x > rc.x0 - m && x < rc.x1 + m && z > rc.z0 - m && z < rc.z1 + m;
   const onProp = (x: number, z: number, m: number): boolean => propRects.some((rc) => inRect(x, z, m, rc));
   const nearTaken = (x: number, z: number, m: number): boolean => taken.some((t) => Math.hypot(t.x - x, t.z - z) < t.r + m);
   const stage = (x: number, z: number): boolean => Math.abs(x) < 5.4 && z > AZ - 3.8; // estrado e degrau
 
   // =============================================================================================
-  // 1) PLANTA DAS BACIAS DE AGUA (cisterna): tanque retangular, canal comprido e lagoa organica
+  // 1) PLANTA DAS BACIAS DE ÁGUA (cisterna): tanque retangular, canal comprido e lagoa orgânica
   // =============================================================================================
-  interface Basin { rect: Rect; kind: "tanque" | "canal" }
+  interface Basin { rect: Rect; kind: "tanque" | "canal"; bridgeZ: number }
   interface Pond { x: number; z: number; r0: number; phase: number[]; ang: number }
   const basins: Basin[] = [];
   const ponds: Pond[] = [];
   const holes: Rect[] = [{ x0: EX - 1.3, x1: EX + 1.3, z0: EZ - 1.3, z1: EZ + 1.3 }];
-  const bandX = L.calm.rx + 0.6; // |x| minimo das bacias (fora da faixa de combate)
   const placeWater = (w: number, d: number, circle = false, tries = 500): { x: number; z: number } | null => {
     for (let t = 0; t < tries; t++) {
       const side = r() < 0.5 ? -1 : 1;
-      const x = side * (bandX + w / 2 + r() * Math.max(0.01, HX - 0.7 - bandX - w));
+      const x = side * (w / 2 + 3 + r() * Math.max(0.01, HX - 0.7 - w - 3));
       const z = (r() - 0.5) * (HZ * 2 - d - 5);
       const rc: Rect = { x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2 };
-      if (Math.abs(x) - w / 2 < bandX - 0.3) continue;
+      if ([[rc.x0, rc.z0], [rc.x1, rc.z0], [rc.x0, rc.z1], [rc.x1, rc.z1], [x, z]].some(([cx, cz]) => inCalm(L, cx!, cz!, 1.0))) continue;
       if (Math.abs(x) + w / 2 > HX - 0.7) continue;
       if (propRects.some((p) => !(rc.x1 + 0.8 < p.x0 || rc.x0 - 0.8 > p.x1 || rc.z1 + 0.8 < p.z0 || rc.z0 - 0.8 > p.z1))) continue;
       const bad = wTaken.some((tk) => {
@@ -151,12 +152,19 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     return null;
   };
   if (kind === "cisterna") {
+    const pr = 1.3 + r() * 0.4;
+    const pp = placeWater(pr * 2 + 0.8, pr * 2 + 0.8, true);
+    if (pp) {
+      ponds.push({ x: pp.x, z: pp.z, r0: pr, phase: [r() * 6.28, r() * 6.28, r() * 6.28], ang: r() * 6.28 });
+      taken.push({ x: pp.x, z: pp.z, r: pr + 1.0 });
+      wTaken.push({ x: pp.x, z: pp.z, r: pr + 0.6 });
+    }
     const long = HZ >= 18;
     const tw = 3.0 + r() * 0.6, td = 2.2 + r() * 0.8;
     const tp = placeWater(tw, td);
     if (tp) {
       const rc: Rect = { x0: tp.x - tw / 2, x1: tp.x + tw / 2, z0: tp.z - td / 2, z1: tp.z + td / 2 };
-      basins.push({ rect: rc, kind: "tanque" });
+      basins.push({ rect: rc, kind: "tanque", bridgeZ: 0 });
       taken.push({ x: tp.x, z: tp.z, r: Math.hypot(tw, td) / 2 + 0.5 });
       wTaken.push({ x: tp.x, z: tp.z, r: Math.max(tw, td) / 2 + 0.3 });
     }
@@ -165,16 +173,9 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     const cp = placeWater(cw, cl);
     if (cp) {
       const rc: Rect = { x0: cp.x - cw / 2, x1: cp.x + cw / 2, z0: cp.z - cl / 2, z1: cp.z + cl / 2 };
-      basins.push({ rect: rc, kind: "canal" });
+      basins.push({ rect: rc, kind: "canal", bridgeZ: rc.z0 + (rc.z1 - rc.z0) * (0.3 + r() * 0.4) });
       taken.push({ x: cp.x, z: cp.z, r: cl / 2 + 0.3 });
       wTaken.push({ x: cp.x, z: cp.z, r: cl / 2 + 0.2 });
-    }
-    const pr = 1.5 + r() * 0.5;
-    const pp = placeWater(pr * 2 + 1.2, pr * 2 + 1.2, true);
-    if (pp) {
-      ponds.push({ x: pp.x, z: pp.z, r0: pr, phase: [r() * 6.28, r() * 6.28, r() * 6.28], ang: r() * 6.28 });
-      taken.push({ x: pp.x, z: pp.z, r: pr + 1.0 });
-      wTaken.push({ x: pp.x, z: pp.z, r: pr + 0.6 });
     }
     for (const b of basins) holes.push(b.rect);
   }
@@ -248,7 +249,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     s.col = col;
   }
 
-  // alturas para posicionar objetos: so em laje "flat"
+  // alturas para posicionar objetos: só em laje "flat"
   const slabAt = (x: number, z: number): Slab | null => {
     for (const s of slabs) if (x >= s.x0 && x <= s.x1 && z >= s.z0 && z <= s.z1) return s;
     return null;
@@ -274,7 +275,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     let poly: [number, number][] = [[s.x0, s.z0], [s.x1, s.z0], [s.x1, s.z1], [s.x0, s.z1]];
     const calm = inCalm(L, cx, cz, 1.1);
     if (!calm && s.kind === "flat" && r() < 0.17 && w > 1 && d > 1) {
-      // canto lascado: corta um canto em diagonal (a laje "perde" um pedaco)
+      // canto lascado: corta um canto em diagonal (a laje "perde" um pedaço)
       const c = Math.floor(r() * 4);
       const k1 = 0.22 + r() * 0.3, k2 = 0.22 + r() * 0.3;
       const P = poly;
@@ -293,8 +294,15 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     });
   }
 
-  // ---- bacias retangulares (tanque, canal): paredes e fundo; agua rebaixada
+  // ---- bacias retangulares (tanque, canal): paredes e fundo; água rebaixada
   const puddles: Spot[] = [];
+  const colliders: Rect[] = [];
+  for (const b of basins) {
+    const rc = b.rect;
+    if (b.kind === "tanque") colliders.push(rc);
+    else colliders.push({ ...rc, z1: b.bridgeZ - 0.55 }, { ...rc, z0: b.bridgeZ + 0.55 });
+  }
+  for (const p of ponds) colliders.push({ x0: p.x - p.r0 * 0.9, x1: p.x + p.r0 * 0.9, z0: p.z - p.r0 * 0.9, z1: p.z + p.r0 * 0.9 });
   const waterCol: RGB = [1, 1, 1];
   for (const b of basins) {
     const rc = b.rect;
@@ -313,7 +321,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     floorF.fan([[rc.x0, Y_BASIN, rc.z0], [rc.x1, Y_BASIN, rc.z0], [rc.x1, Y_BASIN, rc.z1], [rc.x0, Y_BASIN, rc.z1]], hsl(180, 30, 7), [0, 1, 0]);
     waterF.quad([rc.x1, Y_WATER_SUNK, rc.z0], [rc.x1, Y_WATER_SUNK, rc.z1], [rc.x0, Y_WATER_SUNK, rc.z1], [rc.x0, Y_WATER_SUNK, rc.z0], waterCol, [0, 1, 0]);
     puddles.push({ x: (rc.x0 + rc.x1) / 2, z: (rc.z0 + rc.z1) / 2, r: Math.max(rc.x1 - rc.x0, rc.z1 - rc.z0) * 0.6 });
-    // objetos no fundo, vistos atraves da agua: ossos e pedras
+    // objetos no fundo, vistos através da água: ossos e pedras
     const n = b.kind === "tanque" ? 5 : 4;
     for (let i = 0; i < n; i++) {
       const x = rc.x0 + 0.3 + r() * (rc.x1 - rc.x0 - 0.6), z = rc.z0 + 0.3 + r() * (rc.z1 - rc.z0 - 0.6);
@@ -321,8 +329,8 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       else bone(detF, x, Y_BASIN, z, r() * 3.14, 0.4 + r() * 0.3, 0.025, shade(hex("#b7b098"), 0.55));
     }
     if (b.kind === "canal") {
-      // ponte de laje atravessando o canal (peca solta com espessura real)
-      const bz = rc.z0 + (rc.z1 - rc.z0) * (0.3 + r() * 0.4);
+      // ponte de laje atravessando o canal (peça solta com espessura real)
+      const bz = b.bridgeZ;
       const horizontalLong = rc.z1 - rc.z0 > rc.x1 - rc.x0;
       const bw = horizontalLong ? rc.x1 - rc.x0 + 0.9 : 1.1, bd = horizontalLong ? 1.1 : rc.z1 - rc.z0 + 0.9;
       const bx = (rc.x0 + rc.x1) / 2, bzz = horizontalLong ? bz : (rc.z0 + rc.z1) / 2;
@@ -331,7 +339,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     }
   }
 
-  // ---- lagoas organicas: borda de pedra (anel de blocos) acima do chao + agua rebaixada dentro dela
+  // ---- lagoas orgânicas: borda de pedra (anel de blocos) acima do chão + água rebaixada dentro dela
   for (const p of ponds) {
     const N = 26;
     const inner: [number, number][] = [], outer: [number, number][] = [];
@@ -353,7 +361,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       const tone = hsl(172 + (r() - 0.5) * 14, 13, 17 + r() * 6);
       const a0 = inner[i]!, a1 = inner[j]!, b0 = outer[i]!, b1 = outer[j]!;
       const mx = (a0[0] + a1[0]) / 2 - p.x, mz = (a0[1] + a1[1]) / 2 - p.z;
-      // topo do bloco, chanfro externo (desce ao chao) e parede interna molhada (desce a agua)
+      // topo do bloco, chanfro externo (desce ao chão) e parede interna molhada (desce a água)
       floorF.quad([a0[0], hh, a0[1]], [a1[0], hh, a1[1]], [b1[0], hh - 0.012, b1[1]], [b0[0], hh - 0.012, b0[1]], tone, [0, 1, 0]);
       floorF.quad([b0[0], hh - 0.012, b0[1]], [b1[0], hh - 0.012, b1[1]], [b1[0], 0, b1[1]], [b0[0], 0, b0[1]], shade(tone, 0.62), [mx, 0.3, mz]);
       floorF.quad([a0[0], hh, a0[1]], [a1[0], hh, a1[1]], [a1[0], 0.018, a1[1]], [a0[0], 0.018, a0[1]], hsl(172, 26, 11), [-mx, 0.1, -mz]);
@@ -412,17 +420,13 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
   }
 
   // =============================================================================================
-  // 4) PECAS DE APOIO
+  // 4) PEÇAS DE APOIO
   // =============================================================================================
-  const tally: Record<string, number> = {};
-  let tmark = detF.triCount;
-  const mark = (n: string): void => { tally[n] = (tally[n] ?? 0) + detF.triCount - tmark; tmark = detF.triCount; };
-  mark("cracks");
   const rubbleKit = bakeKitPiece(pieces.rubble, 0.16);
   const boneCol = hex("#c9c1a5");
   const rockCol = (): RGB => hsl(205 + (r() - 0.5) * 30, 7 + r() * 5, 21 + r() * 7);
 
-  /** Posicao valida para peca em relevo (fora da faixa de combate, saida, estrado, pilares, agua). */
+  /** Posição válida para peça em relevo (fora da faixa de combate, saida, estrado, pilares, água). */
   const okAt = (x: number, z: number, rad: number, allowCalm = false): boolean => {
     if (Math.abs(x) > HX - 0.55 - rad * 0.5 || Math.abs(z) > HZ - 0.55 - rad * 0.5) return false;
     if (!allowCalm && inCalm(L, x, z, 1.04)) return false;
@@ -431,13 +435,13 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     if (nearWater(x, z, 0.3 + rad)) return false;
     return flatY(x, z) !== null;
   };
-  /** Ponto com tendencia as paredes e cantos (cenografia de borda). */
+  /** Ponto com tendência as paredes e cantos (cenografia de borda). */
   const rimPoint = (): [number, number] => {
     for (let t = 0; t < 40; t++) {
       let x: number, z: number;
       const u = r();
       if (u < 0.6) {
-        // junto a uma parede: distancia ao quadrado favorece o encosto
+        // junto a uma parede: distância ao quadrado favorece o encosto
         const wall = Math.floor(r() * 4);
         const dist = 0.7 + r() * r() * 4.2;
         if (wall === 0) { x = HX - dist; z = (r() - 0.5) * (HZ * 2 - 2); }
@@ -491,16 +495,14 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     rubbleCluster(x, z, flatY(x, z)!, r());
     i++;
   }
-  mark("entulho");
-  // montes de ossos (ossos + cranio + costelas)
+  // montes de ossos (ossos + crânio + costelas)
   for (let i = 0, n = Math.round(rimArea * D.bones), tr = 0; i < n && tr < n * 20; tr++) {
     const [x, z] = rimPoint();
     if (!okAt(x, z, 0.8)) continue;
     boneGroup(x, z, flatY(x, z)!, r() < 0.3);
     i++;
   }
-  mark("ossos");
-  // cranios soltos
+  // crânios soltos
   for (let i = 0, n = Math.round(rimArea * D.skulls), tr = 0; i < n && tr < n * 20; tr++) {
     const [x, z] = rimPoint();
     if (!okAt(x, z, 0.5)) continue;
@@ -508,7 +510,6 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     skullProc(detF, x, flatY(x, z)!, z, r() * 6.28, 1.0 + r() * 0.3, shade(boneCol, 0.85 + r() * 0.2), 0.15 + r() * 0.35, (r() - 0.5) * 0.5);
     i++;
   }
-  mark("cranios");
   // cacos de laje quebrada soltos (a maior parte perto de lajes erguidas e paredes)
   for (let i = 0, n = Math.round(rimArea * D.shards), tr = 0; i < n && tr < n * 20; tr++) {
     const [x, z] = rimPoint();
@@ -518,8 +519,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     shard(detF, x, flatY(x, z)!, z, 0.3 + r() * 0.5, 0.045 + r() * 0.06, r, shade(sl.col, 1.05 + r() * 0.15));
     i++;
   }
-  mark("cacos");
-  // cacos e entulho junto de cada laje erguida (de onde saiu o pedaco)
+  // cacos e entulho junto de cada laje erguida (de onde saiu o pedaço)
   for (const s of slabs) {
     if (s.kind !== "raised" || r() > 0.7) continue;
     const cz = (s.z0 + s.z1) / 2;
@@ -531,7 +531,6 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     shard(detF, side + (r() - 0.5) * 0.4, flatY(side, z)!, z + (r() - 0.5) * 0.5, 0.25 + r() * 0.2, 0.05, r, shade(s.col, 1.1));
   }
 
-  mark("erguidas");
   // =============================================================================================
   // 5) ASSINATURA POR TIPO DE SALA
   // =============================================================================================
@@ -560,7 +559,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
   };
 
   if (kind === "cisterna") {
-    // musgo em tufos: borda das lagoas/bacias, pe das paredes e junto de entulho
+    // musgo em tufos: borda das lagoas/bacias, pé das paredes e junto de entulho
     const mossTargets: [number, number][] = [];
     for (const p of ponds) for (let i = 0; i < 18; i++) {
       const a = r() * 6.28, rr = pondR(p, a - p.ang) + 0.45 + r() * 0.6;
@@ -581,7 +580,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       if (inPond(x, z, -0.45)) continue;
       mossAt(x, z, y, 0.22 + r() * 0.22, 4 + Math.floor(r() * 4));
     }
-    // ralo de ferro: anel, boca escura e grade (peca 3D)
+    // ralo de ferro: anel, boca escura e grade (peça 3D)
     for (let t = 0; t < 80; t++) {
       const [x, z] = rimPoint();
       if (!okAt(x, z, 1.1) || Math.hypot(x, z - cc.z) < 5) continue;
@@ -609,7 +608,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       taken.push({ x, z, r: 1.0 });
       break;
     }
-    // limo nas juntas: filetes de musgo baixo ao longo das lajes proximas da agua
+    // limo nas juntas: filetes de musgo baixo ao longo das lajes proximas da água
     for (const s of slabs) {
       if (s.kind !== "flat") continue;
       const cx = (s.x0 + s.x1) / 2, cz = (s.z0 + s.z1) / 2;
@@ -634,12 +633,12 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       i++;
     }
   } else if (kind === "salao") {
-    // tapete-corredor gasto e rasgado (ocre escuro; o manto do heroi e vermelho)
+    // tapete-corredor gasto e rasgado (ocre escuro; o manto do herói é vermelho)
     const x0 = -1.5, x1 = 1.5, z0 = -HZ + 2.6, z1 = AZ - 3.6;
     const yR = 0.03;
     floorF.uvU = r(); floorF.uvV = r();
     const rugCol = hsl(36, 28, 19);
-    // corpo com um canto roido (poligono de 6 pontos)
+    // corpo com um canto roido (polígono de 6 pontos)
     prism(floorF, [[x0, z0], [x1, z0], [x1, z1 - 0.9], [x1 - 0.7, z1], [x0, z1]], yR, 0.0, rugCol, { bevel: 0.03, drop: 0.015, colSide: hsl(34, 24, 10) });
     // bordado dourado gasto (4 fios) e listras escuras
     const yB = yR + 0.006;
@@ -736,7 +735,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       slope(detF, lm, 0.046, lo, 0.01, shade(lip, 0.65), [0, 1, 0]);
       slope(detF, re, 0.016, rm, 0.046, lip, [0, 1, 0]);
       slope(detF, rm, 0.046, ro, 0.01, shade(lip, 0.65), [0, 1, 0]);
-      // brasa so em trechos (intermitente), mais estreita que a fenda
+      // brasa só em trechos (intermitente), mais estreita que a fenda
       for (let k = 0; k < pts.length - 1; k++) {
         if ((k + Math.floor(a0 * 3)) % 4 === 3) continue;
         ribbon(emisF, [pts[k]!, pts[k + 1]!], [widths[k]! * 0.42, widths[k + 1]! * 0.42], 0.026, [1, 1, 1]);
@@ -759,8 +758,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       i++;
     }
   }
-  mark("assinatura");
-  // tufos de mofo discretos nos demais tipos (so cantos)
+  // tufos de mofo discretos nos demais tipos (só cantos)
   if (kind !== "cisterna" && kind !== "guardiao") {
     for (let i = 0, tr = 0; i < 6 && tr < 60; tr++) {
       const [x, z] = rimPoint();
@@ -779,24 +777,16 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
   stone.diffuseColor = Color3.White();
   stone.specularColor = Color3.Black();
 
-  const under = new StandardMaterial("pisoJuntaMat", scene);
-  under.diffuseColor = Color3.FromHexString(pal.joint);
-  under.specularColor = Color3.Black();
-  const underlay = MeshBuilder.CreateBox("piso_junta", { width: HX * 2 + 1.0, height: 1.0, depth: HZ * 2 + 1.0 }, scene);
-  underlay.position.set(0, Y_JOINT - 0.5, 0);
-  underlay.material = under;
-  underlay.isPickable = false;
-  underlay.receiveShadows = true;
-
+  // fundo das juntas: um quadro escuro grande (cor do rejunte por vértice) e os detalhes na mesma malha
+  const jc = hex(pal.joint);
+  const ex = 0.9;
+  floorF.fan([[-HX - ex, Y_JOINT, -HZ - ex], [-HX - ex, Y_JOINT, HZ + ex], [HX + ex, Y_JOINT, HZ + ex], [HX + ex, Y_JOINT, -HZ - ex]], jc, [0, 1, 0]);
+  floorF.append(detF);
   const floorMesh = floorF.toMesh("piso_lajes", scene, stone)!;
   floorMesh.receiveShadows = true;
-  const detMesh = detF.toMesh("piso_detalhes", scene, stone);
-  if (detMesh) detMesh.receiveShadows = true;
 
-  const meshes: Mesh[] = [underlay, floorMesh];
-  if (detMesh) meshes.push(detMesh);
-
-  // agua: translucida, emissiva sutil, ondulacao por deslocamento de UV (barato)
+  const meshes: Mesh[] = [floorMesh];
+  // água: translucida, emissiva sutil, ondulação por deslocamento de UV (barato)
   let waterTex: DynamicTexture | null = null;
   const waterMesh = waterF.toMesh("piso_agua", scene, null);
   if (waterMesh) {
@@ -829,13 +819,12 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     meshes.push(emisMesh);
   }
 
-  if (import.meta.env.DEV) console.info("[piso] " + JSON.stringify({ kind, slabs: slabs.length, tris: floorF.triCount + detF.triCount + waterF.triCount + emisF.triCount, floor: floorF.triCount, det: detF.triCount, water: puddles, tally, rubbleTris: rubbleKit ? rubbleKit.idx.length / 3 : 0 }));
-  const tris = floorF.triCount + detF.triCount + waterF.triCount + emisF.triCount;
+  const tris = floorF.triCount + waterF.triCount + emisF.triCount;
   return {
     meshes,
     floor: floorMesh,
-    details: detMesh,
     emissive,
+    colliders,
     puddles,
     candles,
     embers,

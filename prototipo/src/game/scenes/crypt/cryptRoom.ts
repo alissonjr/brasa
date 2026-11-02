@@ -571,13 +571,23 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   ground.parent = roomRoot;
   aggregates.push(new PhysicsAggregate(ground, PhysicsShapeType.BOX, { mass: 0 }, scene));
 
-  // --- LAJE BASE solida: o piso visivel. Recebe UMA textura procedural pintada (lajes
-  //     irregulares, rachaduras, sujeira, sangue, ossos, assinatura do tipo de sala; ver
-  //     cryptDecor.paintFloor), o que tambem substitui a antiga grade de juntas (1 draw a menos).
-  //     Topo em y=0; as faces laterais amostram um bolsao escuro da textura (faceUV). ---
+  // --- PISO 3D (cryptFloor): lajes reais com juntas fundas, algumas erguidas/afundadas, e a cenografia
+  //     de apoio como geometria (ossos, entulho, fendas, musgo, tapete, água rebaixada com ondulação).
+  //     Tudo em poucas malhas (laje+detalhes fundidos, água, brasas). A superfície caminhável segue em y=0. ---
   const floorArt = buildFloorScape(scene, L, def.kind, def.index, P);
   for (const m of floorArt.meshes) { m.parent = roomRoot; track(m); }
-  if (floorArt.details) { ctx.shadow.addShadowCaster(floorArt.details); casters.push(floorArt.details); }
+  ctx.shadow.addShadowCaster(floorArt.floor); // detalhes em relevo (ossos, entulho, bordas) projetam sombra no piso
+  casters.push(floorArt.floor);
+  // O chão físico é plano: bacias e lagoa ganham colisor invisível (sem custo de desenho).
+  for (const c of floorArt.colliders) {
+    const box = MeshBuilder.CreateBox("colisor_agua", { width: c.x1 - c.x0, height: 1, depth: c.z1 - c.z0 }, scene);
+    box.position.set((c.x0 + c.x1) / 2, 0.5, (c.z0 + c.z1) / 2);
+    box.isVisible = false;
+    box.isPickable = false;
+    box.checkCollisions = true;
+    track(box);
+    aggregates.push(new PhysicsAggregate(box, PhysicsShapeType.BOX, { mass: 0 }, scene));
+  }
 
   // --- CAVERNA em volta do santuario (camera alta): rampa de rocha por fora dos muros baixos ---
   if (ALTA) for (const m of buildCave(scene, { halfX: HALFX, halfZ: HALFZ, seed: def.index + 1 })) track(m);
@@ -971,7 +981,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   }
 
   function clusterGrime(density: number): void {
-    // Pilha de caveiras junto ao estrado (o entulho e as ossadas soltas do chao vivem em cryptFloor).
+    // Pilha de caveiras junto ao estrado (o entulho e as ossadas soltas do chão vivem em cryptFloor).
     const pile = Math.round(density * 7);
     for (let i = 0; i < pile; i++)
       batch("skull", { x: -(HALFX - 2.6) + rng(i + 30) * 1.6, z: (AZ - 0.6) + rng(i + 40) * 1.6, y: rng(i + 50) * 0.25, rotY: seedRot(i), scale: 0.3 + rng(i + 10) * 0.1 });
