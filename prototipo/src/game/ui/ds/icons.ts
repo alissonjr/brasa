@@ -33,6 +33,8 @@ export const ICON_PATHS: Record<string, string> = {
   close: P("M6 6l12 12M18 6L6 18"),
   arrow: P("M5 12h14M13 6l6 6-6 6"),
   check: P("M5 12.5l4.5 4.5L19 7.5"),
+  sound: P("M4 9.5h3.5L12 6v12l-4.5-3.5H4z") + P("M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"),
+  mute: P("M4 9.5h3.5L12 6v12l-4.5-3.5H4z") + P("M16 9.5l5 5M21 9.5l-5 5"),
   exit: P("M14 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 8l-4 4 4 4M6 12h9"),
 };
 
