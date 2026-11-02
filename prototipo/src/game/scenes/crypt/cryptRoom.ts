@@ -770,6 +770,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   const brokenBase = kitBase(P.wall_broken!, "base");
   if (wallBase) kitInstances(wallBase, wallsV);
   if (brokenBase && brokenV.length) kitInstances(brokenBase, brokenV);
+  else if (brokenBase) { brokenBase.dispose(); } // sem muro quebrado (plantas de 12 m): a malha-base sem instancias apareceria como um bloco na origem
   if (ALTA) {
     if (wallBase) wallBase.scaling.y = PARAPET;
     if (brokenBase) brokenBase.scaling.y = PARAPET;

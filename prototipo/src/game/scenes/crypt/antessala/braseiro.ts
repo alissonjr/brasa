@@ -13,8 +13,8 @@ import { ancoras } from "./planta";
 export function construirBraseiro(kit: AntessalaKit): Peca {
   const a = ancoras(kit.def.index);
   const { x, z } = a.braseiro;
-  const pedra = kit.flatMaterial("braseiroPedra", "#6b6f78");
-  const pedraEscura = kit.flatMaterial("braseiroPedraEscura", "#43474f");
+  const pedra = kit.flatMaterial("braseiroPedra", "#4c5058");
+  const pedraEscura = kit.flatMaterial("braseiroPedraEscura", "#34373e");
   const parte = (nome: string, o: { dTop: number; dBot: number; h: number; y: number }, mat: StandardMaterial): void => {
     const m = MeshBuilder.CreateCylinder(nome, { diameterTop: o.dTop, diameterBottom: o.dBot, height: o.h, tessellation: 14 }, kit.scene);
     m.material = mat;
@@ -27,6 +27,13 @@ export function construirBraseiro(kit: AntessalaKit): Peca {
   parte("braseiro_base", { dTop: 2.3, dBot: 2.5, h: 0.16, y: 0.08 }, pedraEscura);
   parte("braseiro_pe", { dTop: 0.9, dBot: 1.1, h: 0.55, y: 0.435 }, pedra);
   parte("braseiro_bacia", { dTop: 1.6, dBot: 0.85, h: 0.36, y: 0.89 }, pedra);
+  // Aro da bacia (a boca aberta): as brasas ficam dentro dele.
+  const aro = MeshBuilder.CreateTorus("braseiro_aro", { diameter: 1.52, thickness: 0.16, tessellation: 20 }, kit.scene);
+  aro.material = pedra;
+  aro.position.set(x, 1.07, z);
+  aro.isPickable = false;
+  kit.ctx.shadow.addShadowCaster(aro);
+  kit.track(aro);
   kit.collider(x, z, 1.5, 1.5, 1.1);
 
   // Brasas: disco emissivo no fundo da bacia. Frio: cinza quase negra; aceso: laranja viva (glow).
@@ -35,11 +42,11 @@ export function construirBraseiro(kit: AntessalaKit): Peca {
   brasaMat.diffuseColor = Color3.Black();
   brasaMat.specularColor = Color3.Black();
   const frio = Color3.FromHexString("#1d1a18");
-  const quente = Color3.FromHexString("#ff7a1c");
+  const quente = Color3.FromHexString("#c8460e");
   brasaMat.emissiveColor = frio.clone();
-  const brasas = MeshBuilder.CreateDisc("braseiro_brasas", { radius: 0.66, tessellation: 18 }, kit.scene);
+  const brasas = MeshBuilder.CreateDisc("braseiro_brasas", { radius: 0.62, tessellation: 18 }, kit.scene);
   brasas.rotation.x = Math.PI / 2;
-  brasas.position.set(x, 1.05, z);
+  brasas.position.set(x, 1.1, z);
   brasas.material = brasaMat;
   brasas.isPickable = false;
   brasas.metadata = { noOutline: true, noDepth: true };
@@ -90,7 +97,7 @@ export function construirBraseiro(kit: AntessalaKit): Peca {
     },
     update(t: number): void {
       if (k > 0.2) {
-        const f = 0.85 + 0.15 * Math.sin(t * 9) + 0.05 * Math.sin(t * 17);
+        const f = 0.9 + 0.1 * Math.sin(t * 9) + 0.05 * Math.sin(t * 17);
         brasaMat.emissiveColor = Color3.Lerp(frio, quente, Math.min(1, k / 0.45)).scale(f);
       }
     },
