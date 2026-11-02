@@ -329,7 +329,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   const casters: AbstractMesh[] = [];
   // ignite (0..1): fator de aceso. Tochas de parede nascem 1 (sempre acesas); o BRASEIRO
   // nasce 0 (apagado) e sobe na virada frio->quente ao ser aceso.
-  const flames: { mesh: Mesh; light: PointLight | null; base: number; seed: number; ignite: number }[] = [];
+  const flames: { pos: Vector3; scale: number; light: PointLight | null; base: number; seed: number; ignite: number }[] = [];
   let arenaDispose: (() => void) | undefined; // descarte extra da arena do Guardião (observer/glow)
   let decayWebMat: StandardMaterial | null = null; // teia de aranha (reuso por sala)
   let decayMossMat: StandardMaterial | null = null; // musgo/trepadeira (reuso por sala)
@@ -576,19 +576,27 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     }
   }
 
-  type Flame = { mesh: Mesh; light: PointLight | null; base: number; seed: number; ignite: number };
+  // CHAMAS: UMA malha com thin instances para todas (antes 1 malha + 1 material por chama: cada uma
+  // custava draw call no passe principal, na profundidade e no glow). O tremular reescreve as
+  // matrizes a cada quadro; chama apagada vira matriz degenerada.
+  type Flame = (typeof flames)[number];
+  let flameBase: Mesh | null = null;
   function makeFlame(pos: Vector3, scale: number, lightInt: number, withLight: boolean): Flame {
-    const mat = new StandardMaterial("flameMat", scene);
-    mat.emissiveColor = Color3.FromHexString("#ff7a1c");
-    mat.diffuseColor = Color3.Black();
-    mat.specularColor = Color3.Black();
-    mat.disableLighting = true;
-    const flame = MeshBuilder.CreateCylinder("chama", { diameterTop: 0, diameterBottom: 0.32 * scale, height: 0.7 * scale, tessellation: 8 }, scene);
-    flame.material = mat;
-    flame.position.copyFrom(pos);
-    flame.isPickable = false;
-    flame.parent = roomRoot;
-    ctx.glow.addIncludedOnlyMesh(flame);
+    if (!flameBase) {
+      const mat = new StandardMaterial("flameMat", scene);
+      mat.emissiveColor = Color3.FromHexString("#ff7a1c");
+      mat.diffuseColor = Color3.Black();
+      mat.specularColor = Color3.Black();
+      mat.disableLighting = true;
+      const base = MeshBuilder.CreateCylinder("chamas", { diameterTop: 0, diameterBottom: 0.32, height: 0.7, tessellation: 8 }, scene);
+      base.material = mat;
+      base.isPickable = false;
+      base.parent = roomRoot;
+      base.alwaysSelectAsActiveMesh = true; // as instancias vivem fora da caixa do cilindro-base
+      base.metadata = { noOutline: true };
+      ctx.glow.addIncludedOnlyMesh(base);
+      flameBase = base;
+    }
     let light: PointLight | null = null;
     if (withLight) {
       light = new PointLight("luz_chama", pos.add(new Vector3(0, 0.2, 0)), scene);
@@ -598,7 +606,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       light.shadowEnabled = false;
       lights.push(light);
     }
-    const entry: Flame = { mesh: flame, light, base: lightInt, seed: flames.length * 1.7, ignite: 1 };
+    const entry: Flame = { pos: pos.clone(), scale, light, base: lightInt, seed: flames.length * 1.7, ignite: 1 };
     flames.push(entry);
     return entry;
   }
@@ -1227,14 +1235,27 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   }
 
   // Tremular das chamas (escala por `ignite`: apagada some, acesa tremula normal).
+  let flameBuf: Float32Array | null = null;
   const flicker: Observer<Scene> = scene.onBeforeRenderObservable.add(() => {
     const t = performance.now() / 1000;
-    for (const f of flames) {
-      const fl = 0.85 + 0.15 * Math.sin(t * 11 + f.seed) + 0.06 * Math.sin(t * 23 + f.seed * 2);
-      if (f.light) f.light.intensity = f.base * fl * f.ignite;
-      const on = f.ignite > 0.02;
-      if (f.mesh.isEnabled() !== on) f.mesh.setEnabled(on);
-      f.mesh.scaling.y = (0.9 + 0.18 * Math.sin(t * 13 + f.seed)) * (0.4 + 0.6 * f.ignite);
+    if (flameBase) {
+      if (!flameBuf) { flameBuf = new Float32Array(flames.length * 16); flameBase.thinInstanceSetBuffer("matrix", flameBuf, 16, false); }
+      let anyOn = false;
+      for (let i = 0; i < flames.length; i++) {
+        const f = flames[i]!;
+        const fl = 0.85 + 0.15 * Math.sin(t * 11 + f.seed) + 0.06 * Math.sin(t * 23 + f.seed * 2);
+        if (f.light) f.light.intensity = f.base * fl * f.ignite;
+        const on = f.ignite > 0.02;
+        const o = i * 16;
+        const sx = on ? f.scale : 0; // apagada: matriz degenerada
+        const sy = on ? f.scale * (0.9 + 0.18 * Math.sin(t * 13 + f.seed)) * (0.4 + 0.6 * f.ignite) : 0;
+        flameBuf.fill(0, o, o + 16);
+        flameBuf[o] = sx; flameBuf[o + 5] = sy; flameBuf[o + 10] = sx; flameBuf[o + 15] = 1;
+        flameBuf[o + 12] = f.pos.x; flameBuf[o + 13] = f.pos.y; flameBuf[o + 14] = f.pos.z;
+        if (on) anyOn = true;
+      }
+      flameBase.thinInstanceBufferUpdated("matrix");
+      if (flameBase.isEnabled() !== anyOn) flameBase.setEnabled(anyOn);
     }
     floorArt.update(t);
     if (beam.isEnabled()) {
@@ -1527,7 +1548,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     dispose(): void {
       scene.onBeforeRenderObservable.remove(flicker);
       arenaDispose?.();
-      for (const f of flames) ctx.glow.removeIncludedOnlyMesh(f.mesh);
+      if (flameBase) ctx.glow.removeIncludedOnlyMesh(flameBase);
       for (const c of casters) ctx.shadow.removeShadowCaster(c);
       for (const a of aggregates) a.dispose();
       for (const l of lights) l.dispose();
