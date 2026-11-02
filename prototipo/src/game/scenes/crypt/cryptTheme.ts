@@ -1,8 +1,5 @@
 import {
   BoxParticleEmitter,
-  MultiMaterial,
-  PBRMaterial,
-  StandardMaterial,
   Color3,
   Color4,
   ColorCurves,
@@ -10,8 +7,7 @@ import {
   ParticleSystem,
   Vector3,
 } from "@babylonjs/core";
-import type { ArcRotateCamera, Material, Scene, Texture, TransformNode } from "@babylonjs/core";
-import { CellMaterial } from "@babylonjs/materials/cell";
+import type { ArcRotateCamera, Scene, Texture } from "@babylonjs/core";
 
 /**
  * CAMADA JOGO (Brasa). IDENTIDADE POR ANDAR. Cada um dos 7 andares tem um TEMA (rocha da caverna,
@@ -370,25 +366,3 @@ export function createAtmosphere(scene: Scene, t: FloorTheme): Atmosphere | null
 }
 
 export const hex = (h: string): Color3 => Color3.FromHexString(h);
-
-/** Tinge a pedra da arquitetura (muros, pilares, tijolos) com o tom do andar. Material clonado por sala. */
-export function tintArchitecture(root: TransformNode, tint: string): void {
-  const k = Color3.FromHexString(tint);
-  const done = new Set<Material>();
-  const apply = (mat: Material | null | undefined): void => {
-    if (!mat || done.has(mat)) return;
-    done.add(mat);
-    if (mat instanceof MultiMaterial) {
-      for (const sm of mat.subMaterials) apply(sm);
-    } else if (mat instanceof PBRMaterial) {
-      mat.albedoColor = mat.albedoColor.multiply(k);
-    } else if (mat instanceof CellMaterial) {
-      mat.diffuseColor = mat.diffuseColor.multiply(k);
-    } else if (mat instanceof StandardMaterial) {
-      mat.diffuseColor = mat.diffuseColor.multiply(k);
-    }
-  };
-  for (const m of root.getChildMeshes(false)) {
-    if (/wall|pillar|bricks/i.test(m.name)) apply(m.material);
-  }
-}
