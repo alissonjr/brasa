@@ -15,6 +15,7 @@ import { HeroCombat } from "../combat/heroCombat";
 // Corpo Quaternius (Universal Base Characters + Modular Outfits Fantasy, CC0) em preto, bronze e
 // ouro de brasa: heroina.glb (ver heroModel.ts). O modelo estatico do Tripo fica so nos menus.
 const ACENDEDORA_MODEL = "/models/personagens/heroina.glb";
+const HIT_REACTION_SEC = 0.33;
 const FORWARD = new Vector3(0, 0, 1); // eixo local "frente" do modelo (para getFacing)
 
 /** Input de locomoção zerado: usado enquanto o combate trava o ator (golpe comprometido). */
@@ -34,6 +35,8 @@ export class Acendedora {
   private hasAim = false;
   private readonly spark: PointLight;
   private sparkOnHand = false;
+  private lastHp = -1;
+  private hitT = 0; // tempo restante da reação de dano (clipe Hit_Chest ~0,33 s)
 
   constructor(scene: Scene, spawn: Vector3, gravity: Vector3) {
     this.model = new HeroModel(scene, { modelUrl: ACENDEDORA_MODEL, name: "acendedora" });
@@ -106,7 +109,16 @@ export class Acendedora {
     }
     this.combat_.update(deltaSeconds, input);
     // Animação dominante a partir do estado de combate (bloqueio > esquiva > golpe > idle).
-    const action: HeroAction = this.combat_.isBlocking
+    // Reação de dano: só quando a vida cai e a heroína não está guardando, esquivando ou comprometida num golpe.
+    const hp = this.combat_.health.current;
+    if (this.lastHp >= 0 && hp < this.lastHp - 0.01 && hp > 0 && !this.combat_.isBlocking && !this.combat_.moveOverride && !this.combat_.busy) {
+      this.hitT = HIT_REACTION_SEC;
+    }
+    this.lastHp = hp;
+    this.hitT = Math.max(0, this.hitT - deltaSeconds);
+    const action: HeroAction = hp <= 0
+      ? "death"
+      : this.combat_.isBlocking
       ? "block"
       : this.combat_.moveOverride
         ? "dodge"
@@ -116,7 +128,9 @@ export class Acendedora {
             ? this.combat_.heavyAttack
               ? "heavy"
               : "light"
-            : "idle";
+            : this.hitT > 0
+              ? "hit"
+              : "idle";
     this.model.setAction(action);
     // Durante a ANTECIPAÇÃO do golpe, encara para onde a câmera olha (a mira). Parado, o
     // controller só gira o modelo na direção do movimento, então a hitbox (à frente do

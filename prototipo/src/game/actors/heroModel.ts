@@ -32,12 +32,12 @@ const BLOCK_HOLD = 0.5; // fração do clipe de bloqueio em que a guarda fica pa
 const CLIPES = {
   idle: "Idle_Loop", walk: "Walk_Loop", run: "Jog_Fwd_Loop", sprint: "Sprint_Loop",
   light: "Sword_Regular_A", heavy: "Sword_Regular_B", dodge: "Roll", block: "Sword_Block",
-  hit: "Hit_Chest", ember: "Spell_Simple_Shoot",
+  hit: "Hit_Chest", ember: "Spell_Simple_Shoot", death: "Death01",
 } as const;
 type ClipeKey = keyof typeof CLIPES;
 
 /** Ação one-shot/hold do herói, sobreposta à locomoção. */
-export type HeroAction = "idle" | "light" | "heavy" | "dodge" | "block" | "hit" | "ember";
+export type HeroAction = "idle" | "light" | "heavy" | "dodge" | "block" | "hit" | "ember" | "death";
 
 export class HeroModel implements CharacterVisual {
   readonly root: TransformNode;
@@ -137,6 +137,7 @@ export class HeroModel implements CharacterVisual {
       orb.parent = holder;
       orb.isPickable = false;
       orb.metadata = { noOutline: true };
+      this.scene.getGlowLayerByName("glow")?.addIncludedOnlyMesh(orb); // a brasa da mão ganha halo
       this.emberMat = mat;
       this.emberNode = holder;
     }
