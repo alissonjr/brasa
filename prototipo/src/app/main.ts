@@ -505,7 +505,7 @@ async function main(): Promise<void> {
       if (!def.boss) playStinger("despertar"); // os mortos da câmara acordam (stinger frio)
       playStir(def.boss ? 1 : (ROSTER[i]?.length ?? 1)); // os mortos se agitam ao acordar
       gameHud.say("eco", ECHOES[i] ?? "", 4200); // eco/memória do andar
-      playWhisper(Math.sign(currentRoom.inscriptionPos.x) * 0.6); // o eco sussurra do nicho
+      playWhisper(Math.sign(currentRoom.inscriptionPos?.x ?? 0) * 0.6); // o eco sussurra do nicho
     }
     explor.onEnterFloor(i);
   };
@@ -1125,8 +1125,9 @@ async function main(): Promise<void> {
       weaponEl.style.display = "none";
     }
     // Inscrição por proximidade: ao chegar perto do nicho, a pedra "se lê".
-    if (gameActive && !descending && currentRoom &&
-      Math.hypot(hero.position.x - currentRoom.inscriptionPos.x, hero.position.z - currentRoom.inscriptionPos.z) <= 3.0) {
+    const insc = currentRoom?.inscriptionPos; // nulo na antecâmara
+    if (gameActive && !descending && insc &&
+      Math.hypot(hero.position.x - insc.x, hero.position.z - insc.z) <= 3.0) {
       gameHud.setInscription(INSCRIPTIONS[floorIndex] ?? "");
       markCodex(markRead(floorIndex + 1)); // a pedra se lê ao chegar perto: o decalque cai na Crônica
     } else {

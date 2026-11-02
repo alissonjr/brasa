@@ -24,6 +24,8 @@ import { createLightPool, flatColorOf, isCachedToon, loadContainer, toonifyHiera
 import { CellMaterial } from "@babylonjs/materials/cell";
 import { mergeStaticByMaterial } from "./staticMerge";
 import { pickLayout } from "./cryptLayouts";
+import { buildSideDoor } from "./cryptDoor";
+import { ROTA, type NodeKind } from "../../run/rota";
 import { buildFloorScape, buildPoolGroup } from "./cryptDecor";
 import { buildCave } from "./cryptCave";
 import { applyGrade, createAtmosphere, themeFor } from "./cryptTheme";
@@ -67,10 +69,24 @@ export interface CryptCtx {
 export type RoomKind = "guarda" | "salao" | "cisterna" | "santuario" | "guardiao";
 
 export interface RoomDef {
-  index: number; // 0..N-1
+  index: number; // 0..N-1 (numa antecâmara: o andar de ORIGEM, que dá tema e semente)
   kind: RoomKind;
   enemies: number; // quantos mortos despertos a sala spawna
   boss?: boolean;
+  /** Antecâmara lateral (nó) em vez de andar: planta 12x12 própria, sem inimigos nem altar de estilha. */
+  node?: NodeKind;
+  /** Andar de origem da antecâmara (igual a `index`; a planta e o tema vêm dele). */
+  fromIndex?: number;
+  /** Este andar tem uma porta lateral para esta antecâmara (spec-exploracao-portas-e-salas, R5). */
+  sideDoor?: NodeKind;
+}
+
+/** Porta lateral montada na sala: gatilho colado à parede leste. */
+export interface RoomDoor {
+  kind: NodeKind;
+  x: number;
+  z: number;
+  radius: number;
 }
 
 /** Prop interativo atingivel pela arma do heroi: vaso/pote QUEBRA, cadeira TOMBA. O
@@ -95,12 +111,14 @@ export interface Room {
   readables: Readable[]; // pergaminhos/inscricoes legiveis por proximidade + [R]
   spawn: Vector3; // onde a Acendedora entra
   exit: { x: number; z: number; radius: number }; // a PASSAGEM (alçapão): pisar = descer
+  /** Portas laterais (0 ou 1): só existem em andares com `def.sideDoor`. Abrem junto do alçapão. */
+  doors: RoomDoor[];
   enemyAnchor: { x: number; z: number }; // centro em torno do qual os inimigos surgem
   /** Terreno andável dos inimigos: dentro das paredes e à frente do estrado do altar (que tem
    *  colisão e barra o herói). Impede que um inimigo ranged recue para um ponto inalcançável. */
   enemyBounds: EnemyBounds;
   brazier: Vector3;
-  inscriptionPos: { x: number; z: number }; // nicho de parede: ponto de leitura por proximidade
+  inscriptionPos: { x: number; z: number } | null; // nicho de parede: ponto de leitura por proximidade (null na antecâmara)
   /** Vira a luz da sala de fria (t=0) para quente (t=1): acende o braseiro + reaquece a cena. */
   setBrazierLit(t: number): void;
   /** Abre a passagem (alçapão): chamado após a Brasa ser acesa. */
@@ -648,6 +666,11 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   applyGrade(ctx.pipe, THEME);
   ctx.key.diffuse = Color3.FromHexString(THEME.key.diffuse);
   const cave = ALTA ? buildCave(scene, { halfX: HALFX, halfZ: HALFZ, seed: def.index + 1, theme: THEME, doorX: 2, altarZ: AZ, layout: L }) : null;
+  if (cave && def.node) {
+    // Antecamara (orcamento de 60 draw calls): sem o espelho d'agua da borda, que e so enfeite externo.
+    const i = cave.meshes.findIndex((m) => m.name === "caverna_agua");
+    if (i >= 0) cave.meshes.splice(i, 1)[0]!.dispose();
+  }
   if (cave) {
     for (const m of cave.meshes) track(m);
     for (const m of cave.glow) ctx.glow.addIncludedOnlyMesh(m);
@@ -679,8 +702,8 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   //     inscrição (lido por proximidade, item 5). Recesso = caixa escura encostada na
   //     parede leste; uma lápide e caveiras dentro. Posição exposta como inscriptionPos. ---
   const NICHE_Z = -(HALFZ - 5); // canto sudeste, longe do altar e da pista central
-  const inscriptionPos = { x: HALFX - 1.5, z: NICHE_Z };
-  {
+  const inscriptionPos = def.node ? null : { x: HALFX - 1.5, z: NICHE_Z };
+  if (!def.node) {
     const nm = new StandardMaterial("nichoMat", scene);
     nm.diffuseColor = Color3.FromHexString("#0a0d12");
     nm.specularColor = Color3.Black();
@@ -744,7 +767,8 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     if (!p.broken && !ALTA) batch("pillar", { x: p.x, z: p.z, rotY: p.rotY, y: WALL_H }, true);
   }
 
-  // --- Altar ao fundo (norte): estrado + degrau + braseiro (a Brasa) ---
+  // --- Altar ao fundo (norte): estrado + degrau + braseiro (a Brasa). Antecamara: sem altar. ---
+  if (!def.node) {
   const daisMat = new StandardMaterial("matEstrado", scene);
   daisMat.diffuseColor = Color3.FromHexString("#363b43");
   daisMat.specularColor = Color3.Black();
@@ -765,14 +789,15 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   stepM.receiveShadows = true;
   stepM.parent = roomRoot;
   aggregates.push(new PhysicsAggregate(stepM, PhysicsShapeType.BOX, { mass: 0 }, scene));
+  }
 
-  placeProp(P.torch!, { x: 0, z: AZ, y: 0.9, collider: true });
+  if (!def.node) placeProp(P.torch!, { x: 0, z: AZ, y: 0.9, collider: true });
   const brazier = new Vector3(0, 0.9, AZ);
   // A BRASA do altar nasce APAGADA: só acende (frio->quente) quando a sala é limpa e a
   // Acendedora a reacende (setBrazierLit). As duas chamas laterais (offering) acompanham.
   const brazierFlame = makeFlame(new Vector3(0, 2.2, AZ), def.boss ? 2.1 : 1.6, def.boss ? 3.0 : 2.4, true);
   // Anel de caveiras do altar (sempre presente; instanciado via clusterGrime no flush).
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < (def.node ? 0 : 8); i++) {
     const a = (i / 8) * Math.PI * 2;
     batch("skull", { x: Math.cos(a) * 1.7, z: AZ + Math.sin(a) * 1.1, y: 0.9, rotY: a + 1.2, scale: 0.32 });
   }
@@ -808,15 +833,22 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     [EX, EZ + half, HOLE + rimT * 2, rimT], [EX, EZ - half, HOLE + rimT * 2, rimT],
     [EX + half, EZ, rimT, HOLE + rimT * 2], [EX - half, EZ, rimT, HOLE + rimT * 2],
   ];
+  const rimBars: Mesh[] = [];
   for (let i = 0; i < rimSpots.length; i++) {
     const [rx, rz, rw, rd] = rimSpots[i]!;
     const bar = MeshBuilder.CreateBox(`borda_poco_${i}`, { width: rw, height: rimH, depth: rd }, scene);
-    bar.material = rimMat;
     bar.position.set(rx, rimH / 2, rz);
-    bar.isPickable = false;
-    bar.receiveShadows = true;
-    bar.parent = roomRoot;
-    track(bar);
+    bar.bakeCurrentTransformIntoVertices();
+    rimBars.push(bar);
+  }
+  const rim = Mesh.MergeMeshes(rimBars, true, true); // as 4 vigas viram 1 malha (cada malha custa varias passadas de desenho)
+  if (rim) {
+    rim.name = "borda_poco";
+    rim.material = rimMat;
+    rim.isPickable = false;
+    rim.receiveShadows = true;
+    rim.parent = roomRoot;
+    track(rim);
   }
   // Alcapao (tampa) por cima do buraco: visivel enquanto ha inimigos; ABRE (some) ao limpar.
   const hatch = placeProp(P.trapdoor!, { x: EX, z: EZ, y: 0.05, scale: HOLE / 2.2, cast: false, dyn: true });
@@ -833,6 +865,19 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   beam.parent = roomRoot;
   beam.setEnabled(false);
   ctx.glow.addIncludedOnlyMesh(beam);
+
+  // --- PORTA LATERAL (andares com def.sideDoor): portao de pedra na parede leste (peca do kit,
+  //     fundida com o resto do cenario estatico) + veu e poca de luz na cor da antecamara, que
+  //     acendem junto do alcapao. Sem luz pontual (o teto de 6 luzes da cena e do alcapao/tochas).
+  const sideDoors: RoomDoor[] = [];
+  let sideDoorFx: ReturnType<typeof buildSideDoor> | null = null;
+  if (def.sideDoor && L.doors[0]) {
+    const d = L.doors[0];
+    const gate = placeProp(P.wall_gate_door!, { x: d.x + 0.4, z: d.z, rotY: d.rotY, cast: false });
+    if (gate && ALTA) gate.scaling.y *= PARAPET; // muro baixo da camera alta: o portao nao pode tapar o heroi
+    sideDoorFx = buildSideDoor(scene, ctx.glow, roomRoot, d, def.sideDoor);
+    sideDoors.push({ kind: def.sideDoor, x: d.x, z: d.z, radius: ROTA.doorRadius });
+  }
 
   // --- Tochas/luminárias de parede: fileira baixa + alta (parede dupla). As 2 sconces mais
   //     perto da pista (lado da entrada) ganham LUZ QUENTE REAL de curto alcance (candelabro
@@ -884,7 +929,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   addPools(torchPoolsLit, poolCol.torch, 0.42, "torch");
   addPools(torchPoolsDim, poolCol.torch, 0.24, "torch");
   // Pool do BRASEIRO: nasce apagada e cresce/acende com o aquecimento (gangorra frio -> quente).
-  {
+  if (!def.node) {
     const bp = createLightPool(scene, { radius: 7.5, color: "#ffb870", alpha: 0.5, y: 0.19 });
     bp.position.set(0, 0.19, AZ - 3.2);
     bp.parent = roomRoot;
@@ -1152,15 +1197,19 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     placeBreakable(P.bottle_A_green!, { x: HALFX - 2.0, z: -8, scale: 1.5 });
     placeBreakable(P.bottle_C_brown!, { x: -HALFX + 2.0, z: -8, scale: 1.5 });
     // PERGAMINHOS/INSCRICOES legiveis ([R] perto): lore ligada a descida e as estilhas.
-    readables.push({ x: HALFX - 1.8, z: 3.5, text: "Tratado das Acendedoras: \"Desce. Recolhe cada estilha. So no fundo, com todas, a Brasa volta a arder.\"" });
+    // (com porta lateral o tratado sai da frente dela: o gatilho da porta tem raio 1,8)
+    readables.push({ x: HALFX - 1.8, z: def.sideDoor ? -2.5 : 3.5, text: "Tratado das Acendedoras: \"Desce. Recolhe cada estilha. So no fundo, com todas, a Brasa volta a arder.\"" });
     readables.push({ x: -HALFX + 1.8, z: 0.0, text: "Inscricao na lapide: \"Aqui jaz a guarda da chama. Foram teu povo, antes do frio.\"" });
     readables.push({ x: 0, z: AZ - 3.4, text: "Sobre o relicario: \"A estilha nao aquece - lembra. Leva o que o fogo foi ate onde ele pode ser de novo.\"" });
   }
 
   // ANDAR 1 (guarda) e CURADO a mao (sem espelho/jitter): cada coisa num lugar com proposito.
   // Os demais andares variam (dressing on) para nao repetir.
+  // Antecamara: so a planta e a luz (o conteudo de cada uma entra em cryptNodes, nas fases seguintes).
   dressing = def.kind !== "guarda";
-  switch (def.kind) {
+  switch (def.node ? "node" : def.kind) {
+    case "node": // antecamara vazia: so a planta e a luz do andar (o nome vem no HUD; o conteudo, em cryptNodes)
+      break;
     case "guarda": // SALA-CRIPTA DE REFERENCIA, curada e SEM amontoado: cada zona numa parede.
       clusterBanners(3); // estandartes na parede norte (sem pegada no chao)
       clusterCatacomb(true); // tumulos/caixoes na parede OESTE (catacumba)
@@ -1187,11 +1236,11 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       clusterTreasure(true); clusterGrime(0.3);
       break;
   }
-  clusterDecay(); // abandono: teias, mofo/vegetacao envelhecida e bichos (varia por andar)
+  if (!def.node) clusterDecay(); // abandono: teias, mofo/vegetacao envelhecida e bichos (varia por andar)
   dressing = false;
   // Velas votivas do santuario (reais, 1 batch ja usado pelo ritual) sobre as pintadas no piso.
-  if (def.kind === "santuario") for (const c of floorArt.candles) batch("candle_triple", { x: c.x, z: c.z, scale: 1.15 });
-  clusterInteractive(); // cadeiras/vasos interativos (fora do jitter: hitbox = visual)
+  if (def.kind === "santuario" && !def.node) for (const c of floorArt.candles) batch("candle_triple", { x: c.x, z: c.z, scale: 1.15 });
+  if (!def.node) clusterInteractive(); // cadeiras/vasos interativos (fora do jitter: hitbox = visual)
 
   // Instancia todo o dressing repetido acumulado (1 draw call por tipo) + colisores.
   flushBatches();
@@ -1534,6 +1583,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     readables,
     spawn: L.spawn,
     exit: L.exit, // a passagem (alçapão): pisar nela = descer
+    doors: sideDoors,
     enemyAnchor: L.enemyAnchor,
     enemyBounds,
     brazier,
@@ -1541,7 +1591,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     setBrazierLit,
     setCleared(open: boolean): void {
       // ESTILO (Bloco 2, §4.2b): o feixe da passagem ACENDE com fade+scale, não liga seco.
-      if (open && !beam.isEnabled()) {
+      if (open && !beam.isEnabled() && !def.node) { // (antecâmara: a escada já nasce aberta, sem feixe)
         beam.setEnabled(true);
         beam.scaling.y = 0.12;
         Animation.CreateAndStartAnimation("feixe_in", beam, "scaling.y", 60, 22, 0.12, 1, 0);
@@ -1551,6 +1601,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       }
       // ALCAPAO: aberto = some a tampa (revela a escada/poço); selado = tampa visível.
       hatch?.setEnabled(!open);
+      sideDoorFx?.setOpen(open); // a porta lateral abre junto (R1: uma condição de abertura)
     },
     arena,
     dispose(): void {
