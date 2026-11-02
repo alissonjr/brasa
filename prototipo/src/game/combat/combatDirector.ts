@@ -1,6 +1,7 @@
-import { Color3, MeshBuilder, StandardMaterial, Vector3 } from "@babylonjs/core";
-import type { Mesh, Scene } from "@babylonjs/core";
-import { HitStop, Tweens, Easings, type EventBus, type ThirdPersonCamera } from "@engine";
+import { Color3, Mesh, MeshBuilder, StandardMaterial, Vector3 } from "@babylonjs/core";
+import type { Scene } from "@babylonjs/core";
+import { HitStop, Tweens, Easings, createLightPool, type EventBus, type ThirdPersonCamera } from "@engine";
+import { buildCapturedWeapon } from "../actors/weapons";
 import type { Acendedora } from "../actors/acendedora";
 import { TrainingDummy } from "../actors/trainingDummy";
 import { Skeleton, type SkeletonKind, type ShotSpec, type EnemyBounds } from "../actors/enemies/skeleton";
@@ -301,19 +302,19 @@ export class CombatDirector {
 
   // --- Captura de arma (drop -> [G] pegar -> buff/munição temporária) ---
   private spawnDrop(kind: WeaponKind, at: Vector3): void {
-    const mesh =
-      kind === "clava"
-        ? MeshBuilder.CreateBox("drop_clava", { width: 0.5, height: 0.5, depth: 1.1 }, this.scene)
-        : kind === "espada"
-          ? MeshBuilder.CreateBox("drop_espada", { width: 0.14, height: 0.14, depth: 1.5 }, this.scene)
-          : MeshBuilder.CreateCylinder("drop_cajado", { diameter: 0.18, height: 1.4, tessellation: 8 }, this.scene);
-    const mat = new StandardMaterial("dropMat", this.scene);
-    mat.emissiveColor = Color3.FromHexString(kind === "clava" ? "#caa45a" : kind === "espada" ? "#cfe2ff" : "#ff8a2c");
-    mat.diffuseColor = Color3.Black();
-    mat.specularColor = Color3.Black();
-    mat.disableLighting = true;
-    mesh.material = mat;
+    // Arma de verdade (clava, espada, cajado) deitada no chao, com um halo de brasa embaixo e um
+    // balanco leve (ver updateDrops). A raiz e uma malha vazia para o resto do codigo (popIn,
+    // dispose) tratar como antes.
+    const mesh = new Mesh(`drop_${kind}`, this.scene);
     mesh.isPickable = false;
+    const weapon = buildCapturedWeapon(this.scene, kind);
+    weapon.parent = mesh;
+    weapon.scaling.scaleInPlace(1.4); // legivel da camera alta
+    weapon.rotation.x = Math.PI / 2; // deitada: o eixo maior vai para o chao
+    weapon.rotation.y = Math.random() * Math.PI * 2;
+    weapon.position.y = kind === "clava" ? -0.45 : kind === "espada" ? -0.5 : -0.5;
+    const halo = createLightPool(this.scene, { radius: 1.1, color: kind === "espada" ? "#cfe2ff" : "#ffb870", alpha: 0.55, y: -0.64 });
+    halo.parent = mesh;
     mesh.position.set(at.x, 0.7, at.z);
     this.popIn(mesh, 260); // ESTILO (Bloco 2): a arma "salta" ao cair
     this.drops.push({ mesh, pos: new Vector3(at.x, 0.7, at.z), kind, life: 20 });
@@ -351,22 +352,15 @@ export class CombatDirector {
 
   private equipWeapon(kind: WeaponKind): void {
     this.heroWeapon?.mesh.dispose();
-    const mesh =
-      kind === "clava"
-        ? MeshBuilder.CreateBox("arma_clava", { width: 0.45, height: 0.45, depth: 1.2 }, this.scene)
-        : kind === "espada"
-          ? MeshBuilder.CreateBox("arma_espada", { width: 0.12, height: 0.12, depth: 1.5 }, this.scene)
-          : MeshBuilder.CreateCylinder("arma_cajado", { diameter: 0.14, height: 1.3, tessellation: 8 }, this.scene);
-    const mat = new StandardMaterial("armaMat", this.scene);
-    mat.emissiveColor = Color3.FromHexString(kind === "clava" ? "#caa45a" : kind === "espada" ? "#cfe2ff" : "#ff8a2c");
-    mat.diffuseColor = Color3.Black();
-    mat.specularColor = Color3.Black();
-    mat.disableLighting = true;
-    mesh.material = mat;
+    // Arma em maos: a mesma peca do drop, inclinada para frente ao lado do heroi.
+    const mesh = new Mesh(`arma_${kind}`, this.scene);
     mesh.isPickable = false;
+    const weapon = buildCapturedWeapon(this.scene, kind);
+    weapon.parent = mesh;
+    weapon.rotation.x = 0.5;
+    weapon.position.y = -0.35;
     mesh.parent = this.hero.model.root;
     mesh.position.set(0.45, 1.0, 0.5);
-    if (kind === "cajado") mesh.rotation.x = Math.PI / 2;
     // clava: forte mas breve. espada: golpe forte e durador (cargas por acerto). cajado: 3 bolas.
     const stats =
       kind === "clava" ? { timer: 10, charges: 5 } : kind === "espada" ? { timer: 999, charges: 12 } : { timer: 999, charges: 3 };

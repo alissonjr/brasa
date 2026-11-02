@@ -34,9 +34,12 @@ Quaternius - Universal Animation Library
 
 Quaternius - Universal Base Characters (Standard, gratuita), Modular Character Outfits - Fantasy
 (Standard, gratuita), Universal Animation Library 1 e 2 (Standard)  [CC0 1.0, todos]
-  Arquivos derivados em public/models/personagens/: heroina.glb, morto_*.glb (corpo + roupa Ranger/
-  Peasant, texturas reduzidas e recoloridas, ossos dos dedos podados, malhas juntas por material),
-  anim.glb (23 clipes das UAL1/UAL2, so os ossos usados), manto_*.jpg (variantes de cor do manto).
+  Arquivos derivados em public/models/personagens/: heroina.glb (capuz e ombreiras claros: cor-assinatura),
+  guardia.glb (o Guardiao: a Primeira Acendedora, mesmo corpo, manto queimado e fendas de carvao emissivas),
+  morto_*.glb (corpo + roupa Ranger/Peasant, texturas reduzidas e recoloridas, ossos dos dedos podados,
+  malhas juntas por material; morto_antigo/morto_sentinela trazem elmo, crista e escudo gerados no Blender
+  e fundidos na malha da roupa), anim.glb (23 clipes das UAL1/UAL2, so os ossos usados), manto_*.jpg
+  (variantes de cor do manto, capuz claro no matiz do manto).
   Fontes: https://quaternius.itch.io/universal-base-characters
           https://quaternius.itch.io/modular-character-outfits-fantasy
           https://quaternius.itch.io/universal-animation-library

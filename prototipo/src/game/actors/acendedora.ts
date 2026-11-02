@@ -63,10 +63,12 @@ export class Acendedora {
     spark.intensity = 1.0;
     spark.range = 9;
     spark.shadowEnabled = false;
+    spark.renderPriority = 40; // entra no orçamento de luzes da heroína antes das tochas distantes
     spark.parent = this.model.root; // ao carregar o modelo, passa para a mão (brasa), ver update()
     this.spark = spark;
     // Halo quente no chão sob a Acendedora: a lanterna dela e o ponto de luz da cena fria.
-    const pool = createLightPool(scene, { radius: 3.4, color: "#ffa63d", alpha: 0.4, y: -0.84 });
+    // Menor e mais forte (revisão): um disco quente e nítido sob ela, não uma mancha larga.
+    const pool = createLightPool(scene, { radius: 2.6, color: "#ffa63d", alpha: 0.5, y: -0.84 });
     pool.parent = this.model.root;
     // Aterramento: sombra de contato (1 draw call para todos os atores; lê da câmera alta).
     getContactShadows(scene).add(this.model.root, 0.6);

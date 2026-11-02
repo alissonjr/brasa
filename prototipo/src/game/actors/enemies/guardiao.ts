@@ -1,10 +1,11 @@
 import { Color3, MeshBuilder, StandardMaterial, TransformNode, Vector3 } from "@babylonjs/core";
-import type { AnimationGroup, AssetContainer, Mesh, Scene } from "@babylonjs/core";
-import { gradeMonsterMaterials } from "../actorGrade";
-import { AttackState, StateMachine, Health, loadContainer, outlineHierarchy, type AttackTiming, type Hurtbox } from "@engine";
+import type { AbstractMesh, AnimationGroup, AssetContainer, Material, Mesh, Scene } from "@babylonjs/core";
+import { AttackState, StateMachine, Health, getActorLight, loadContainer, outlineHierarchy, type AttackTiming, type Hurtbox } from "@engine";
 import type { CombatTarget } from "../../combat/combatTarget";
 import type { ArenaControls } from "../../scenes/crypt/cryptRoom";
 import { tellSound } from "../../combat/combatSound";
+import { loadAnimLibrary, retargetClips, semContornoNosOlhos } from "../quaterniusRig";
+import { buildSword } from "../weapons";
 
 /**
  * CAMADA JOGO (Brasa). O GUARDIÃO: chefe único do fundo do poço (spec-chefe-guardiao). Não é
@@ -30,6 +31,13 @@ import { tellSound } from "../../combat/combatSound";
  * Implementa CombatTarget (o herói o fere pelo mesmo pipeline). O CombatDirector o trata num
  * slot próprio (boss) e o credita ao morrer. A ARENA (cryptRoom) reage à luz e telegrafa os
  * hazards via `bindArena`; o chefe é a fonte de verdade dos medidores.
+ *
+ * CORPO (canon, narrativa-e-historia §0): o Guardião É a Primeira Acendedora. Mesmo corpo
+ * Quaternius da heroína (guardia.glb, tools/personagens/gerar.py), manto queimado e capuz,
+ * ~2,2 m, pele de carvão com FENDAS emissivas: a textura de emissão é cinza (fendas claras,
+ * corpo fraco) e a COR vem daqui (applyPhaseTint): brasa laranja com a luz forte, ciano
+ * espectral no breu, tinta da fase na telegrafia, flash frio no cambaleio. Mesmos clipes da
+ * biblioteca (anim.glb) retargetados por osso; lâmina carbonizada na mão direita.
  */
 type Mode = "approach" | "attacking" | "cooldown" | "exposto" | "dead";
 type AttackKind = "overhead" | "sweep" | "pull" | "aoe" | "combo";
@@ -45,11 +53,14 @@ interface BossAttack {
   guardBreak?: boolean; // ignora a guarda frontal (overhead, pull)
 }
 
-const MODEL = "/models/quaternius_monsters/mushroomking.glb";
-const HEIGHT = 3.2;
+const MODEL = "/models/personagens/guardia.glb";
+const HEIGHT = 2.2; // a Primeira Acendedora: mais alta que Cinza (1,8), não um gigante
 const MAX_HP = 340; // spec §2: vida medida em SEGUNDOS (~75-110 s), não esponja
 const MOVE_BASE = 1.6; // lento, pesado, solene (não corre); o escuro o acelera
-const FACE_OFFSET = Math.PI; // Quaternius olha -Z
+const FACE_OFFSET = 0; // corpo Quaternius (loader já converte a mão-dupla): olha para +Z
+const OUTLINE_WORLD = 0.04; // contorno de tinta grosso (é o chefe; silhueta domina a leitura)
+const EMBER = new Color3(1.0, 0.48, 0.14); // brasa nas fendas (luz forte)
+type EmissiveMat = Material & { emissiveColor: Color3 };
 
 // Limiares da LUZ da Brasa (3 estágios, §4): quase morta / bruxulejando / forte.
 const LIGHT_FORTE = 0.8; // >= forte: OFUSCA o Guardião (cambaleio de luz, §5.5)
@@ -90,14 +101,17 @@ function attacksFor(phase: number): BossAttack[] {
 }
 
 let cache: Promise<AssetContainer> | null = null;
+const clamp01 = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+const clampN = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 
 export class Guardiao implements CombatTarget {
   readonly health = new Health(MAX_HP);
   private readonly scene: Scene;
   private rootNode: TransformNode | null = null;
-  private mats: StandardMaterial[] = [];
+  private mats: EmissiveMat[] = [];
   private animGroups: AnimationGroup[] = [];
   private skeletons: { dispose(): void }[] = [];
+  private glowMeshes: AbstractMesh[] = [];
   private anims: Record<string, AnimationGroup | undefined> = {};
   private currentAnim: AnimationGroup | null = null;
 
@@ -225,41 +239,52 @@ export class Guardiao implements CombatTarget {
     this.skeletons = entries.skeletons;
     const model = entries.rootNodes[0] as TransformNode | undefined;
     if (!model) return;
-    this.animGroups = entries.animationGroups;
+    for (const g of entries.animationGroups) g.dispose(); // o glb nao traz clipes (vem da biblioteca)
 
     const root = new TransformNode("guardiao", this.scene);
     this.rootNode = root;
-    root.position.copyFrom(spawn);
-    model.parent = root;
-    model.rotationQuaternion = null;
-    model.position.setAll(0);
-    model.scaling.setAll(1);
+    // Encaixe como nos mortos humanoides (skeleton.ts): o __root__ do loader guarda a conversao
+    // de mao-dupla; escala e aterramento vao num no proprio, medidos com o root na origem.
+    const fit = new TransformNode("guardiao_fit", this.scene);
+    fit.parent = root;
+    model.parent = fit;
     model.computeWorldMatrix(true);
     let b = model.getHierarchyBoundingVectors(true);
     const scale = HEIGHT / Math.max(0.001, b.max.y - b.min.y);
-    model.scaling.setAll(scale);
+    fit.scaling.setAll(scale);
+    fit.computeWorldMatrix(true);
     model.computeWorldMatrix(true);
     b = model.getHierarchyBoundingVectors(true);
-    model.position.set(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
+    fit.position.set(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
+    root.position.copyFrom(spawn);
 
+    const glow = this.scene.getGlowLayerByName("glow");
     for (const m of model.getChildMeshes(false)) {
       m.isPickable = false;
-      const mat = m.material as StandardMaterial | null;
-      if (mat && "emissiveColor" in mat && !this.mats.includes(mat)) this.mats.push(mat);
+      const mat = m.material as (Material & { emissiveColor?: Color3; maxSimultaneousLights?: number }) | null;
+      if (!mat) continue;
+      if (typeof mat.maxSimultaneousLights === "number") mat.maxSimultaneousLights = 8;
+      if (mat.emissiveColor && !this.mats.includes(mat as EmissiveMat)) this.mats.push(mat as EmissiveMat);
+      // As fendas de carvao (e os olhos) ardem no glow: a textura de emissao e quem recorta.
+      glow?.addIncludedOnlyMesh(m as Mesh);
+      this.glowMeshes.push(m);
     }
-    gradeMonsterMaterials(this.mats, 1); // tinta da paleta (o cogumelo Quaternius e saturado demais)
-    // ESTILO (Bloco 1, §4.1b): contorno de tinta grosso (é o chefe; silhueta domina a leitura).
-    outlineHierarchy(model, { width: HEIGHT * 0.022 });
+    semContornoNosOlhos(model);
+    // ESTILO (Bloco 1, §4.1b): contorno de tinta grosso em metros de mundo (acompanha o esqueleto).
+    outlineHierarchy(model, { worldWidth: OUTLINE_WORLD });
+    getActorLight(this.scene).include(model); // luz de aro dos atores (leitura do alto)
+    this.attachBlade(model);
 
-    const find = (re: RegExp): AnimationGroup | undefined => this.animGroups.find((g) => re.test(g.name));
-    for (const g of this.animGroups) g.stop();
-    this.anims = {
-      idle: find(/^Idle$/i) ?? find(/idle/i),
-      walk: find(/^Walk$/i) ?? find(/walk/i),
-      attack: find(/^Punch$/i) ?? find(/attack/i),
-      hit: find(/hitreact/i) ?? find(/hit/i),
-      death: find(/death/i),
-    };
+    // Clipes da biblioteca compartilhada, um por golpe (a FSM escolhe pelo `kind`).
+    const lib = await loadAnimLibrary(this.scene);
+    if (this.disposed) { this.dispose(); return; }
+    const g = retargetClips(lib, model, "guardiao" + root.uniqueId, {
+      idle: "Sword_Idle", walk: "Walk_Loop", overhead: "Sword_Regular_B", sweep: "Sword_Regular_A", pull: "Melee_Hook",
+      aoe: "Spell_Simple_Shoot", combo: "Sword_Regular_A", hit: "Hit_Chest", death: "Death01",
+    });
+    this.anims = g;
+    this.animGroups = Object.values(g).filter((x): x is AnimationGroup => !!x);
+    if (g.walk) g.walk.speedRatio = MOVE_BASE / 1.2;
 
     // Anel de telegrafia do AoE (disco emissivo no chão; some quando não há AoE).
     const ring = MeshBuilder.CreateDisc("guardiao_aoe", { radius: 1, tessellation: 32 }, this.scene);
@@ -283,6 +308,24 @@ export class Guardiao implements CombatTarget {
     this.setAnim(this.anims.idle, true);
   }
 
+  /** Lâmina carbonizada (weapons.ts recolorida) na mão direita: grande, escura, com o fio em brasa. */
+  private attachBlade(model: TransformNode): void {
+    const hand = model.getChildTransformNodes(false).find((n) => n.name.replace(/^Clone of /, "") === "hand_r");
+    if (!hand) return;
+    const sword = buildSword(this.scene);
+    sword.parent = hand;
+    sword.position.set(-0.035, 0.01, 0); // mesmo encaixe do osso da mão da heroína (heroModel.ts)
+    sword.rotation.set(Math.PI / 2, 0, 0);
+    sword.scaling.setAll(1.6); // x escala do encaixe (~1,2): lâmina de ~0,9 m
+    for (const m of sword.getChildMeshes(false)) {
+      (m as Mesh).metadata = { ...(m.metadata ?? {}), noOutline: true };
+      const mat = m.material as StandardMaterial | null;
+      if (!mat) continue;
+      mat.diffuseColor = Color3.FromHexString(/grip/i.test(mat.name) ? "#17110e" : "#2a2320");
+      mat.emissiveColor = Color3.FromHexString(/grip/i.test(mat.name) ? "#000000" : "#4a1606");
+    }
+  }
+
   private setAnim(group: AnimationGroup | undefined, loop: boolean): void {
     if (!group || group === this.currentAnim) return;
     this.currentAnim?.stop();
@@ -292,20 +335,26 @@ export class Guardiao implements CombatTarget {
   }
 
   private applyPhaseTint(telegraph: number): void {
-    // emissivo = tinta da fase * (base + telegrafia) + olhos ciano no breu. No escuro o ciano
-    // sobressai (silhueta espectral, §4.1); na luz a tinta quente da fase domina.
+    // Fendas de carvão e olhos (textura de emissão em cinza): a COR vem daqui. A GANGORRA lê
+    // no corpo: com a Brasa forte as fendas ardem laranja; apagando, esfriam para o ciano
+    // espectral (§4.1). A transição é curta (0,3..0,7) para não virar um cinza morno no meio.
+    // A telegrafia soma a tinta da fase (fria -> tição -> quente) e clareia o corpo inteiro.
     const tint = PHASE_TINT[this.phase - 1]!;
-    const k = 0.12 + 0.9 * telegraph;
-    const cold = (1 - this.brasaLight) * 0.4; // olhos/runas ciano crescem no escuro
-    for (const m of this.mats)
-      m.emissiveColor.set(tint.r * k + EYE_COLD.r * cold, tint.g * k + EYE_COLD.g * cold, tint.b * k + EYE_COLD.b * cold);
+    const t = clamp01((this.brasaLight - 0.3) / 0.4);
+    const w = t * t * (3 - 2 * t);
+    const k = 0.95 * telegraph;
+    const base = 0.8; // brilho de repouso das fendas (o corpo de carvao recebe ~10% disso pela textura)
+    const r = (EMBER.r * w + EYE_COLD.r * (1 - w)) * base + tint.r * k;
+    const g = (EMBER.g * w + EYE_COLD.g * (1 - w)) * base + tint.g * k;
+    const b = (EMBER.b * w + EYE_COLD.b * (1 - w)) * base + tint.b * k;
+    for (const m of this.mats) m.emissiveColor.set(r, g, b);
   }
 
   get hurtbox(): Hurtbox {
     const p = this.rootNode?.position ?? this.base;
     this.center_.copyFrom(p);
-    this.center_.y += HEIGHT * 0.34; // ~1.1: altura de golpe do herói (não lá no alto)
-    return { center: this.center_, radius: 1.7 }; // chefe grande: alvo generoso, golpe confiável
+    this.center_.y += HEIGHT * 0.48; // ~1,05: altura de golpe do herói (tronco)
+    return { center: this.center_, radius: 1.3 }; // chefe: alvo generoso (corpo humanoide de 2,2 m), golpe confiável
   }
 
   takeHit(damage: number, dir: Vector3, knockback: number): { guarded: boolean } {
@@ -482,7 +531,10 @@ export class Guardiao implements CombatTarget {
     };
     this.attack.start(timing);
     this.sm.to("attacking");
-    this.setAnim(this.anims.attack, false);
+    // Clipe do golpe (um por kind) no ritmo do tell: dura o que o tuning manda.
+    const clip = this.anims[pick.kind] ?? this.anims.idle;
+    if (clip) clip.speedRatio = clampN(((clip.to - clip.from) / 60) / (timing.startup + timing.active + timing.recovery), 0.5, 3);
+    this.setAnim(clip, false);
     // Assinatura sonora por golpe (audível no breu, §6/§7): sopro = inquebrável (grave de
     // perigo); gancho = agudo curto; combo = pesado; overhead/sweep = grave dissonante do chefe.
     tellSound(pick.kind === "aoe" ? "unblock" : pick.kind === "pull" ? "swift" : pick.kind === "combo" ? "heavy" : "boss");
@@ -494,6 +546,9 @@ export class Guardiao implements CombatTarget {
     this.arena = null;
     for (const g of this.animGroups) g.dispose();
     this.animGroups = [];
+    const glow = this.scene.getGlowLayerByName("glow");
+    for (const m of this.glowMeshes) glow?.removeIncludedOnlyMesh(m as Mesh);
+    this.glowMeshes = [];
     this.aoeRing?.dispose();
     // Nao derruba os materiais/texturas do container em cache; libera o esqueleto desta instancia.
     for (const m of this.mats) m.dispose(false, false);

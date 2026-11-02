@@ -1,7 +1,7 @@
 import { Color3, Engine, ImportMeshAsync, MeshBuilder, StandardMaterial, Texture, TrailMesh, TransformNode } from "@babylonjs/core";
 import type { AnimationGroup, BaseTexture, Material, Mesh, Scene, StandardMaterial as StdMat } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF"; // registra o loader glTF
-import { assetUrl, createLightPool, outlineHierarchy, type CharacterVisual } from "@engine";
+import { assetUrl, createLightPool, getActorLight, outlineHierarchy, type CharacterVisual } from "@engine";
 import { buildSword } from "./weapons";
 import { loadAnimLibrary, PERSONAGENS_DIR, retargetClips, semContornoNosOlhos } from "./quaterniusRig";
 import type { ClipSync } from "../combat/heroCombat";
@@ -9,7 +9,9 @@ import type { ClipSync } from "../combat/heroCombat";
 /**
  * CAMADA JOGO (Brasa). Modelo visual da heroína: corpo Universal Base Characters + roupa
  * Modular Outfits Fantasy (Ranger, recolorida para preto fuligem, bronze e ouro de brasa) num
- * GLB único (heroina.glb, 3 malhas: pele, roupa, olhos; 23 ossos sem dedos). As animações vêm
+ * GLB único (heroina.glb, 3 malhas: pele, roupa, olhos; 23 ossos sem dedos). O capuz e as
+ * ombreiras são a cor-assinatura CLARA (ouro de brasa; nos outros mantos, cinza de osso, luar,
+ * aço): ~30% da silhueta vista do alto, para a Acendedora ler contra as lajes. As animações vêm
  * da biblioteca Universal Animation Library 1 e 2 (anim.glb), retargetadas por nome de osso
  * (quaterniusRig.ts). Tudo CC0; ver public/models/CREDITS.txt e tools/personagens/.
  *
@@ -141,7 +143,15 @@ export class HeroModel implements CharacterVisual {
     semContornoNosOlhos(this.root);
     // ESTILO (Bloco 1, spec-estilo-visual-render §4.1b): contorno de tinta na heroína.
     top.computeWorldMatrix(true);
-    outlineHierarchy(this.root, { worldWidth: OUTLINE_WORLD });
+    outlineHierarchy(this.root, { worldWidth: OUTLINE_WORLD, depthGuard: true }); // guarda de profundidade: a poca de luz dela nao tinge o corpo (ver outline.ts)
+    // LEITURA DO ALTO: luz de aro quente só nos atores (não entra no orçamento de luzes do
+    // cenário) e orçamento de luzes do PBR acima do padrão (4), para a luz de aro e a
+    // fagulha nunca serem descartadas por uma tocha distante.
+    for (const m of this.root.getChildMeshes(false)) {
+      const mat = m.material as (Material & { maxSimultaneousLights?: number }) | null;
+      if (mat && typeof mat.maxSimultaneousLights === "number") mat.maxSimultaneousLights = 8;
+    }
+    getActorLight(this.scene).include(this.root);
 
     this.setupAnimations(retargetClips(lib, top as TransformNode, this.root.name, CLIPES));
     this.loaded = true;
