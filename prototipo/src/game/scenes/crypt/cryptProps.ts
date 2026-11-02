@@ -626,40 +626,15 @@ export function ossuary(c: CaveCtx, side: "e" | "w", along: number): void {
   for (let i = 0; i < 6; i++) bone(c, base.x + (c.rnd() - 0.5) * 1.4, base.z + (c.rnd() - 0.5) * 2.6, 0.5 + c.rnd() * 0.3, c.rnd() * TAU, 0.06, tint);
 }
 
-/** Aneis de brasa em volta da sala (o crater do Guardiao): fendas radiais e dois arcos concentricos. */
+/** Fendas de brasa irregulares em volta da sala (cratera do Guardiao). Sem aneis nem raios simetricos: nada que leia como sinal ritual. */
 export function crater(c: CaveCtx): void {
-  const side = ["n", "s", "e", "w"] as const;
-  // fendas radiais saindo da metade de cada lado e de cada canto
-  for (const s of side) {
-    for (const along of s === "n" || s === "s" ? [-6, 6] : [-6, 6]) {
-      const a = rimPoint(c, s, along, 1.2);
-      const b = rimPoint(c, s, along * 1.5, 11);
-      fissure(c, a.x, a.z, b.x, b.z, 0.45, 0.8);
-    }
-  }
-  // arcos concentricos tracejados no perimetro, a 5 m e a 10 m da borda
-  for (const d of [5.5, 10.5]) {
-    const hx = c.halfX + 0.5 + d;
-    const hz = c.halfZ + 0.5 + d;
-    const perim: { x: number; z: number }[] = [];
-    const steps = 90;
-    for (let i = 0; i < steps; i++) {
-      const u = (i / steps) * 4;
-      const side4 = Math.floor(u);
-      const t = (u - side4) * 2 - 1;
-      perim.push(side4 === 0 ? { x: t * hx, z: -hz } : side4 === 1 ? { x: hx, z: t * hz } : side4 === 2 ? { x: -t * hx, z: hz } : { x: -hx, z: -t * hz });
-    }
-    let i = 0;
-    while (i < perim.length) {
-      const len = 3 + Math.floor(c.rnd() * 5);
-      const gap = 2 + Math.floor(c.rnd() * 4);
-      const seg = perim.slice(i, i + len).map((p, k) => {
-        const jx = (c.rnd() - 0.5) * 0.5;
-        const jz = (c.rnd() - 0.5) * 0.5;
-        return { x: p.x + jx, y: c.surf(p.x + jx, p.z + jz) + 0.13, z: p.z + jz, w: 0.16 + 0.16 * Math.sin((Math.PI * (k + 0.5)) / len) };
-      });
-      if (seg.length >= 3) c.geoGlow.strip(seg, [0.6, 0.22, 0.06, 1], [1.4, 1.0, 0.6, 1]);
-      i += len + gap;
+  const sides = ["n", "s", "e", "w"] as const;
+  for (const s of sides) {
+    for (let k = 0; k < 2; k++) {
+      const along = (c.rnd() * 2 - 1) * (s === "n" || s === "s" ? c.halfX - 3 : c.halfZ - 3);
+      const a = rimPoint(c, s, along, 1.5 + c.rnd() * 2);
+      const b = rimPoint(c, s, along + (c.rnd() - 0.5) * 9, 7 + c.rnd() * 5);
+      fissure(c, a.x, a.z, b.x, b.z, 0.4 + c.rnd() * 0.3, 0.8);
     }
   }
 }
