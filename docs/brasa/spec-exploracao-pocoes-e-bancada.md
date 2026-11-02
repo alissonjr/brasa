@@ -58,7 +58,10 @@ Plano B no fim desta seção.
   4. `retryFloor` e `revive`: 100%.
 - **Teste "parado 2 minutos na sala limpa"**: nada muda. A Ferida só some por golpe, remédio,
   braseiro ou Bancada.
-- Ferida **não é salva**: o save é no checkpoint (chegada ao andar), onde ela já foi fechada.
+- Ferida **é salva** (`RunSave.ferida`, default 0): o checkpoint é a chegada ao andar, e nem toda
+  chegada fecha a Ferida (a Estante não fecha; a queda da Instabilidade pula o braseiro). Sem
+  salvar, recarregar o jogo zeraria a Ferida de graça. Ela é regravada a cada autosave e zera só
+  pelos 4 caminhos acima.
 
 Exemplo (vida máx. 140): levo 100 de dano em um andar: Ferida 30, teto 110. Bebo Recuperação
 (+63): a vida sobe só até 110. Se eu tivesse 20 de Ferida a menos, subiria até 130. Ao fechar a
@@ -74,6 +77,19 @@ dentro do próprio combate. O botão de dificuldade é `woundFrac`: 0 desliga o 
 **Plano B (sem Ferida):** Unguento vira *cura ao longo do tempo*: 35% da vida em 8 s
 (HoT; 49 HP), mantendo a receita e o tamanho da bolsa; não há teto de vida nem cauterização. Menos
 rico, zero risco de equilíbrio, quase nenhum código fora do `heroCombat`.
+
+## 3.1 Interação com os sistemas existentes
+
+| Sistema | Efeito desta spec |
+|---|---|
+| Economia de Fagulhas | preparos custam 3 a 4 Fagulhas (mais barato que a Banca do Braseiro); o Descanso é grátis; sem moeda nova |
+| Brasa (barra de Erupção) | sem mudança; o Unguento não enche nem gasta a barra |
+| Estamina | sem custo de estamina em nenhum frasco (como Digit1 e Digit2 hoje); `canDrink` vale para o Unguento |
+| 7 andares | a Ferida vale em todos, inclusive na arena do chefe; ingredientes: 2 a 3 por andar; nenhum andar muda |
+| `RoomKind` | inalterado; a Bancada é `NodeKind` (spec de portas), a mesa usa o dressing de `clusterAlchemy` |
+| `DESCENT` / `crypt:floor` | inalterados; a Bancada emite `crypt:node`, não `crypt:floor`; ingredientes nascem em `enterRoom` (andar) |
+| Save | `RunSave.unguento`, `raiz`, `cera`, `ferida` (default 0); nada de bump de `SAVE_SCHEMA_VERSION` |
+| Crônica | objetivo `visitou_bancada` e o verbete de lugar "Bancada"; frascos com a letra de Marta como relato |
 
 ## 4. Remédios e consumo
 
@@ -164,7 +180,7 @@ fundo (`clusterAlchemy` já existe, reaproveitar), três velas na mesa (os pavio
 - Bolsa cheia: a ação não gasta, mostra "cheio". Falta de ingrediente: nada se perde.
 - Beber no meio de golpe: `canDrink` bloqueia sem consumir (já é regra).
 - Bancada sem ingredientes e sem Fagulha: o Descanso grátis sempre existe; nunca é uma sala vazia.
-- Morrer: Ferida zera (revive), ingredientes e frascos ficam (como poções hoje).
+- Morrer: Ferida zera (revive, como a vida), ingredientes e frascos ficam (como poções hoje).
 - Quem desliga o sistema (plano B ou `woundFrac` 0): o Unguento vira HoT e o resto vale.
 - Ferida e Guardião: a Ferida vale na arena; o Descanso/braseiro não existem lá, então o
   Unguento é o recurso para a luta final (guarda esse motivo para escolher a Bancada antes do chefe).
@@ -203,5 +219,5 @@ de combate (livre depois de Q1). Q4 e Q5 dependem da fundação P0/P1 da spec de
 - [ ] Digit3 remapeável e listada na tela de Controles.
 - [ ] Ingredientes: 2-3 por andar, determinísticos, persistem; `[perf]` medido.
 - [ ] Bancada: 3 pavios, 4 ações, Descanso grátis, sem preparo que falha.
-- [ ] Banca do Braseiro e Poções 1 e 2 sem regressão; `spec-pocoes-e-absorcao.md` referencia esta spec.
+- [ ] Banca do Braseiro e Poções 1 e 2 sem regressão; `spec-pocoes-e-absorcao.md` ganha uma linha de ponteiro no topo ("Estendida por `spec-exploracao-pocoes-e-bancada.md`: Ferida, Unguento e Bancada").
 - [ ] Sem travessões, sem emojis, pt-BR com acentos.

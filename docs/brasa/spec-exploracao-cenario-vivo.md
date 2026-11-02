@@ -163,6 +163,16 @@ buraco da câmera alta; validar no Chrome real (ver índice, "headless engana").
 
 ## 7. Interações com os outros sistemas
 
+| Sistema | Efeito desta spec |
+|---|---|
+| `RoomKind` | inalterado; o comportamento vem de `Room.cenario?` (campo opcional) pelo índice do andar, não pelo tipo visual |
+| `DESCENT` | inalterado; cenário vivo é configurado por índice de andar em arquivo próprio |
+| `crypt:floor` | continua emitido em `enterRoom`; eventos novos `cenario:warn` e `cenario:fall` |
+| Estamina | sem mudança; o empurrão final não gasta estamina |
+| 7 andares | andares 3, 4 e 7 ganham a peça; os demais ficam como estão |
+
+Detalhes por sistema:
+
 - **Portas e salas**: as saídas continuam abrindo com a estilha; a Instabilidade termina nesse
   mesmo evento (3 da seção 4.2). A queda substitui a transição normal (sem tela do braseiro).
   O plano de rota (`planRoute`) da transição afetada é descartado (a queda não escolhe porta).
@@ -170,8 +180,8 @@ buraco da câmera alta; validar no Chrome real (ver índice, "headless engana").
 - **Poções**: a Ferida segue valendo na queda; o dano da queda (12%) gera Ferida como qualquer
   dano (30% dele).
 - **Economia**: a queda custa a visita ao braseiro (~17,5 ✦ equivalentes); ver spec de portas 4.2.
-- **Save**: o autosave de chegada grava o andar 4; nada de estado novo (a Instabilidade é
-  recalculada ao entrar; `retryFloor` reinicia o andar 3 do zero com o prazo cheio).
+- **Save**: o autosave de chegada grava o andar 4, com a vida pós-queda e a Ferida atual
+  (`RunSave.ferida`); a Instabilidade não guarda estado (é recalculada ao entrar no andar 3).
 - **Crônica**: objetivo `caiu_andar3` (sem `near`) desbloqueia um verbete curto de lugar.
 - **Brasa (barra)** e **estamina**: sem mudança.
 - **Leaderboard**: só o modo "Normal" de Calma do cenário vale.
@@ -181,7 +191,9 @@ buraco da câmera alta; validar no Chrome real (ver índice, "headless engana").
 - Jogador parado numa faixa que vai ceder: empurrão final (4.2 regra 1).
 - Inimigo ranged que ficou do outro lado do vazio: o limite encolhe antes de a faixa cair; ele
   caminha para dentro (a IA não tem navegação, mas anda em linha reta para o herói).
-- `retryFloor` na queda: reinicia o andar 3 (não o 4), com a estilha ainda no relicário.
+- Morrer **antes** do cataclismo, no andar 3: `retryFloor` reinicia o andar 3 com o prazo cheio e
+  a estilha ainda no relicário. Morrer **depois de cair**, no andar 4: reinicia o andar 4 (o
+  autosave de chegada já o gravou); a queda não se desfaz.
 - Pausa: o relógio do cenário para junto (usa o `dt` do combate; hit-stop não conta).
 - Jogador com Calma "Sem prazo": ainda vê o aviso (poeira e rachadura), só não cede.
 - Colunas e herói encurralado: a coluna para e recua (3).

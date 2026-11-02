@@ -53,13 +53,18 @@ outline**; a variação entre execuções vem de o pós-processo ter ou não car
 | 6 (5) | cisterna | 123 a 128 |
 | 7 (6) | Guardião | 93 |
 
-**Conclusão: com o pós-processo ativo todas as salas já estão acima de 60 nesta medição.** O
-"limite já apertado" do pedido é, na verdade, já estourado quando se conta como o gate conta.
+**Conclusão: com o pós-processo ativo todas as salas já estão acima de 60 nesta medição.** Os
+relatórios de outras frentes na mesma máquina (logs `cap-*.log` do scratchpad, em outras
+branches e com mais cenário) mostram 147 a 223 por sala, e nenhum número abaixo de 60 existe
+em relatório algum. Então o "limite já apertado" do pedido parece já estourado quando se conta
+como o gate conta, **condicionado a confirmar em GPU real** (nenhuma medição em GPU real existe
+ainda).
 Consequência para o plano: (a) cada sistema é aceito por **delta** medido antes e depois com o
 mesmo script e o mesmo ambiente (`node tools/perf_rooms.cjs <porta>`), teto de **+6 por sala**
 com o sistema ativo; (b) as antecâmaras (12 x 12, sem inimigos) são o único lugar onde ainda
-dá para cumprir 60 e devem medir <= 60; (c) a decisão D7 abaixo (redefinir o gate) é pré-requisito
-para o aceite. A medição deve ser repetida na GPU real (`--use-angle=gl-egl`) por quem for
+dá para cumprir 60 e devem medir <= 60; (c) a decisão D7 abaixo (redefinir o gate) vale **se a medição em GPU real
+confirmar** o estouro; se a GPU real medir abaixo de 60, o gate original volta e o delta
+vira só uma folga. A medição deve ser repetida na GPU real (`--use-angle=gl-egl`) por quem for
 implementar: o script já usa esses argumentos; os números acima vêm de SwiftShader e servem de
 ordem de grandeza.
 
@@ -121,11 +126,13 @@ Campos novos de `RunSave` (todos com default em `readRun`; **não** subir
 | `sabedoria` | `number[3]` (Lâmina, Fogo, Contragolpe) | livros | `[0,0,0]` |
 | `livros` | `string[]` (ids lidos nesta descida) | livros | `[]` |
 | `raiz`, `cera`, `unguento` | `number` | poções | `0` |
+| `ferida` | `number` (HP de Ferida aberta) | poções | `0` |
 
-Ferida e estado do cenário **não** são salvos (recalculados; o checkpoint é a chegada ao andar).
+A Ferida **é** salva (a Estante e a queda da Instabilidade chegam ao checkpoint sem fechá-la;
+sem salvar, recarregar a zeraria). O estado do cenário **não** é salvo (recalculado ao entrar).
 
 Eventos novos em `platform.events`: `crypt:node` `{node, fromIndex}`; `hero:wound`
-`{wound, ceiling}`; `wisdom:changed` `{linhas}`; `cenario:warn` `{peca, segundos}`. O evento
+`{wound, ceiling}`; `wisdom:changed` `{linhas}`; `cenario:warn` `{peca, segundos}`; `cenario:fall` `{de, para}`. O evento
 `crypt:floor` continua só para andares.
 
 Números ficam em arquivo próprio por sistema (`rota.ts`, `sabedoria.ts`, `ferida.ts`,
@@ -201,8 +208,8 @@ Cada uma com a minha recomendação. Nada foi implementado; as specs assumem as 
    sinais de segredo (e o acampamento do andar 2 pode ser de Marta)? Recomendo **sim**
    (compatível com o canon: Marta desceu e voltou).
 7. **D7 Gate de 60 draw calls.** Trocar o critério por "delta <= +6 por sistema e por sala" até
-   haver uma passada de otimização geral? Recomendo **sim**; hoje as 7 salas já passam de 60 na
-   medição.
+   haver uma passada de otimização geral? Recomendo **sim, condicionado a que a medição em GPU real confirme**
+   (hoje as 7 salas passam de 60 em SwiftShader; ver seção 3).
 8. **D8 Crônica em "Novo jogo".** Os relatos de livros e de lugares sobrevivem a "Novo jogo"
    (mover esses objetivos para o perfil)? Recomendo **sim**.
 9. **D9 Provação.** Fica fora da primeira entrega (terceira saída com desafio)? Recomendo
@@ -217,7 +224,7 @@ Cada uma com a minha recomendação. Nada foi implementado; as specs assumem as 
 quatro saídas com moldura, ícone, nome e promessa, e anel de compromisso de 0,6 s; Estante com 3
 pedestais e leitura de 2,0 s; Bancada com pavios e receitas; HUD com a Ferida hachurada e os
 frascos; faixas da Instabilidade com pips. Tem três testes embutidos: **ver em cinza**,
-**reduzir movimento**, **texto 200%**. Ícones propostos (a entrar em `icons.ts` quando
+**reduzir movimento**, **texto 200%** (escala o conteúdo da página com `zoom`). Ícones propostos (a entrar em `icons.ts` quando
 aprovados): `hatch`, `jar`, `flask`, `wound`, `crack`, `candle`, `root`, `wax`, `contra`.
 Checado em Chromium headless (sem erros de console, interações respondem) e em 390 px de
 largura; por ser DOM, o risco de GPU é baixo, mas **o aceite visual deve ser feito no Chrome

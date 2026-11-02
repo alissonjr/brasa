@@ -67,9 +67,9 @@ uma chave própria de planta quando `def.node` existe.
   escolher a rota, então "reunir as estilhas" vale em qualquer caminho.
 - **R2 Plano de rota por semente.** `planRoute(runSeed)` (função pura) devolve, por transição,
   a lista de saídas. Transição T0 (andar 1 para 2): só o alçapão (ensina a tela do braseiro).
-  T1 a T5: alçapão + 1 porta lateral (`estante` ou `bancada`). Restrições: não repetir o tipo
-  em transições consecutivas; cada tipo aparece pelo menos 1 vez e no máximo 3 vezes nas 5
-  transições. A mesma semente dá o mesmo plano (retomar não embaralha, como o jitter de
+  T1 a T5: alçapão + 1 porta lateral (`estante` ou `bancada`). Restrições: o mesmo tipo no máximo 2
+  vezes seguidas; cada tipo aparece pelo menos 1 vez e no máximo 3 vezes nas 5 transições (com
+  só 2 tipos, "nunca repetir" deixaria apenas 2 planos possíveis por descida). A mesma semente dá o mesmo plano (retomar não embaralha, como o jitter de
   inimigos em `enterRoom`).
 - **R3 Prévia honesta.** Cada saída mostra um ícone e, ao chegar a 6 m, o nome e a promessa
   em uma linha ("Estante: leia um livro, ganhe Sabedoria"). Nada é surpresa; o risco só existe

@@ -1,5 +1,7 @@
 # Spec: Poções, Banca do Alquimista e Absorção
 
+Estendida por [`spec-exploracao-pocoes-e-bancada.md`](spec-exploracao-pocoes-e-bancada.md): Ferida, Unguento de Brasa (Digit3), ingredientes e a Bancada (resolve o `[A DEFINIR]` da banca no mundo).
+
 Status das marcações: [NORMATIVO] decidido e a implementar; [ASPIRACIONAL] meta sem prazo;
 [A DEFINIR] depende de playtest.
 

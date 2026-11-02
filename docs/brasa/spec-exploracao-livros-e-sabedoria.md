@@ -133,6 +133,18 @@ eco "Marta dizia: se não eu, então tu" é o do andar 6.
 
 ## 6. Interação com os sistemas existentes
 
+| Sistema | Efeito desta spec |
+|---|---|
+| Economia de Fagulhas | gasto só no Volume lacrado (12); nenhuma fonte nova |
+| Brasa (barra de Erupção) | sem mudança (ver Contragolpe III abaixo) |
+| Estamina | ler não custa estamina; esquivar cancela a leitura; Contragolpe não altera custos de estamina |
+| 7 andares | Estante só em T1 a T5; livros filtrados pelo andar de origem; nenhum andar muda |
+| `RoomKind` | inalterado; a Estante é `NodeKind` (spec de portas) com `RoomDef.node` e `fromIndex` |
+| `DESCENT` / `crypt:floor` | inalterados; a Estante não é entrada de `DESCENT` e emite `crypt:node` |
+| Save / Crônica | seção abaixo (campos com default; objetivos `livro_<id>`) |
+
+Detalhes por sistema:
+
 - **Fagulha**: gasto só no lacrado. **Poção**: nenhuma interação direta. **Brasa (barra)**: o
   Contragolpe III não enche a barra extra (mantém o equilíbrio atual de `combat:hit`).
 - **Dádivas**: independentes; "Ressonância" (acertos encadeados) soma com Pulso firme (janela
