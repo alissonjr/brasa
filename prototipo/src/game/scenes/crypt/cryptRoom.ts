@@ -153,12 +153,17 @@ function kitRecolor(name: string, c0: Color3): Color3 {
 
 /** Material UNICO e branco do cenario de cor chapada: a cor de cada peca vai nos vertices, entao
  *  pedra, madeira, metal e ouro caem na mesma malha fundida (2 malhas em vez de ~12 por sala). */
+const KIT_FLAT_BASE = 0.4;
 function kitFlatMaterial(scene: Scene): CellMaterial {
   let m = KIT_TOON.get("__flat");
   if (!m) {
     m = new CellMaterial("kitFlat", scene);
     m.computeHighLevel = true;
-    m.diffuseColor = Color3.White();
+    // O shader do CellMaterial faz clamp(luz * diffuseColor) * corDoVertice: com diffuseColor
+    // branco o clamp cortava a luz azulada acima de 1 e a pedra perdia o azul (medido). Com
+    // diffuseColor = KIT_FLAT_BASE e a cor dividida por ele nos vertices, o resultado casa com o
+    // CellMaterial por cor de antes (clamp(luz * cor)) para qualquer luz abaixo de ~2.
+    m.diffuseColor = new Color3(KIT_FLAT_BASE, KIT_FLAT_BASE, KIT_FLAT_BASE);
     m.maxSimultaneousLights = 6;
     KIT_TOON.set("__flat", m);
   }
@@ -1278,7 +1283,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       resolve: (src) => {
         if (!kitMats.has(src)) return null;
         const flat = flatColorOf(src);
-        if (flat) return { material: kitFlatMaterial(scene), color: kitRecolor(src.name, flat) }; // cor chapada: 1 material, cor nos vertices
+        if (flat) return { material: kitFlatMaterial(scene), color: kitRecolor(src.name, flat).scale(1 / KIT_FLAT_BASE) }; // cor chapada: 1 material, cor nos vertices
         const mt = toonMaterialFor(scene, src, toonOpts); // com textura (HalloweenBits): CellMaterial proprio
         return mt ? { material: mt } : null;
       },
