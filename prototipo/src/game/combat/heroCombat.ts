@@ -2,6 +2,7 @@ import { TransformNode, Vector3 } from "@babylonjs/core";
 import type { Scene } from "@babylonjs/core";
 import { AttackState, Health, type CombatInputSource, type InputSource } from "@engine";
 import { DRINK, HERO, type AttackTuning, type PotionKind } from "./tuning";
+import type { EmberTuning, WeaponDef } from "./armas/tipos";
 import { buildSword } from "../actors/weapons";
 
 /**
@@ -83,6 +84,8 @@ export class HeroCombat {
   private readonly hitNode: TransformNode; // ponto de acerto à frente, na altura do torso
 
   private state: State = "idle";
+  // Arma capturada na mão (null = espada de bronze): traz os golpes completos (spec-armas-capturadas, F0).
+  private weapon: WeaponDef | null = null;
   private activeTuning: AttackTuning = HERO.light;
   private hitConsumed = false;
   private blocking = false;
@@ -209,8 +212,27 @@ export class HeroCombat {
     return this.state === "ember" && (this.attack.isActive || this.skippedEmber_) && !this.emberConsumed;
   }
 
-  get emberTuning(): typeof HERO.ember {
-    return HERO.ember;
+  get emberTuning(): EmberTuning {
+    return this.weapon?.ember ?? HERO.ember;
+  }
+
+  // --- Arma capturada: os golpes efetivos (leve, finalizadora, pesado) vêm da arma na mão, senão da espada de bronze. ---
+  private get tLight(): AttackTuning {
+    return this.weapon?.light ?? HERO.light;
+  }
+  private get tFinisher(): AttackTuning {
+    return this.weapon?.finisher ?? HERO.lightFinisher;
+  }
+  private get tHeavy(): AttackTuning {
+    return this.weapon?.heavy ?? HERO.heavy;
+  }
+
+  /** Arma capturada na mão (null = espada de bronze). Trocar de arma reinicia o combo; um golpe em curso termina com o que começou. */
+  setWeapon(def: WeaponDef | null): void {
+    this.weapon = def;
+    this.comboStep = 0;
+    this.comboLive = false;
+    this.comboQueued = false;
   }
 
   markEmber(): void {
@@ -262,8 +284,8 @@ export class HeroCombat {
     if (this.state !== "attacking" && this.state !== "ember") return null;
     const ph = this.attack.current;
     if (ph === "idle") return null;
-    const t = this.state === "ember" ? HERO.ember : this.activeTuning;
-    const kind = this.state === "ember" ? "ember" : this.activeTuning === HERO.heavy ? "heavy" : this.comboStep >= 2 && this.isLightChain ? "finisher" : "light";
+    const t = this.state === "ember" ? this.emberTuning : this.activeTuning;
+    const kind = this.state === "ember" ? "ember" : this.activeTuning.kind === "heavy" ? "heavy" : this.activeTuning.kind === "finisher" ? "finisher" : "light";
     return { kind, phase: ph, progress: this.attack.phaseProgress, sec: t[ph], seq: this.seq };
   }
 
@@ -292,7 +314,7 @@ export class HeroCombat {
 
   /** O golpe em andamento é o pesado? (o ator escolhe a animação certa). */
   get heavyAttack(): boolean {
-    return this.activeTuning === HERO.heavy;
+    return this.activeTuning.kind === "heavy";
   }
 
   /** i-frames: invulnerável no MIOLO do rolamento (vulnerável no início e no fim). */
@@ -648,10 +670,10 @@ export class HeroCombat {
     }
     if (this.buf.heavy > 0) {
       this.buf.heavy = 0;
-      if (this.spend(HERO.heavy.staminaCost ?? 0)) {
+      if (this.spend(this.tHeavy.staminaCost ?? 0)) {
         this.isLightChain = false;
         this.comboLive = false;
-        this.beginAttack(HERO.heavy);
+        this.beginAttack(this.tHeavy);
         return true;
       }
     }
@@ -668,7 +690,7 @@ export class HeroCombat {
       if (this.comboLive && this.comboStep < 2 && this.idleTime <= HERO.comboResetSec) this.comboStep += 1;
       else this.comboStep = 0;
       this.isLightChain = true;
-      this.beginAttack(this.comboStep >= 2 ? HERO.lightFinisher : HERO.light);
+      this.beginAttack(this.comboStep >= 2 ? this.tFinisher : this.tLight);
       return true;
     }
     return false;
@@ -732,7 +754,7 @@ export class HeroCombat {
       // Golpe terminou: encadeia ou volta a idle (já consumindo o buffer neste quadro).
       if (this.isLightChain && this.comboQueued && this.comboStep < 2) {
         this.comboStep += 1;
-        this.beginAttack(this.comboStep >= 2 ? HERO.lightFinisher : HERO.light);
+        this.beginAttack(this.comboStep >= 2 ? this.tFinisher : this.tLight);
       } else {
         // Terminou um leve (não a finalizadora): o combo continua vivo por comboResetSec.
         this.comboLive = this.isLightChain && this.comboStep < 2;
@@ -761,7 +783,7 @@ export class HeroCombat {
     this.comboLive = false;
     this.seq++;
     this.state = "ember";
-    this.attack.start(HERO.ember);
+    this.attack.start(this.emberTuning);
   }
 
   private updateEmber(dt: number, input: CombatInputSource): void {
@@ -773,7 +795,7 @@ export class HeroCombat {
       this.endAction(input);
       return;
     }
-    this.tryRecoveryCancel(input, HERO.ember.cancelAt);
+    this.tryRecoveryCancel(input, this.emberTuning.cancelAt);
   }
 
   private beginDrink(kind: PotionKind): void {
