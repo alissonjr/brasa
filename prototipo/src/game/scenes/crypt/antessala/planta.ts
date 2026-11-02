@@ -37,6 +37,8 @@ export interface Ancoras {
   gatilho: Ponto2 & { radius: number };
   /** Centro dos painéis do mural (o que foi à esquerda de quem entra, o que vem à direita). */
   muralFoi: Ponto2;
+  /** Ponto de leitura do mural (a 3 m da verga, afastado do gatilho da porta para ler sem cruzar). */
+  leituraMural: Ponto2;
   muralVem: Ponto2;
   torches: TorchSpot[];
 }
@@ -63,8 +65,9 @@ export function ancoras(index: number): Ancoras {
     armario: { x: -halfX + 1.25, z: 0.4 },
     oficio,
     porta: { x: 0, z: halfZ },
-    gatilho: { x: 0, z: halfZ - 1.9, radius: 1.7 },
+    gatilho: { x: 0, z: halfZ - 1.55, radius: 1.25 },
     muralFoi: { x: -4.0, z: halfZ - 1.05 },
+    leituraMural: { x: 0, z: halfZ - 3.7 },
     muralVem: { x: 4.0, z: halfZ - 1.05 },
     torches: [
       { x: halfX - 0.5, z: tz(-0.4), rotY: Math.PI / 2 },

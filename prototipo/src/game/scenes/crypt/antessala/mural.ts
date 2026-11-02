@@ -75,7 +75,7 @@ export function construirMural(kit: AntessalaKit): Peca {
   }
 
   return {
-    interativos: [{ id: "mural", x: 0, z: a.halfZ - 2.7, radius: 3.0, y: 3.0, action: "interact", icon: "scroll", name: "antMural" }],
+    interativos: [{ id: "mural", x: a.leituraMural.x, z: a.leituraMural.z, radius: 3.2, y: 3.0, action: "interact", icon: "scroll", name: "antMural" }],
     setLit(v: number): void {
       k = v;
       aplicar();

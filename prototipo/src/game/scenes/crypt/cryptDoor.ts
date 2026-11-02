@@ -20,7 +20,7 @@ export const DOOR_COLOR: Record<DoorTone, string> = {
   ember: "#ff8a2c", // --ember-400 (porta de pedra da antessala)
 };
 
-const VEIL_ALPHA = 0.6;
+const VEIL_ALPHA = 0.42;
 
 export interface SideDoorFx {
   setOpen(open: boolean): void;

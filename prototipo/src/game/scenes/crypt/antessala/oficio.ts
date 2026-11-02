@@ -37,7 +37,7 @@ export function construirOficio(kit: AntessalaKit): Peca {
     kit.placeProp("bottle_C_brown", { x: x + 0.1, z: z + 0.3, y: 0.71, scale: 0.55, cast: false });
     kit.placeProp("barrel", { x: x - 0.1, z: z - 1.65, scale: 0.8, collider: true });
     for (const dz of [-0.62, 0, 0.62]) {
-      const p = kit.flame(new Vector3(x - 0.1, 1.2, z + dz), 0.3, 0, false);
+      const p = kit.flame(new Vector3(x - 0.1, 1.5, z + dz), 0.42, 0, false);
       p.ignite = 0;
       pavios.push(p);
     }

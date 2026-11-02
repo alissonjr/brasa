@@ -255,6 +255,7 @@ async function main(): Promise<void> {
       readMural: () => readMural(), // DEV: abre a placa do mural
       setLight: (k: number) => { lightT = lightGoal = k; currentRoom?.setBrazierLit(k); }, // DEV: luz do braseiro sem gesto (capturas frio/aceso)
       pocoes: () => pocoes.toSave(),
+      sparks: (n: number) => { fagulhas += n; updateFagulhaHud(); }, // DEV: ganha Fagulhas
       interativos: () => currentRoom?.antessala?.interativos ?? [],
       route: () => ({ ...route.save(), place: route.current, floor: floorIndex, passageOpen, fragments }),
       takeFragment: () => { if (currentRoom && !fragmentTaken) { const b = currentRoom.brazier; hero.teleport(new Vector3(b.x + 3, 1.5, b.z - 0.6)); } }, // DEV: encosta no relicário (colhe a estilha) fora do gatilho do alçapão

@@ -5,6 +5,7 @@ import { construirArmario } from "./armario";
 import { construirOficio } from "./oficio";
 import { construirMural } from "./mural";
 import { construirPorta } from "./porta";
+import { construirGrade } from "./grade";
 
 export type { AntessalaHandle, AntessalaKit, Interativo, InteracaoId } from "./types";
 export { ancoras } from "./planta";
@@ -15,7 +16,7 @@ export { ancoras } from "./planta";
  * Bancada), mural e porta de pedra. Um arquivo por peça; aqui só se juntam os resultados.
  */
 export function buildAntessala(kit: AntessalaKit): AntessalaHandle {
-  const pecas: Peca[] = [construirBoca(kit), construirBraseiro(kit), construirArmario(kit), construirOficio(kit), construirMural(kit), construirPorta(kit)];
+  const pecas: Peca[] = [construirBoca(kit), construirBraseiro(kit), construirArmario(kit), construirOficio(kit), construirMural(kit), construirPorta(kit), ...(kit.def.grade ? [construirGrade(kit)] : [])];
   const interativos: Interativo[] = pecas.flatMap((p) => p.interativos);
   return {
     interativos,
