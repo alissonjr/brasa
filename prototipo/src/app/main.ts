@@ -1118,7 +1118,7 @@ async function main(): Promise<void> {
     startNewGame: (c) => {
       character = c;
       applyDifficulty();
-      platform.profile.rename(c.name);
+      // O nome da heroína (Cinza por padrão) é do personagem; o perfil do jogador fica como está.
       rev = 0;
       platform.score.reset(0);
       platform.progression.load({ chapterId: DEFAULT_CHAPTER, checkpointId: "", objectivesDone: [] });

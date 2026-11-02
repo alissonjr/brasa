@@ -1,6 +1,6 @@
 import { Color3, TransformNode, Vector3 } from "@babylonjs/core";
 import type { AbstractMesh, AnimationGroup, AssetContainer, Material, Scene, Skeleton as Skeleton_ } from "@babylonjs/core";
-import { AttackState, StateMachine, Ticker, Health, loadContainer, outlineHierarchy, getContactShadows, type ContactShadowHandle, type Hurtbox } from "@engine";
+import { AttackState, StateMachine, Ticker, Health, getActorLight, loadContainer, outlineHierarchy, getContactShadows, type ContactShadowHandle, type Hurtbox } from "@engine";
 import { gradeMonsterMaterials } from "../actorGrade";
 import { loadAnimLibrary, retargetClips, semContornoNosOlhos } from "../quaterniusRig";
 import type { CombatTarget } from "../../combat/combatTarget";
@@ -62,6 +62,8 @@ interface SkelStats {
   poise: number; // postura: o golpe do heroi drena; ao zerar, CAMBALEIA (interrompe a antecipacao)
   canUnblockable?: boolean; // pode telegrafar um golpe INQUEBRAVEL (ignora bloqueio; forca esquiva)
   monsterExposure?: number; // monstro nao humanoide: multiplicador da exposicao da tinta (yeti branco < 1)
+  monsterSat?: number; // monstro nao humanoide: saturacao global da tinta (-100..0; default -50)
+  monsterTint?: string; // monstro nao humanoide: multiplicador de albedo (hex) para sair da paleta de pele
   humanoid?: HumanoidSpec; // corpo Quaternius (UBC + roupa): animacoes da UAL por retarget, olhos ciano
 }
 
@@ -74,8 +76,11 @@ interface HumanoidSpec {
 
 const MORTOS = "/models/personagens/";
 type EmissiveMat = Material & { emissiveColor: Color3 };
-const DEAD_ALBEDO_BOOST = 1.12;
-const DEAD_GLOW = new Color3(0.035, 0.05, 0.065); // piso de luz fria dos mortos humanoides
+// Do alto o morto precisa ler como OSSO claro sobre as lajes: albedo mais claro, piso de luz fria
+// proprio e olhos ciano maiores (brilho mais forte no glow). Revisao: "mortos cinza sobre cinza".
+const DEAD_ALBEDO_BOOST = 1.8; // atlas dos mortos ja em osso claro; o boost leva o osso a ~0,4 linear
+const DEAD_GLOW = new Color3(0.08, 0.1, 0.12); // piso de luz fria dos mortos humanoides
+const DEAD_EYES = 1.7; // multiplicador do brilho dos olhos (o glow os alarga)
 const clampN = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 
 const STATS: Record<SkeletonKind, SkelStats> = {
@@ -91,32 +96,34 @@ const STATS: Record<SkeletonKind, SkelStats> = {
     model: MORTOS + "morto_ladino.glb", humanoid: { attack: "Punch_Jab" }, height: 1.78, hp: 42, moveSpeed: 3.7, attackRange: 2.0, approachUntil: 1.8, cooldownSec: 0.3,
     overhead: { startup: 0.32, active: 0.08, recovery: 0.42, damage: 11, knockback: 1, hitStopFrames: 5 }, damage: 11, guards: false, reward: 4, tellProfile: "swift", poise: 14,
   },
+  // Pesado: guarda de aco com elmo e ESCUDO (silhueta de quem bloqueia). Tinta de aco frio, nunca pele.
   heavy: {
-    model: MORTOS + "morto_guerreiro.glb", humanoid: { attack: "Melee_Hook", tint: "#c9a79a", eyes: 1.3 }, height: 2.45, hp: 130, moveSpeed: 1.5, attackRange: 2.7, approachUntil: 2.3, cooldownSec: 0.85,
+    model: MORTOS + "morto_sentinela.glb", humanoid: { attack: "Melee_Hook", tint: "#b4bcc6", eyes: 1.3 }, height: 2.3, hp: 130, moveSpeed: 1.5, attackRange: 2.7, approachUntil: 2.3, cooldownSec: 0.85,
     overhead: { startup: 0.95, active: 0.15, recovery: 0.85, damage: 28, knockback: 3, hitStopFrames: 10 }, damage: 28, guards: true, reward: 8, tellProfile: "heavy", poise: 65, canUnblockable: true,
   },
-  // Antigo: morto de profundidade, mais vida e golpe forte. Bestiário §3. (Repontado para
-  // orc_skull do Quaternius: Skeleton_Mage.glb nunca existiu em disco e o tipo falhava ao carregar.)
+  // Antigo: morto de profundidade, mais vida e golpe forte. Bestiário §3. Corpo humanoide com
+  // couraca de osso velho, elmo fechado e crista alta (le de longe); tinta de osso, ate 1,3x a heroina.
   antigo: {
-    model: "/models/quaternius_monsters/orc_skull.glb", height: 2.0, hp: 95, moveSpeed: 2.2, attackRange: 2.4, approachUntil: 2.1, cooldownSec: 0.6,
-    overhead: { startup: 0.7, active: 0.13, recovery: 0.8, damage: 21, knockback: 2, hitStopFrames: 8 }, damage: 21, guards: false, reward: 9, faceOffset: Math.PI, poise: 45,
+    model: MORTOS + "morto_antigo.glb", humanoid: { attack: "Melee_Hook", tint: "#d8d1c2", eyes: 1.5 }, height: 2.3, hp: 95, moveSpeed: 2.2, attackRange: 2.4, approachUntil: 2.1, cooldownSec: 0.6,
+    overhead: { startup: 0.7, active: 0.13, recovery: 0.8, damage: 21, knockback: 2, hitStopFrames: 8 }, damage: 21, guards: false, reward: 9, poise: 45,
   },
-  // Sentinela: elite pré-chefe, enorme, tanque, bloqueia; drop alto. Bestiário §3.
+  // Sentinela: elite pré-chefe, tanque, bloqueia; drop alto. Bestiário §3. Elmo com crista, escudo e
+  // ombreiras em osso claro; 1,4x a heroina (era 2,7 m e lia como gigante de carne).
   sentinela: {
-    model: MORTOS + "morto_guerreiro.glb", humanoid: { attack: "Melee_Hook", tint: "#d6b48a", eyes: 1.6 }, height: 2.7, hp: 200, moveSpeed: 1.7, attackRange: 2.9, approachUntil: 2.5, cooldownSec: 0.8,
+    model: MORTOS + "morto_sentinela.glb", humanoid: { attack: "Melee_Hook", tint: "#e4ded1", eyes: 2.0 }, height: 2.5, hp: 200, moveSpeed: 1.7, attackRange: 2.9, approachUntil: 2.5, cooldownSec: 0.8,
     overhead: { startup: 0.85, active: 0.15, recovery: 0.85, damage: 32, knockback: 4, hitStopFrames: 12 }, damage: 32, guards: true, reward: 20, tellProfile: "heavy", poise: 95, canUnblockable: true,
   },
 
   // --- Monstros Quaternius (Ultimate Monsters, CC0): variedade de silhueta + COMPORTAMENTO ---
   // Demonio: melee agressivo de meia-distancia, rapido, dano medio (pressao constante).
   demonio: {
-    model: "/models/quaternius_monsters/demon.glb", height: 1.95, hp: 70, moveSpeed: 3.0, attackRange: 2.1, approachUntil: 1.9, cooldownSec: 0.45,
+    model: "/models/quaternius_monsters/demon.glb", monsterSat: -88, monsterTint: "#8d8894", height: 1.95, hp: 70, moveSpeed: 3.0, attackRange: 2.1, approachUntil: 1.9, cooldownSec: 0.45,
     overhead: { startup: 0.4, active: 0.1, recovery: 0.5, damage: 16, knockback: 2, hitStopFrames: 6 }, damage: 16, guards: false, reward: 6,
     behavior: "melee", faceOffset: Math.PI, poise: 25,
   },
   // Brutamonte: tanque lento e ENORME, golpe pesado lento de ler, bloqueia leve frontal.
   brutamonte: {
-    model: "/models/quaternius_monsters/yeti.glb", monsterExposure: 0.45, height: 2.5, hp: 150, moveSpeed: 1.6, attackRange: 2.8, approachUntil: 2.4, cooldownSec: 0.8,
+    model: "/models/quaternius_monsters/yeti.glb", monsterExposure: 0.5, monsterSat: -85, monsterTint: "#9aa6b2", height: 2.5, hp: 150, moveSpeed: 1.6, attackRange: 2.8, approachUntil: 2.4, cooldownSec: 0.8,
     overhead: { startup: 0.9, active: 0.15, recovery: 0.8, damage: 30, knockback: 4, hitStopFrames: 11 }, damage: 30, guards: true, reward: 12,
     behavior: "melee", faceOffset: Math.PI, tellProfile: "heavy", poise: 75, canUnblockable: true,
   },
@@ -389,9 +396,13 @@ export class Skeleton implements CombatTarget {
       const mat = m.material as (Material & { emissiveColor?: Color3; albedoColor?: Color3; emissiveIntensity?: number }) | null;
       if (!mat) continue;
       if (!this.ownMats.includes(mat)) this.ownMats.push(mat);
+      // Orcamento de luzes acima do padrao do PBR (4): a luz de aro dos atores e a fagulha da
+      // heroina nao podem ser descartadas por uma tocha distante.
+      const ml = mat as unknown as { maxSimultaneousLights?: number };
+      if (typeof ml.maxSimultaneousLights === "number") ml.maxSimultaneousLights = 8;
       if (hum && /olhos/i.test(m.name)) {
         // Olhos espectrais: emissivo ciano que nao entra no flash/telegrafia e brilha no glow.
-        mat.emissiveIntensity = hum.eyes ?? 1;
+        mat.emissiveIntensity = (hum.eyes ?? 1) * DEAD_EYES;
         glow?.addIncludedOnlyMesh(m as never);
         this.glowMeshes.push(m);
         continue;
@@ -409,11 +420,12 @@ export class Skeleton implements CombatTarget {
       }
     }
     // Monstros nao humanoides (Quaternius saturado): tinta da paleta (dessatura, esfria as sombras).
-    if (!hum) gradeMonsterMaterials(this.ownMats, this.stats.monsterExposure ?? 1);
+    if (!hum) gradeMonsterMaterials(this.ownMats, this.stats.monsterExposure ?? 1, this.stats.monsterSat ?? -50, this.stats.monsterTint);
     // ESTILO (Bloco 1, spec-estilo-visual-render §4.1b): contorno de tinta. Largura em METROS de
     // mundo (igual para todo ator, qualquer escala do modelo). Acompanha o esqueleto.
     if (hum) semContornoNosOlhos(model);
     outlineHierarchy(model, { worldWidth: this.stats.height * 0.016 });
+    getActorLight(this.scene).include(model); // luz de aro dos atores (leitura do alto)
     this.contact = getContactShadows(this.scene).add(rootNode, Math.max(0.45, this.stats.height * 0.3));
     this.contact.scale = 0;
 

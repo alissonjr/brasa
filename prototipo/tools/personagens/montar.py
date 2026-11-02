@@ -85,6 +85,37 @@ for o in list(bpy.data.objects):
     # sobram do importador: formas de osso (Icosphere) e vazios
     if o.type not in ("MESH", "ARMATURE") or o.name.startswith("Icosphere"): bpy.data.objects.remove(o, do_unlink=True)
 
+# --- props de silhueta (elmo, crista, escudo): primitivas presas a UM osso (peso 1), material da roupa com a UV
+# num ponto claro/metalico do atlas. Fundidas depois na malha da roupa: zero draw calls a mais.
+import math
+from mathutils import Vector
+for pr in spec.get("props", []):
+    b = arm.data.bones[pr["osso"]]
+    pos = arm.matrix_world @ b.head_local + Vector(pr.get("offset", (0, 0, 0)))
+    if pr["tipo"] == "elmo":  # calota (metade de cima de uma esfera), um pouco achatada atras
+        bpy.ops.mesh.primitive_uv_sphere_add(segments=14, ring_count=8, radius=pr.get("raio", 0.16), location=pos)
+        o = bpy.context.active_object
+        bm = bmesh.new(); bm.from_mesh(o.data)
+        bmesh.ops.delete(bm, geom=[v for v in bm.verts if v.co.z < -0.35 * pr.get("raio", 0.16)], context="VERTS")
+        bm.to_mesh(o.data); bm.free()
+    elif pr["tipo"] == "crista":  # lamina vertical sobre o elmo (x fino, y comprido, z alto)
+        bpy.ops.mesh.primitive_cube_add(size=1, location=pos)
+        o = bpy.context.active_object; o.scale = Vector(pr.get("escala", (0.03, 0.22, 0.12)))
+    elif pr["tipo"] == "escudo":  # disco grosso, plano de frente (eixo Y do Blender = frente/tras)
+        bpy.ops.mesh.primitive_cylinder_add(vertices=14, radius=pr.get("raio", 0.32), depth=0.06, location=pos, rotation=(math.pi / 2, 0, 0))
+        o = bpy.context.active_object
+    else:
+        raise SystemExit("prop desconhecido: " + pr["tipo"])
+    bpy.ops.object.transform_apply(location=False, rotation=True, scale=True)
+    o.name = "prop_" + pr["tipo"]
+    o.data.materials.append(bpy.data.materials.new("MI_Prop"))
+    uv = o.data.uv_layers.new() if not o.data.uv_layers else o.data.uv_layers[0]
+    for l in o.data.loops: uv.data[l.index].uv = (pr["uv"][0], pr["uv"][1])
+    o.vertex_groups.new(name=pr["osso"]).add([v.index for v in o.data.vertices], 1.0, "REPLACE")
+    o.modifiers.new("Armature", "ARMATURE").object = arm
+    o.parent = arm
+    print("AVISO prop", pr["tipo"], "em", pr["osso"], [round(c, 3) for c in pos])
+
 # --- poda dos ossos dos dedos: pesos vao para a mao
 DEDOS = re.compile(r"^(index|middle|ring|pinky|thumb)_\d\d(_leaf)?_([lr])$|^(index|middle|ring|pinky|thumb)_04_leaf_([lr])$|^ball_leaf_([lr])$")
 def alvo(nome):
@@ -162,11 +193,19 @@ for o in [o for o in bpy.data.objects if o.type == "MESH"]:
         c = classe(slot.material) if slot.material else "roupa"
         slot.material = mats[c]
 
-# --- so a 1a UV e nenhum atributo de cor (o exportador levava 4-5 TEXCOORD e COLOR por vertice)
+# --- so a 1a UV e nenhum atributo de cor (o exportador levava 4-5 TEXCOORD e COLOR por vertice).
+# Remove POR NOME, um de cada vez: guardar a lista e remover por referencia deixava ponteiros
+# pendentes e o Blender 4.5 apagava o atributo ERRADO (o UVMap do corpo feminino sumia e a
+# heroina saia sem TEXCOORD: a roupa rendia como um pixel so do atlas).
+def podar_atributos(me):
+    while len(me.uv_layers) > 1:
+        me.uv_layers.remove(me.uv_layers[len(me.uv_layers) - 1])
+    for nome in [c.name for c in me.color_attributes]:
+        ca = me.color_attributes.get(nome)
+        if ca: me.color_attributes.remove(ca)
+    if me.uv_layers: me.uv_layers[0].active_render = True
 for o in [o for o in bpy.data.objects if o.type == "MESH"]:
-    me = o.data
-    while len(me.uv_layers) > 1: me.uv_layers.remove(me.uv_layers[len(me.uv_layers) - 1])
-    for ca in list(me.color_attributes): me.color_attributes.remove(ca)
+    podar_atributos(o.data)
 
 # --- junta por material (primeiro separa objetos multi-material)
 for o in [o for o in bpy.data.objects if o.type == "MESH" and len(o.material_slots) > 1]:
@@ -187,6 +226,9 @@ for nome, objs in grupos.items():
     objs[0].name = nome.replace("mat_", "")
     objs[0].data.name = objs[0].name
 
+for o in [o for o in bpy.data.objects if o.type == "MESH"]:
+    podar_atributos(o.data)
+    if not o.data.uv_layers: raise SystemExit("ERRO malha sem UV depois do join: " + o.name)
 # --- limites: 4 influencias, normalizadas
 for o in bpy.data.objects:
     if o.type != "MESH": continue

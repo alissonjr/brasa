@@ -113,3 +113,63 @@ export function buildRoundShield(scene: Scene): TransformNode {
   for (const m of [disc, rim, boss]) m.isPickable = false;
   return root;
 }
+
+/**
+ * Armas capturadas (drop no chão e arma em mãos): clava de madeira com tachas de ferro, espada
+ * curta de bronze e cajado com orbe de brasa. Todas nascem com o eixo maior em +Y (como a espada
+ * do herói); quem usa deita ou inclina. Substituem as caixas e cilindros emissivos de antes,
+ * que liam como "bastões" soltos no chão.
+ */
+export function buildCapturedWeapon(scene: Scene, kind: "clava" | "cajado" | "espada"): TransformNode {
+  if (kind === "espada") {
+    const sword = buildSword(scene);
+    sword.scaling.setAll(1.7);
+    return sword;
+  }
+  const root = new TransformNode(`arma_${kind}`, scene);
+  const wood = flatMat(scene, "armaMadeira", "#6a4526", "#1c1209");
+  const iron = flatMat(scene, "armaFerro", "#6b7380", "#14161a");
+
+  if (kind === "clava") {
+    const handle = MeshBuilder.CreateCylinder("clavaCabo", { height: 0.7, diameterTop: 0.07, diameterBottom: 0.05, tessellation: 7 }, scene);
+    handle.material = wood;
+    handle.parent = root;
+    handle.position.y = 0.35;
+    const head = MeshBuilder.CreateCylinder("clavaCabeca", { height: 0.5, diameterTop: 0.34, diameterBottom: 0.16, tessellation: 7 }, scene);
+    head.material = wood;
+    head.parent = root;
+    head.position.y = 0.86;
+    const band = MeshBuilder.CreateTorus("clavaAro", { diameter: 0.3, thickness: 0.04, tessellation: 10 }, scene);
+    band.material = iron;
+    band.parent = root;
+    band.position.y = 0.95;
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const stud = MeshBuilder.CreateCylinder("clavaTacha", { height: 0.09, diameterTop: 0, diameterBottom: 0.05, tessellation: 5 }, scene);
+      stud.material = iron;
+      stud.parent = root;
+      stud.position.set(Math.cos(a) * 0.17, 0.82 + (i % 2) * 0.1, Math.sin(a) * 0.17);
+      stud.rotation.z = -Math.cos(a) * 1.2;
+      stud.rotation.x = Math.sin(a) * 1.2;
+      stud.isPickable = false;
+    }
+    for (const m of [handle, head, band]) m.isPickable = false;
+    return root;
+  }
+
+  // cajado: vara torta de madeira, engaste de ferro e orbe de brasa no topo
+  const staff = MeshBuilder.CreateCylinder("cajadoVara", { height: 1.3, diameterTop: 0.06, diameterBottom: 0.045, tessellation: 7 }, scene);
+  staff.material = wood;
+  staff.parent = root;
+  staff.position.y = 0.65;
+  const claw = MeshBuilder.CreateTorus("cajadoEngaste", { diameter: 0.17, thickness: 0.035, tessellation: 9 }, scene);
+  claw.material = iron;
+  claw.parent = root;
+  claw.position.y = 1.3;
+  const orb = MeshBuilder.CreateSphere("cajadoOrbe", { diameter: 0.17, segments: 6 }, scene);
+  orb.material = flatMat(scene, "cajadoBrasa", "#ff8a2c", "#ff7a1c");
+  orb.parent = root;
+  orb.position.y = 1.3;
+  for (const m of [staff, claw, orb]) m.isPickable = false;
+  return root;
+}

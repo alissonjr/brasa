@@ -111,13 +111,15 @@ export const FLOOR_THEMES: FloorTheme[] = [
     terrain: { rough: 0.6, strata: 0, moat: true, ridges: 0 },
     props: { rocks: 36, spikes: 22, lean: 0.05, columns: 0, bones: 4, roots: 0, drums: 3, crystals: 9, veins: 0, far: 14 },
     set: "cascata",
-    stone: "#86bcbc",
-    accent: { color: "#5fd4ee", strength: 0.9 },
-    fog: { cold: "#15303c", warm: "#1f2420", density: 0.0095 },
-    amb: { cold: "#86bccf", warm: "#a29878", intensity: 0.42, warmDrop: 0.2 },
-    key: { diffuse: "#8fbfd2", intensity: 0.6, warmDrop: 0.2 },
-    pool: { torch: "#ffa860", accent: "#43b6cf", warm: false },
-    grade: { shadowsHue: 192, shadowsDensity: 34, shadowsSaturation: 14, highlightsHue: 40, highlightsDensity: 34, highlightsSaturation: 22, globalSaturation: 6, vignette: [0.02, 0.05, 0.07] },
+    // Revisao (leitura dos atores): o teal saturava a cena inteira (sat. media 0,49, teto 0,40);
+    // pedra e luz mais cinzentas e etalonagem dessaturada, mantendo o acento frio nos cristais.
+    stone: "#9ab5b6",
+    accent: { color: "#5fd4ee", strength: 0.7 },
+    fog: { cold: "#1a2e36", warm: "#1f2420", density: 0.0095 },
+    amb: { cold: "#96b6c2", warm: "#a29878", intensity: 0.42, warmDrop: 0.2 },
+    key: { diffuse: "#9dbcc8", intensity: 0.6, warmDrop: 0.2 },
+    pool: { torch: "#ffa860", accent: "#5aaebf", warm: false },
+    grade: { shadowsHue: 192, shadowsDensity: 30, shadowsSaturation: 8, highlightsHue: 40, highlightsDensity: 30, highlightsSaturation: 14, globalSaturation: -28, vignette: [0.02, 0.05, 0.07] },
     particles: { kind: "nevoa", rate: 1 },
   },
   // 3 - SALAO (o custo): ferro enferrujado, espetos tortos, grades, primeiros veios de brasa.
