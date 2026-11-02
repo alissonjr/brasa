@@ -183,8 +183,7 @@ export class AlertDialog implements Screen {
 // --- Menu principal ---
 
 // UMA heroína em todas as vitrines (título, criação) e no jogo: Cinza, corpo Quaternius vestido de
-// Acendedora (heroina.glb; idle da biblioteca anim.glb). Antes o título usava acendedora.glb
-// (Tripo, azul, com cajado) e a criação o Rogue_Hooded do KayKit: três heroínas no produto.
+// Acendedora (heroina.glb; idle da biblioteca anim.glb).
 const ACENDEDORA_PREVIEW_MODEL = "/models/personagens/heroina.glb";
 // Criação de personagem: o MESMO modelo e atlas do jogo, para o manto escolhido valer na prévia.
 const ACENDEDORA_GAME_MODEL = "/models/personagens/heroina.glb";

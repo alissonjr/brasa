@@ -35,7 +35,7 @@ import { loadAnimLibrary, retargetClips } from "../actors/quaterniusRig";
  */
 
 export interface ModelStageOptions {
-  /** glb a exibir (ex.: "/models/Mage.glb"). */
+  /** glb a exibir (ex.: "/models/personagens/heroina.glb"). */
   modelUrl: string;
   /** Liga a auto-rotação lenta (default: true). */
   autoRotate?: boolean;

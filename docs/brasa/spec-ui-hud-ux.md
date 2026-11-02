@@ -310,14 +310,13 @@ e `theme.css` re-tematizados (ver seção 8).
   escuro) a brasa-plena (laranja-ouro) conforme o progresso da campanha (`descentAccent` em
   `screens.ts`), refletindo a Brasa reacesa sem pedir input e sem perder a assinatura quente.
   Atende à tendência de "menus que reagem ao progresso" das franquias campeãs.
-- `[CÓDIGO]` `[NORMATIVO]` modelo: os menus usam um **modelo próprio da Acendedora**
-  (`/models/acendedora.glb`, gerado no Tripo e limpo no Blender), estático (sem rig), o que
-  basta para a vitrine (a câmera é que orbita). O herói EM JOGO usa o KayKit **Rogue_Hooded**
-  (encapuzado, lê como a Acendedora, com rig/pesos/animações limpos). Tentamos riggar o
-  modelo próprio via auto-rig do Tripo para o jogo, mas deformava como gelatina (pesos ruins)
-  e a malha saiu com defeito; descartado para gameplay (ver `personagens.md` 1.2). Logo, há
-  diferença temporária entre a Acendedora dos menus (própria, estática) e a do jogo
-  (Rogue_Hooded), até existir um rig de qualidade do modelo próprio.
+- `[CÓDIGO]` `[NORMATIVO]` modelo: uma só Acendedora em todo o produto (título, criação e jogo):
+  `personagens/heroina.glb` (Quaternius), com o idle da biblioteca `anim.glb`. O modelo próprio
+  do Tripo (`acendedora.glb`) e o KayKit Rogue_Hooded foram removidos do repositório. A Crônica
+  não usa mais vitrine 3D: usa as gravuras de `ui/ds/illustrations.ts`.
+- `[CÓDIGO]` `[NORMATIVO]` enquadramento: em telas largas o texto fica na coluna esquerda e a
+  Acendedora no terço direito, diante da Brasa (braseiro de pedras com chama), com luz de aro
+  fria e quente atrás e a câmara de cripta ao fundo (`titleScene.ts`, `frameHero`).
 - `[CÓDIGO]` `[NORMATIVO]` áudio: a tela-título tem um **ambiente procedural de brasa**
   (`titleAmbience.ts`, WebAudio, sem asset): drone grave quente com respiração (LFO) e
   estalos de ember, gated pelo volume de música (master x música) e lido ao vivo. Toca no
@@ -384,13 +383,8 @@ Implementado em `src/game/ui/modelStage.ts` (`ModelStage`).
   preta). Custo: um contexto WebGL extra só enquanto a tela está aberta.
 
 Usos atuais `[CÓDIGO]`:
-- **Crônica (Codex):** verbetes de personagem abrem em duas colunas (modelo girando + texto).
-  Mapa em `codex.ts` (campo `model`): Acendedora -> `acendedora.glb` (modelo próprio);
-  Acendedoras anteriores -> `Rogue_Hooded.glb`; Guardião -> `Skeleton_Warrior.glb`;
-  despertar dos mortos -> `Skeleton_Minion.glb`. Verbetes sem modelo seguem em coluna única.
-  Conteúdo enriquecido (10 verbetes, voz em 1a pessoa nas inscrições), atendendo ao gap de
-  "codex raso" do estudo.
-- **Criação de personagem (Nova Descida):** a Acendedora (`acendedora.glb`) na vitrine à
+- **Crônica (Codex):** gravuras do design system (`ui/ds/illustrations.ts`); sem vitrine 3D.
+- **Criação de personagem (Nova Descida):** a Acendedora (`heroina.glb`) na vitrine à
   esquerda, o formulário à direita; o manto escolhido tinge o nicho ao vivo.
 
 - **Tela-título (Nova Descida):** diorama de fundo na variante `backdrop` (ver 5.1), a
