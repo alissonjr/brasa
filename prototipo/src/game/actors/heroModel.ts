@@ -1,7 +1,7 @@
 import { Color3, ImportMeshAsync, MeshBuilder, StandardMaterial, Texture, TransformNode } from "@babylonjs/core";
-import type { AnimationGroup, BaseTexture, Material, Mesh, Scene } from "@babylonjs/core";
+import type { AnimationGroup, BaseTexture, Material, Mesh, Scene, StandardMaterial as StdMat } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF"; // registra o loader glTF
-import { assetUrl, outlineHierarchy, type CharacterVisual } from "@engine";
+import { assetUrl, createLightPool, outlineHierarchy, type CharacterVisual } from "@engine";
 import { buildSword } from "./weapons";
 import { loadAnimLibrary, PERSONAGENS_DIR, retargetClips, semContornoNosOlhos } from "./quaterniusRig";
 
@@ -54,6 +54,7 @@ export class HeroModel implements CharacterVisual {
   private loaded = false;
   private emberT = 0;
   private emberMat?: StandardMaterial;
+  private emberHalo?: Mesh;
   // Manto escolhido na criação: o atlas da roupa é trocado por uma variante recolorida
   // (public/models/personagens/manto_<id>.jpg; "brasa" é o atlas embutido no glb). Aplicado ao
   // carregar e a cada começo de jogo.
@@ -132,12 +133,17 @@ export class HeroModel implements CharacterVisual {
       mat.diffuseColor = Color3.Black();
       mat.specularColor = Color3.Black();
       mat.emissiveColor = Color3.FromHexString("#ffa63d");
-      const orb = MeshBuilder.CreateSphere("brasa_mao_orb", { diameter: 0.1, segments: 6 }, this.scene);
+      const orb = MeshBuilder.CreateSphere("brasa_mao_orb", { diameter: 0.16, segments: 8 }, this.scene);
       orb.material = mat;
       orb.parent = holder;
       orb.isPickable = false;
       orb.metadata = { noOutline: true };
       this.scene.getGlowLayerByName("glow")?.addIncludedOnlyMesh(orb); // a brasa da mão ganha halo
+      // Halo da brasa: a mesma poça de luz do engine (createLightPool), pequena, deitada na altura da mão.
+      // Da câmera alta é o que denuncia a Acendedora na multidão: um disco quente que anda com ela.
+      const halo = createLightPool(this.scene, { radius: 0.6, color: "#ffb04a", alpha: 0.55, y: 1 });
+      halo.name = "brasa_mao_halo";
+      this.emberHalo = halo;
       this.emberMat = mat;
       this.emberNode = holder;
     }
@@ -231,6 +237,11 @@ export class HeroModel implements CharacterVisual {
     this.emberT += dt;
     const f = 0.9 + 0.1 * Math.sin(this.emberT * 9) + 0.05 * Math.sin(this.emberT * 23.7);
     if (this.emberMat) this.emberMat.emissiveColor.set(1 * f, 0.62 * f, 0.24 * f);
+    if (this.emberHalo && this.emberNode) {
+      const p = this.emberNode.getAbsolutePosition();
+      this.emberHalo.position.set(p.x, p.y, p.z);
+      (this.emberHalo.material as StdMat).alpha = 0.5 * f;
+    }
   }
 
   /** Mescla idle/andar/correr/sprint por velocidade (pesos somando ~1) e ajusta o ritmo de cada passada. */

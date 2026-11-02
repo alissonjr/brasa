@@ -2,8 +2,8 @@ Creditos de assets - Brasa (todos CC0 1.0 Universal: uso livre, inclusive comerc
 sem exigencia de atribuicao; creditamos por boa pratica).
 
 KayKit - Character Pack: Adventurers (Kay Lousberg)
-  Arquivos: Rogue_Hooded.glb (heroina Acendedora EM JOGO: encapuzada, rig/pesos/animacoes
-  limpos), Mage.glb (alternativa / fallback do HeroModel).
+  Arquivos: Rogue_Hooded.glb (so nas vitrines de menu/criacao e no codex; a heroina EM JOGO agora e
+  personagens/heroina.glb, Quaternius), Mage.glb (nao usado).
   Fonte: https://kaylousberg.itch.io/kaykit-adventurers
          https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0
 
@@ -18,7 +18,7 @@ Acendedora (modelo proprio do projeto) - acendedora.glb
 
 KayKit - Character Pack: Skeletons (Kay Lousberg)
   Arquivos: Skeleton_Warrior.glb, Skeleton_Minion.glb, Skeleton_Mage.glb, Skeleton_Rogue.glb
-            (os mortos despertos; rigados).
+            (so no codex; os mortos em jogo agora sao personagens/morto_*.glb, Quaternius).
   Fonte: https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0
 
 KayKit - Dungeon Pack (Kay Lousberg)

@@ -57,6 +57,30 @@ const [porta, out, cenario = "sala0"] = process.argv.slice(2);
       await shot("sala" + i);
     }
   }
+  if (cenario === "mantos") {
+    for (const m of ["noite", "cinza", "ferro", "brasa"]) {
+      await p.evaluate((m) => { window.__brasa.heal(); window.__brasa.hero.setMantle(m); }, m);
+      await p.waitForTimeout(800);
+      await p.screenshot({ path: `${out}/manto_${m}.png`, clip: { x: 650, y: 380, width: 300, height: 200 } });
+    }
+  }
+  if (cenario === "tipos") {
+    // Um de cada tipo de inimigo em anel ao redor da heroina (sala 1), mais as 4 cores de manto.
+    await p.evaluate(() => window.__brasa.enterRoom(1));
+    await p.waitForTimeout(3500);
+    await p.evaluate(() => {
+      const b = window.__brasa; const V = b.hero.position.constructor;
+      const kinds = ["minion", "warrior", "rogue", "heavy", "antigo", "sentinela", "demonio", "brutamonte", "espreitador", "conjurador", "arqueiro"];
+      kinds.forEach((k, i) => { const a = (i / kinds.length) * Math.PI * 2; b.combat.addSkeleton(new V(b.hero.position.x + Math.cos(a) * 9, 0, b.hero.position.z + Math.sin(a) * 6), { kind: k, respawns: false }); });
+    });
+    await p.waitForTimeout(1500);
+    await shot("tipos_alto");
+    for (const m of ["noite", "cinza", "ferro", "brasa"]) {
+      await p.evaluate((m) => window.__brasa.hero.setMantle(m), m);
+      await p.waitForTimeout(700);
+      await p.screenshot({ path: `${out}/manto_${m}.png`, clip: { x: 650, y: 380, width: 300, height: 200 } });
+    }
+  }
   if (cenario === "combate") {
     // Sequencia: observa (idle/andar/ataque dos mortos), depois golpe leve, pesado, esquiva, bloqueio, fogo e uma
     // saraivada de golpes leves ate matar. Salva quadros recortados em volta da heroina (q_XX.png).

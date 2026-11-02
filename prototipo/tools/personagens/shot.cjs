@@ -7,7 +7,7 @@ const [url, out, espera = "1500", js] = process.argv.slice(2);
   const b = await chromium.launch({ args: ["--use-angle=gl-egl", "--ignore-gpu-blocklist", "--enable-gpu", "--use-gl=angle"] });
   const p = await b.newPage({ viewport: { width: 1600, height: 900 } });
   p.on("pageerror", (e) => console.log("[pageerror]", String(e).slice(0, 300)));
-  p.on("console", (m) => { const t = m.text(); if (m.type() === "error" || /perf|AVISO|\[personagens\]/.test(t)) console.log("[console]", t.slice(0, 300)); });
+  p.on("console", (m) => { const t = m.text(); if (m.type() === "error" || m.type() === "warning" || /perf|AVISO|outline|\[personagens\]/.test(t)) console.log("[console]", t.slice(0, 300)); });
   await p.goto(url);
   try { await p.waitForFunction(() => window.__pronto === true, null, { timeout: 60000 }); } catch { console.log("sem __pronto"); }
   await p.waitForTimeout(Number(espera));

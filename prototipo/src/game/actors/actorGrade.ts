@@ -15,10 +15,10 @@ function monsterGrade(exposureK: number): ImageProcessingConfiguration {
   if (!cfg) {
     cfg = new ImageProcessingConfiguration();
     cfg.toneMappingEnabled = false;
-    cfg.exposure = 0.86 * exposureK;
+    cfg.exposure = 0.62 * exposureK;
     cfg.contrast = 1.04;
     const cc = new ColorCurves();
-    cc.globalSaturation = -40;
+    cc.globalSaturation = -50;
     cc.shadowsHue = 214;
     cc.shadowsDensity = 22;
     cc.shadowsSaturation = 8;

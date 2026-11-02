@@ -57,7 +57,7 @@ def morto(im, cor, sat=0.35, claro=0.85):
 
 # paletas do manto da Acendedora (escuro, meio, claro): preto de fuligem com brilho de cada cor escolhida
 MANTOS = {
-    "brasa": ("#050303", "#25100a", "#8a3a16"),
+    "brasa": ("#0a0605", "#34170c", "#a64a1c"),
     "cinza": ("#070708", "#2a2928", "#6e6a64"),
     "noite": ("#04060b", "#131e30", "#3a5f8c"),
     "ferro": ("#06080b", "#20262c", "#5f6a76"),

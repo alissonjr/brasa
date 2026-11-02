@@ -74,6 +74,8 @@ interface HumanoidSpec {
 
 const MORTOS = "/models/personagens/";
 type EmissiveMat = Material & { emissiveColor: Color3 };
+const DEAD_ALBEDO_BOOST = 1.12;
+const DEAD_GLOW = new Color3(0.035, 0.05, 0.065); // piso de luz fria dos mortos humanoides
 const clampN = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 
 const STATS: Record<SkeletonKind, SkelStats> = {
@@ -114,7 +116,7 @@ const STATS: Record<SkeletonKind, SkelStats> = {
   },
   // Brutamonte: tanque lento e ENORME, golpe pesado lento de ler, bloqueia leve frontal.
   brutamonte: {
-    model: "/models/quaternius_monsters/yeti.glb", monsterExposure: 0.7, height: 2.5, hp: 150, moveSpeed: 1.6, attackRange: 2.8, approachUntil: 2.4, cooldownSec: 0.8,
+    model: "/models/quaternius_monsters/yeti.glb", monsterExposure: 0.45, height: 2.5, hp: 150, moveSpeed: 1.6, attackRange: 2.8, approachUntil: 2.4, cooldownSec: 0.8,
     overhead: { startup: 0.9, active: 0.15, recovery: 0.8, damage: 30, knockback: 4, hitStopFrames: 11 }, damage: 30, guards: true, reward: 12,
     behavior: "melee", faceOffset: Math.PI, tellProfile: "heavy", poise: 75, canUnblockable: true,
   },
@@ -394,7 +396,13 @@ export class Skeleton implements CombatTarget {
         this.glowMeshes.push(m);
         continue;
       }
-      if (hum?.tint && mat.albedoColor) mat.albedoColor = mat.albedoColor.multiply(Color3.FromHexString(hum.tint));
+      if (hum && mat.albedoColor) {
+        // Da camera alta o morto precisa ler: albedo mais claro (x1.12) e um piso de luz fria propria
+        // (o morto "brilha" de leve; a heroina e a unica luz quente da sala).
+        const base = hum.tint ? Color3.FromHexString(hum.tint) : Color3.White();
+        mat.albedoColor = mat.albedoColor.multiply(base).scale(DEAD_ALBEDO_BOOST);
+        if (mat.emissiveColor) mat.emissiveColor = DEAD_GLOW.clone();
+      }
       if ("emissiveColor" in mat && mat.emissiveColor && !this.mats.includes(mat as EmissiveMat)) {
         this.mats.push(mat as EmissiveMat);
         this.matEmissive0.push(mat.emissiveColor.clone());

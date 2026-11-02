@@ -1,5 +1,6 @@
 import { Color3, MeshBuilder, StandardMaterial, TransformNode, Vector3 } from "@babylonjs/core";
 import type { AnimationGroup, AssetContainer, Mesh, Scene } from "@babylonjs/core";
+import { gradeMonsterMaterials } from "../actorGrade";
 import { AttackState, StateMachine, Health, loadContainer, outlineHierarchy, type AttackTiming, type Hurtbox } from "@engine";
 import type { CombatTarget } from "../../combat/combatTarget";
 import type { ArenaControls } from "../../scenes/crypt/cryptRoom";
@@ -246,6 +247,7 @@ export class Guardiao implements CombatTarget {
       const mat = m.material as StandardMaterial | null;
       if (mat && "emissiveColor" in mat && !this.mats.includes(mat)) this.mats.push(mat);
     }
+    gradeMonsterMaterials(this.mats, 1); // tinta da paleta (o cogumelo Quaternius e saturado demais)
     // ESTILO (Bloco 1, §4.1b): contorno de tinta grosso (é o chefe; silhueta domina a leitura).
     outlineHierarchy(model, { width: HEIGHT * 0.022 });
 

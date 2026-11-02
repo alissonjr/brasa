@@ -5,6 +5,7 @@ import {
 import "@babylonjs/loaders/glTF";
 import { outlineHierarchy } from "@engine";
 import { loadAnimLibrary, retargetClips, semContornoNosOlhos } from "../game/actors/quaterniusRig";
+import { gradeMonsterMaterials } from "../game/actors/actorGrade";
 import { HeroModel, type HeroAction } from "../game/actors/heroModel";
 
 /**
@@ -12,7 +13,7 @@ import { HeroModel, type HeroAction } from "../game/actors/heroModel";
  * coerencia de estilo (escala, paleta, contorno) sem precisar jogar ate cada inimigo.
  * Abre em /bestiario.html. Parametros: ?pose=0..N (rotacao), ?cam=perto|alta.
  */
-interface Cast { nome: string; model: string; height: number; face: number; humanoide?: boolean; heroi?: boolean; morto?: string; }
+interface Cast { nome: string; model: string; height: number; face: number; humanoide?: boolean; heroi?: boolean; morto?: string; exp?: number; }
 const TODOS: Cast[] = [
   { nome: "Acendedora", model: "/models/personagens/heroina.glb", height: 1.8, face: Math.PI, humanoide: true, heroi: true },
   { nome: "Minion", model: "/models/personagens/morto_aldeao.glb", height: 1.8, face: Math.PI, humanoide: true, morto: "idle" },
@@ -21,9 +22,10 @@ const TODOS: Cast[] = [
   { nome: "Pesado", model: "/models/personagens/morto_guerreiro.glb", height: 2.45, face: Math.PI, humanoide: true, morto: "idle" },
   { nome: "Antigo", model: "/models/quaternius_monsters/orc_skull.glb", height: 2.0, face: Math.PI },
   { nome: "Demonio", model: "/models/quaternius_monsters/demon.glb", height: 1.95, face: Math.PI },
-  { nome: "Brutamonte", model: "/models/quaternius_monsters/yeti.glb", height: 2.5, face: Math.PI },
+  { nome: "Brutamonte", model: "/models/quaternius_monsters/yeti.glb", height: 2.5, face: Math.PI, exp: 0.7 },
   { nome: "Espreitador", model: "/models/quaternius_monsters/ninja.glb", height: 1.8, face: Math.PI },
-  { nome: "Conjurador", model: "/models/quaternius_monsters/mushroomking.glb", height: 2.1, face: 0 },
+  { nome: "Conjurador", model: "/models/personagens/morto_conjurador.glb", height: 1.95, face: Math.PI, humanoide: true, morto: "idle" },
+  { nome: "Guardiao", model: "/models/quaternius_monsters/mushroomking.glb", height: 3.4, face: 0 },
 ];
 const GAP = 3.1;
 const q = new URLSearchParams(location.search);
@@ -108,6 +110,8 @@ floor.material = fm;
         if (q.get("frac")) { g.goToFrame(g.from + (g.to - g.from) * Number(q.get("frac"))); g.pause(); }
       }
     } else {
+      // monstros nao humanoides: mesma tinta de paleta do jogo (skeleton.ts)
+      gradeMonsterMaterials(holder.getChildMeshes(false).map((m) => m.material!).filter(Boolean), c.exp ?? 1);
       (r.animationGroups.find((g) => /^Idle$/i.test(g.name)) ?? r.animationGroups.find((g) => /idle/i.test(g.name)))?.play(true);
     }
   }
