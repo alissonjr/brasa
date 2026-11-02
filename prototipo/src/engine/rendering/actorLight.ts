@@ -1,4 +1,4 @@
-import { Color3, DirectionalLight, Mesh, Vector3 } from "@babylonjs/core";
+import { Color3, DirectionalLight, HemisphericLight, Mesh, Vector3 } from "@babylonjs/core";
 import type { AbstractMesh, Node, Scene } from "@babylonjs/core";
 
 /**
@@ -22,10 +22,13 @@ export interface ActorLightOptions {
 
 export class ActorLight {
   readonly light: DirectionalLight;
+  /** Preenchimento hemisférico só dos atores: acende tronco e pernas (superfícies verticais que a câmera alta vê). */
+  readonly fill: HemisphericLight;
   private readonly dummy: Mesh;
 
   constructor(scene: Scene, opts: ActorLightOptions = {}) {
-    const l = new DirectionalLight("luz_atores", (opts.direction ?? new Vector3(0.15, -1, 0.35)).normalize(), scene);
+    // Inclinada para o lado da câmera (que orbita em -Z): acende as faces voltadas para ela, não só o topo.
+    const l = new DirectionalLight("luz_atores", (opts.direction ?? new Vector3(0.2, -0.7, 0.75)).normalize(), scene);
     l.diffuse = Color3.FromHexString(opts.color ?? "#ffd9ad");
     l.specular = Color3.Black();
     l.intensity = opts.intensity ?? 1.5;
@@ -39,24 +42,34 @@ export class ActorLight {
     l.includedOnlyMeshes = [this.dummy];
     l.renderPriority = 50;
     this.light = l;
+    const f = new HemisphericLight("luz_atores_fill", new Vector3(0, 1, 0), scene);
+    f.diffuse = Color3.FromHexString("#d8c8b4");
+    f.groundColor = Color3.FromHexString("#5a4e46");
+    f.specular = Color3.Black();
+    f.intensity = 0.55;
+    f.includedOnlyMeshes = [this.dummy];
+    f.renderPriority = 49;
+    this.fill = f;
   }
 
   /** Passa a iluminar todas as malhas (atuais) da hierarquia. Chamar depois de anexar props. */
   include(root: Node): void {
-    const list = this.light.includedOnlyMeshes;
-    const add = (m: AbstractMesh): void => { if (!list.includes(m)) list.push(m); };
-    if ((root as AbstractMesh).getTotalVertices) add(root as AbstractMesh);
-    for (const m of root.getChildMeshes(false)) add(m);
+    for (const list of [this.light.includedOnlyMeshes, this.fill.includedOnlyMeshes]) {
+      const add = (m: AbstractMesh): void => { if (!list.includes(m)) list.push(m); };
+      if ((root as AbstractMesh).getTotalVertices) add(root as AbstractMesh);
+      for (const m of root.getChildMeshes(false)) add(m);
+    }
   }
 
   /** Deixa de iluminar a hierarquia (o dispose de uma malha já a tira da lista sozinho). */
   exclude(root: Node): void {
-    const list = this.light.includedOnlyMeshes;
-    for (const m of root.getChildMeshes(false)) { const i = list.indexOf(m); if (i >= 0) list.splice(i, 1); }
+    for (const list of [this.light.includedOnlyMeshes, this.fill.includedOnlyMeshes])
+      for (const m of root.getChildMeshes(false)) { const i = list.indexOf(m); if (i >= 0) list.splice(i, 1); }
   }
 
   dispose(): void {
     this.light.dispose();
+    this.fill.dispose();
     this.dummy.dispose();
     perScene.delete(this.light.getScene());
   }

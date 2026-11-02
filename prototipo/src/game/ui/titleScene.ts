@@ -72,6 +72,8 @@ export class TitleScene {
     });
     this.engine = engine;
     const scene = new Scene(engine);
+    // DEV: gancho para inspecionar a vitrine do titulo em capturas automatizadas (nao entra no build).
+    if (import.meta.env.DEV) (window as unknown as { __titulo?: Scene }).__titulo = scene;
 
     const accent = Color3.FromHexString(this.opts.accent);
     scene.clearColor = new Color4(0.015, 0.025, 0.04, 1);

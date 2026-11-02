@@ -78,8 +78,8 @@ const MORTOS = "/models/personagens/";
 type EmissiveMat = Material & { emissiveColor: Color3 };
 // Do alto o morto precisa ler como OSSO claro sobre as lajes: albedo mais claro, piso de luz fria
 // proprio e olhos ciano maiores (brilho mais forte no glow). Revisao: "mortos cinza sobre cinza".
-const DEAD_ALBEDO_BOOST = 2.0; // o atlas dos mortos e escuro (L ~100/255): x2 leva o osso a ~0,3 linear
-const DEAD_GLOW = new Color3(0.06, 0.08, 0.1); // piso de luz fria dos mortos humanoides
+const DEAD_ALBEDO_BOOST = 1.8; // atlas dos mortos ja em osso claro; o boost leva o osso a ~0,4 linear
+const DEAD_GLOW = new Color3(0.08, 0.1, 0.12); // piso de luz fria dos mortos humanoides
 const DEAD_EYES = 1.7; // multiplicador do brilho dos olhos (o glow os alarga)
 const clampN = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 

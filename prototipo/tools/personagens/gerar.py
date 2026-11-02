@@ -124,11 +124,13 @@ def morto(im, cor, sat=0.35, claro=0.85):
     return ImageChops.multiply(im, Image.new("RGB", im.size, hexc(cor)))
 
 # paletas do manto da Acendedora (escuro, meio, claro): preto de fuligem com brilho de cada cor escolhida
+# Corpo do manto: fuligem (cinza-escuro quente), nao preto puro. Da camera alta a figura inteira precisa
+# ficar acima das lajes: o capuz claro e a assinatura, o corpo em L* ~35-40 segura a media.
 MANTOS = {
-    "brasa": ("#0a0605", "#34170c", "#a64a1c"),
-    "cinza": ("#070708", "#2a2928", "#6e6a64"),
-    "noite": ("#04060b", "#131e30", "#3a5f8c"),
-    "ferro": ("#06080b", "#20262c", "#5f6a76"),
+    "brasa": ("#1a110c", "#5a3a2a", "#a0643a"),
+    "cinza": ("#161616", "#575350", "#8f8a84"),
+    "noite": ("#0d1420", "#2e4466", "#5f82b0"),
+    "ferro": ("#14181c", "#4a545e", "#7f8c99"),
 }
 # CAPUZ e ombreiras: a cor-assinatura CLARA da Acendedora (le do alto, 2 passos de valor acima das
 # lajes). O capuz leva o matiz do manto escolhido, mas sempre claro (ouro de brasa, cinza de osso,
@@ -174,7 +176,10 @@ png(olho, "olho")
 def roupa_heroina(ranger, masks, manto):
     """Atlas da roupa da heroina para um manto: pano escuro + bronze/ouro, capuz e ombreiras claros."""
     base = tingir(ranger, MANTOS[manto], BRONZE, OURO)
-    return tingir_pecas(base, masks, {"Head_Hood": CAPUZ[manto], "Acc_Pauldrons": OURO}, {"Head_Hood": CLARA, "Acc_Pauldrons": (40, 120, 200)}, fonte=ranger)
+    # Pernas em couro-bronze (nao fuligem): da camera alta sao a maior area vertical da figura.
+    PERNAS = ("#2a1a0e", "#7a4e2a", "#c08a52")
+    return tingir_pecas(base, masks, {"Head_Hood": CAPUZ[manto], "Acc_Pauldrons": OURO, "Legs": PERNAS},
+                        {"Head_Hood": CLARA, "Acc_Pauldrons": (40, 120, 200), "Legs": (20, 55, 95)}, fonte=ranger)
 
 def heroina():
     ranger = carregar(os.path.join(OUT, "T_Ranger_BaseColor.png"), 1024)
@@ -225,10 +230,10 @@ def mortos():
     olho_a.save(os.path.join(TMP, "mo_a.png")); olho_e.save(os.path.join(TMP, "mo_e.png"))
     peasant = carregar(os.path.join(OUT, "T_Peasant_BaseColor.png"), 512)
     ranger = carregar(os.path.join(OUT, "T_Ranger_BaseColor.png"), 512)
-    pele_m = morto(carregar(os.path.join(UBC, "T_Superhero_Male_Dark.png"), 256), "#c3d1d3", 0.28, 1.15)
-    pele_f = morto(carregar(os.path.join(UBC, "T_Superhero_Female_Dark_BaseColor.png"), 256), "#c3d1d3", 0.28, 1.15)
-    aço = ("#1b1f23", "#8794a0", "#dde4ea")
-    couro = ("#0f0c09", "#54463a", "#9a846a")
+    pele_m = morto(carregar(os.path.join(UBC, "T_Superhero_Male_Dark.png"), 256), "#d2dde0", 0.28, 1.5)
+    pele_f = morto(carregar(os.path.join(UBC, "T_Superhero_Female_Dark_BaseColor.png"), 256), "#d2dde0", 0.28, 1.5)
+    aço = ("#2a3036", "#9aa6b2", "#e4eaf0")
+    couro = ("#1a1510", "#6a5a4a", "#b09a80")
 
     def variante(nome, base, outfit, incluir, reduzir, roupa, pele):
         blender({
@@ -242,18 +247,18 @@ def mortos():
     cabeca = {"Superhero|SuperHero|Retopology": 0.45}
     # minion: aldeao comum, trapos desbotados
     variante("morto_aldeao", "Superhero_Male_FullBody.gltf", "Male_Peasant.gltf", ["Arms", "Body", "Feet", "Legs"],
-             {**cabeca, "Arms": 0.3, "Feet": 0.35, "Body": 0.55, "Legs": 0.7}, morto(peasant, "#d3dcde", 0.4, 1.05), pele_m)
+             {**cabeca, "Arms": 0.3, "Feet": 0.35, "Body": 0.55, "Legs": 0.7}, morto(peasant, "#dce4e6", 0.4, 1.4), pele_m)
     # guerreiro: couraca de ferro velho, sem capuz
     variante("morto_guerreiro", "Superhero_Male_FullBody.gltf", "Male_Ranger.gltf", ["Body", "Arms", "Legs", "Feet", "Belt", "Pauldron"],
              {**cabeca, "Feet": 0.14, "Bracer": 0.25, "Pauldron": 0.45, "Arms$": 0.5, "Body$": 0.55, "Belt": 0.6},
-             tingir(ranger, ("#0b0e11", "#3d464f", "#95a3b0"), couro, aço), pele_m)
+             tingir(ranger, ("#1e2328", "#66727e", "#b9c4ce"), couro, aço), pele_m)
     # ladino: capuz de trapo verde-azulado escuro
     variante("morto_ladino", "Superhero_Male_FullBody.gltf", "Male_Ranger.gltf", ["Hood", "Body", "Arms", "Legs", "Feet", "Belt"],
              {**cabeca, "Feet": 0.14, "Bracer": 0.25, "Hood": 0.6, "Arms$": 0.5, "Body$": 0.55, "Belt": 0.6},
-             tingir(ranger, ("#060d10", "#223a40", "#5f929c"), couro, aço), pele_m)
+             tingir(ranger, ("#13262b", "#44707a", "#8fbcc4"), couro, aço), pele_m)
     # conjurador: vestes frias de camponesa, tom violeta apagado
     variante("morto_conjurador", "Superhero_Female_FullBody.gltf", "Female_Peasant.gltf", ["Arms", "Body", "Feet", "Legs"],
-             {**cabeca, "Arms": 0.35, "Feet": 0.35, "Body": 0.6, "Legs": 0.7}, morto(peasant, "#c4c0e0", 0.5, 1.0), pele_f)
+             {**cabeca, "Arms": 0.35, "Feet": 0.35, "Body": 0.6, "Legs": 0.7}, morto(peasant, "#d0cce8", 0.5, 1.35), pele_f)
 
 def elites():
     """Mortos GRANDES (antigo, sentinela/pesado): mesmo corpo, silhueta por ELMO, CRISTA e ESCUDO gerados
@@ -261,11 +266,11 @@ def elites():
     olho_a, olho_e = olho_morto("#8da0a6")
     olho_a.save(os.path.join(TMP, "mo_a.png")); olho_e.save(os.path.join(TMP, "mo_e.png"))
     ranger = carregar(os.path.join(OUT, "T_Ranger_BaseColor.png"), 512)
-    pele_m = morto(carregar(os.path.join(UBC, "T_Superhero_Male_Dark.png"), 256), "#c3d1d3", 0.28, 1.15)
+    pele_m = morto(carregar(os.path.join(UBC, "T_Superhero_Male_Dark.png"), 256), "#d2dde0", 0.28, 1.5)
     masks = RANGER_M()
-    osso = ("#2a2a28", "#9c968a", "#e8e2d4")
-    aço = ("#1b1f23", "#8794a0", "#dde4ea")
-    couro = ("#0f0c09", "#54463a", "#9a846a")
+    osso = ("#2a2a28", "#a8a296", "#ece6d8")
+    aço = ("#2a3036", "#9aa6b2", "#e4eaf0")
+    couro = ("#1a1510", "#6a5a4a", "#b09a80")
     cabeca = {"Superhero|SuperHero|Retopology": 0.45}
     red = {**cabeca, "Feet": 0.14, "Bracer": 0.25, "Pauldron": 0.5, "Arms$": 0.5, "Body$": 0.5, "Belt": 0.6, "Legs": 0.8}
     def variante(nome, roupa, props):
@@ -277,14 +282,14 @@ def elites():
             "emissao": {"olhos": png(olho_e, "mo_e")},
             "saida": os.path.join(SAIDA, nome + ".glb"), "jpeg": 76}, nome)
     # antigo: couraca de osso velho, elmo fechado com crista alta (le de longe)
-    r_ant = tingir_pecas(tingir(ranger, ("#0e0f10", "#555650", "#b3ada0"), couro, aço), masks, {"Acc_Pauldron": osso, "Body": osso}, {"Body": CLARA, "Acc_Pauldron": CLARA}, fonte=ranger)
+    r_ant = tingir_pecas(tingir(ranger, ("#1e1f20", "#6e6f68", "#c4beb0"), couro, aço), masks, {"Acc_Pauldron": osso, "Body": osso}, {"Body": CLARA, "Acc_Pauldron": CLARA}, fonte=ranger)
     uv_a = ponto_claro(r_ant)
     variante("morto_antigo", r_ant, [
         {"tipo": "elmo", "osso": "Head", "offset": [0, 0.01, 0.13], "raio": 0.165, "uv": uv_a},
         {"tipo": "crista", "osso": "Head", "offset": [0, 0.0, 0.3], "escala": [0.035, 0.26, 0.16], "uv": uv_a},
     ])
     # sentinela/pesado: aco frio, elmo com crista curta e ESCUDO redondo no antebraco esquerdo (bloqueia)
-    r_sen = tingir_pecas(tingir(ranger, ("#0b0e11", "#4a5560", "#aab6c2"), couro, aço), masks, {"Acc_Pauldron": aço, "Body": aço}, {"Body": CLARA, "Acc_Pauldron": CLARA}, fonte=ranger)
+    r_sen = tingir_pecas(tingir(ranger, ("#1b2026", "#5e6a76", "#b4c0cc"), couro, aço), masks, {"Acc_Pauldron": aço, "Body": aço}, {"Body": CLARA, "Acc_Pauldron": CLARA}, fonte=ranger)
     uv_s = ponto_claro(r_sen)
     variante("morto_sentinela", r_sen, [
         {"tipo": "elmo", "osso": "Head", "offset": [0, 0.01, 0.12], "raio": 0.16, "uv": uv_s},
@@ -301,7 +306,7 @@ def guardia():
     queimado = ("#050303", "#1a100a", "#3d2416")
     couro_q = ("#0a0705", "#2a1f17", "#5a4330")
     ferro_q = ("#1a1512", "#4a3a2e", "#8a6a4a")
-    cinza_q = ("#1a1512", "#7a706a", "#cfc6bc")  # capuz: cinza de manto queimado (mais claro: le do alto)
+    cinza_q = ("#1a1512", "#8a7f78", "#dcd3c9")  # capuz: cinza de manto queimado (mais claro: le do alto)
     roupa = tingir(ranger, queimado, couro_q, ferro_q)
     roupa = tingir_pecas(roupa, masks, {"Head_Hood": cinza_q, "Acc_Pauldrons": ferro_q}, {"Head_Hood": CLARA}, fonte=ranger)
     pano = ImageChops.lighter(masks["Head_Hood"], ImageChops.lighter(masks["Body"], masks.get("Legs", masks["Body"])))
