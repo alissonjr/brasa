@@ -1,4 +1,4 @@
-import { Mesh, MultiMaterial, VertexData } from "@babylonjs/core";
+import { Mesh, MultiMaterial, StandardMaterial, VertexData } from "@babylonjs/core";
 import type { AbstractMesh, Color3, Material, Matrix, Node, Scene } from "@babylonjs/core";
 
 /**
@@ -24,14 +24,27 @@ export interface StaticMergeOptions {
   resolve(src: Material): { material: Material; color?: Color3 } | null;
   /** A malha projeta sombra? Fundem-se separadamente (sombra só dos que projetam). */
   casts(m: AbstractMesh): boolean;
+  /**
+   * Grupo opcional da malha (ex.: um vaso que quebra). As faixas de vértices de cada grupo ficam em
+   * `merged[i].ranges`, e a malha fundida sai ATUALIZÁVEL: quem quebra o grupo zera esses vértices.
+   */
+  tag?(m: AbstractMesh): string | null;
+  /**
+   * Com `true`, a malha fundida NÃO se divide por "projeta sombra" (1 malha por material: menos draw
+   * calls no passe principal) e a geometria das peças que projetam vai para uma malha-sombra à parte,
+   * invisível para a câmera (`result.shadowProxy`), que o chamador registra no gerador de sombra.
+   */
+  shadowProxy?: boolean;
   parent: Node;
 }
 
 export interface StaticMergeResult {
   /** Malhas novas (para o chamador registrar casters e rastrear o descarte). */
-  merged: { mesh: Mesh; casts: boolean }[];
+  merged: { mesh: Mesh; casts: boolean; ranges?: Map<string, { start: number; count: number }[]> }[];
   /** Malhas de origem já descartadas (para tirar da lista de casters). */
   removed: AbstractMesh[];
+  /** Geometria só das peças que projetam sombra (só com `opts.shadowProxy`): registrar como caster. */
+  shadowProxy: Mesh | null;
 }
 
 interface Acc {
@@ -46,6 +59,7 @@ interface Acc {
   side: number | null;
   idx: number[];
   vertexCount: number;
+  ranges: Map<string, { start: number; count: number }[]> | null;
 }
 
 function pushTransformed(acc: Acc, vd: VertexData, m: Matrix, flip: boolean, color: Color3 | undefined, range?: { start: number; count: number }): void {
@@ -95,6 +109,7 @@ function pushTransformed(acc: Acc, vd: VertexData, m: Matrix, flip: boolean, col
 export function mergeStaticByMaterial(scene: Scene, root: Node, opts: StaticMergeOptions): StaticMergeResult {
   const accs = new Map<string, Acc>();
   const removed: AbstractMesh[] = [];
+  const sh: Acc = { material: null as unknown as Material, casts: true, pos: [], nor: [], uv: [], col: null, hasUv: false, side: null, idx: [], vertexCount: 0, ranges: null };
   for (const m of root.getChildMeshes(false)) {
     if (!(m instanceof Mesh) || m.skeleton || m.morphTargetManager) continue;
     if (!m.material || m.getTotalVertices() <= 0 || !m.isEnabled() || !opts.eligible(m)) continue;
@@ -117,14 +132,25 @@ export function mergeStaticByMaterial(scene: Scene, root: Node, opts: StaticMerg
       ? m.subMeshes.map((sub) => ({ res: resolved[sub.materialIndex]!, range: { start: sub.indexStart, count: sub.indexCount } }))
       : [{ res: resolved[0]! }];
     for (const part of parts) {
-      const key = `${part.res.material.uniqueId}|${casts ? 1 : 0}|${side}`;
+      const key = `${part.res.material.uniqueId}|${opts.shadowProxy ? 0 : casts ? 1 : 0}|${side}`;
       let acc = accs.get(key);
-      if (!acc) accs.set(key, (acc = { material: part.res.material, casts, side, pos: [], nor: [], uv: [], col: part.res.color ? [] : null, hasUv: false, idx: [], vertexCount: 0 }));
-      for (const mt of mats) pushTransformed(acc, vd, mt, flip, part.res.color, part.range);
+      if (!acc) accs.set(key, (acc = { material: part.res.material, casts, side, pos: [], nor: [], uv: [], col: part.res.color ? [] : null, hasUv: false, idx: [], vertexCount: 0, ranges: null }));
+      if (opts.shadowProxy && casts) for (const mt of mats) pushTransformed(sh, vd, mt, flip, undefined, part.range);
+      const tag = opts.tag?.(m) ?? null;
+      for (const mt of mats) {
+        const start = acc.vertexCount;
+        pushTransformed(acc, vd, mt, flip, part.res.color, part.range);
+        if (tag !== null) {
+          if (!acc.ranges) acc.ranges = new Map();
+          const list = acc.ranges.get(tag) ?? [];
+          list.push({ start, count: acc.vertexCount - start });
+          acc.ranges.set(tag, list);
+        }
+      }
     }
     removed.push(m);
   }
-  const merged: { mesh: Mesh; casts: boolean }[] = [];
+  const merged: StaticMergeResult["merged"] = [];
   let k = 0;
   for (const acc of accs.values()) {
     const vd = new VertexData();
@@ -134,7 +160,7 @@ export function mergeStaticByMaterial(scene: Scene, root: Node, opts: StaticMerg
     if (acc.col) vd.colors = acc.col;
     vd.indices = acc.vertexCount > 65535 ? new Uint32Array(acc.idx) : new Uint16Array(acc.idx);
     const mesh = new Mesh(`cenario_${acc.material.name}_${acc.casts ? "c" : "n"}_${k++}`, scene);
-    vd.applyToMesh(mesh, false);
+    vd.applyToMesh(mesh, acc.ranges !== null);
     mesh.hasVertexAlpha = false;
     mesh.material = acc.material;
     if (acc.side !== null) mesh.overrideMaterialSideOrientation = acc.side;
@@ -142,8 +168,23 @@ export function mergeStaticByMaterial(scene: Scene, root: Node, opts: StaticMerg
     mesh.isPickable = false;
     mesh.receiveShadows = true;
     mesh.freezeWorldMatrix();
-    merged.push({ mesh, casts: acc.casts });
+    merged.push({ mesh, casts: acc.casts, ranges: acc.ranges ?? undefined });
+  }
+  let shadowProxy: Mesh | null = null;
+  if (sh.vertexCount > 0) {
+    const vd = new VertexData();
+    vd.positions = sh.pos;
+    vd.normals = sh.nor;
+    vd.indices = sh.vertexCount > 65535 ? new Uint32Array(sh.idx) : new Uint16Array(sh.idx);
+    shadowProxy = new Mesh("proxy_sombra", scene);
+    vd.applyToMesh(shadowProxy, false);
+    shadowProxy.material = new StandardMaterial("proxy_sombra_mat", scene);
+    shadowProxy.layerMask = 0x20000000; // a câmera não o desenha; o mapa de sombra recebe-o por lista própria
+    shadowProxy.parent = opts.parent;
+    shadowProxy.isPickable = false;
+    shadowProxy.metadata = { noDepth: true }; // fica fora do proxy de profundidade (nao e desenhado de fato)
+    shadowProxy.freezeWorldMatrix();
   }
   for (const m of removed) m.dispose(false, false);
-  return { merged, removed };
+  return { merged, removed, shadowProxy };
 }

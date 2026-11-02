@@ -1,5 +1,6 @@
 import { DynamicTexture, Effect, PostProcess } from "@babylonjs/core";
 import type { Camera, Texture } from "@babylonjs/core";
+import { clearSceneOutlineConfig, getSceneOutlineConfig } from "./sceneOutline";
 
 /**
  * CAMADA ENGINE (genérica). Passe de FINALIZAÇÃO "impresso": posterize (poucos níveis de cor)
@@ -21,6 +22,19 @@ uniform sampler2D paperSampler;
 uniform float posterizeLevels;
 uniform float ditherStrength;
 uniform float paperStrength;
+#ifdef GRAIN
+uniform float grainIntensity;
+uniform float animatedSeed;
+#endif
+#ifdef EDGE
+uniform sampler2D depthSampler;   // profundidade linear 0..1 (DepthRenderer)
+uniform vec2 texel;
+uniform float depthThreshold;
+uniform float thickness;
+uniform vec3 lineColor;
+uniform float lineStrength;
+float depthAt(vec2 uv){ return texture2D(depthSampler, uv).r; }
+#endif
 
 // Matriz de Bayer 4x4 (0..15) para dither ordenado. mat4 é coluna-maior: m[col][row].
 float bayer4(vec2 fragxy){
@@ -36,6 +50,31 @@ float bayer4(vec2 fragxy){
 
 void main(void){
   vec4 c = texture2D(textureSampler, vUV);
+#ifdef GRAIN
+  // grão de película (mesma conta do GrainPostProcess do Babylon): mais forte nos tons médios
+  {
+    float r = fract(sin(dot(vUV * animatedSeed, vec2(12.9898, 78.233))) * 43758.5453);
+    float g = mix(-grainIntensity / 255.0, grainIntensity / 255.0, r);
+    float lum = clamp(dot(c.rgb, vec3(0.2126, 0.7152, 0.0722)), 0.0, 1.0);
+    float amount = (cos(-3.14159265 + lum * 6.2831853) + 1.0) / 2.0;
+    c.rgb = max(c.rgb + g * amount, 0.0);
+  }
+#endif
+#ifdef EDGE
+  // contorno de tinta do cenário: Sobel sobre a profundidade (antes do posterize, a linha também é papelada)
+  {
+    vec2 o = texel * thickness;
+    float dC = depthAt(vUV);
+    float dR = depthAt(vUV + vec2(o.x, 0.0));
+    float dL = depthAt(vUV - vec2(o.x, 0.0));
+    float dD = depthAt(vUV + vec2(0.0, o.y));
+    float dU = depthAt(vUV - vec2(0.0, o.y));
+    float depthEdge = abs(dC - dR) + abs(dC - dL) + abs(dC - dD) + abs(dC - dU);
+    float dThresh = depthThreshold * (0.4 + dC * 1.6); // limiar cresce com a profundidade
+    float edge = step(dThresh, depthEdge) * step(dC, 0.999) * lineStrength;
+    c.rgb = mix(c.rgb, lineColor, edge);
+  }
+#endif
   // dither: empurra a cor +/- meio nível ANTES do posterize (escolhe a faixa vizinha)
   float d = (bayer4(gl_FragCoord.xy) + 0.5) / 16.0 - 0.5; // -0.5..0.5
   vec3 col = c.rgb + d * (ditherStrength / max(posterizeLevels, 1.0));
@@ -55,6 +94,25 @@ export interface FinishingOptions {
   ditherStrength?: number;
   /** Intensidade do papel no multiply (0..1). Default 0.16. */
   paperStrength?: number;
+  /** Grão de película embutido neste passe (em vez do GrainPostProcess do pipeline: 1 passe a menos). */
+  grain?: FinishingGrain;
+}
+
+export interface FinishingGrain {
+  /** Intensidade em níveis de 0..255 (igual ao `grain.intensity` do pipeline). */
+  intensity: number;
+  /** Sorteia uma semente nova a cada quadro (grão vivo). */
+  animated: boolean;
+}
+
+const GRAIN = new WeakMap<Camera, FinishingGrain>();
+/** Declara o grão da câmera ANTES de addFinishingPass: ele o embute no próprio shader (o chamador desliga o do pipeline). */
+export function setFinishingGrain(camera: Camera, grain: FinishingGrain): void {
+  GRAIN.set(camera, grain);
+}
+/** Grão declarado para a câmera (se houver). */
+export function getFinishingGrain(camera: Camera): FinishingGrain | undefined {
+  return GRAIN.get(camera);
 }
 
 export interface FinishingHandle {
@@ -107,13 +165,37 @@ export function addFinishingPass(camera: Camera, opts: FinishingOptions = {}): F
   const dither = opts.ditherStrength ?? 0.6;
   const paperStrength = opts.paperStrength ?? 0.16;
 
-  const pp = new PostProcess(SHADER, SHADER, ["posterizeLevels", "ditherStrength", "paperStrength"], ["paperSampler"], 1.0, camera);
+  // Absorve o edge-detect de cena (se houver) e o grão: tudo no mesmo shader, 2 passes full-screen a menos.
+  const edge = getSceneOutlineConfig(camera);
+  const grain = opts.grain ?? GRAIN.get(camera);
+  const defines = [edge ? "#define EDGE" : "", grain ? "#define GRAIN" : ""].filter(Boolean).join("\n");
+  const uniforms = ["posterizeLevels", "ditherStrength", "paperStrength"];
+  const samplers = ["paperSampler"];
+  if (edge) { uniforms.push("texel", "depthThreshold", "thickness", "lineColor", "lineStrength"); samplers.push("depthSampler"); }
+  if (grain) uniforms.push("grainIntensity", "animatedSeed");
+  const pp = new PostProcess(SHADER, SHADER, uniforms, samplers, 1.0, camera, undefined, undefined, undefined, defines || undefined);
   pp.onApply = (effect) => {
     effect.setFloat("posterizeLevels", levels);
     effect.setFloat("ditherStrength", dither);
     effect.setFloat("paperStrength", paperStrength);
     effect.setTexture("paperSampler", paper);
+    if (edge) {
+      effect.setTexture("depthSampler", edge.depthMap);
+      effect.setFloat2("texel", 1 / pp.width, 1 / pp.height);
+      effect.setFloat("depthThreshold", edge.depthThreshold);
+      effect.setFloat("thickness", edge.thickness);
+      effect.setColor3("lineColor", edge.color);
+      effect.setFloat("lineStrength", edge.strength);
+    }
+    if (grain) {
+      effect.setFloat("grainIntensity", grain.intensity);
+      effect.setFloat("animatedSeed", grain.animated ? Math.random() + 1 : 1);
+    }
   };
+  if (edge) {
+    edge.postProcess.dispose(camera); // o passe próprio do edge-detect some: a linha vive neste shader
+    clearSceneOutlineConfig(camera);
+  }
 
   return {
     postProcess: pp,
