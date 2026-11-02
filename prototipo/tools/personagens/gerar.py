@@ -305,10 +305,10 @@ def guardia():
     roupa = tingir(ranger, queimado, couro_q, ferro_q)
     roupa = tingir_pecas(roupa, masks, {"Head_Hood": cinza_q, "Acc_Pauldrons": ferro_q}, {"Head_Hood": CLARA}, fonte=ranger)
     pano = ImageChops.lighter(masks["Head_Hood"], ImageChops.lighter(masks["Body"], masks.get("Legs", masks["Body"])))
-    emi_roupa = fendas(1024, pano.filter(ImageFilter.MinFilter(5)), corpo=70, n=90, seed=3)
+    emi_roupa = fendas(1024, pano.filter(ImageFilter.MinFilter(5)), corpo=26, n=90, seed=3)
     pele = carregar(os.path.join(UBC, "T_Superhero_Female_Dark_BaseColor.png"), 512)
     pele = morto(pele, "#3a2e28", 0.12, 0.42)  # carvao
-    emi_pele = fendas(512, Image.new("L", (512, 512), 255), corpo=70, n=60, seed=5)
+    emi_pele = fendas(512, Image.new("L", (512, 512), 255), corpo=26, n=60, seed=5)
     # olhos: albedo neutro e emissao em cinza (a cor do brilho vem do codigo, como nas fendas)
     olho_a, olho_e = olho_morto("#2e2522", iris_a=(70, 60, 55), iris_e=(235, 235, 235), escl=(190, 190, 190))
     blender({
