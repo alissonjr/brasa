@@ -24,6 +24,7 @@ import { createLightPool, loadContainer, toonifyHierarchy } from "@engine";
 import { pickLayout } from "./cryptLayouts";
 import { buildPoolGroup, buildRaisedSlabs, inCalm, paintFloor } from "./cryptDecor";
 import { buildCave } from "./cryptCave";
+import { applyGrade, createAtmosphere, themeFor, tintArchitecture } from "./cryptTheme";
 import type { EnemyBounds } from "../../actors/enemies/skeleton";
 
 /**
@@ -58,6 +59,7 @@ export interface CryptCtx {
   glow: GlowLayer;
   ambient: HemisphericLight; // luz fria ambiente (modulada na virada frio->quente)
   key: DirectionalLight; // luz-chave (sombra); cai um pouco ao acender o braseiro
+  pipe: DefaultRenderingPipeline; // etalonagem/vinheta (a identidade de cada andar troca a etalonagem)
 }
 
 export type RoomKind = "guarda" | "salao" | "cisterna" | "santuario" | "guardiao";
@@ -247,7 +249,7 @@ export function setupCryptScene(scene: Scene, camera: Camera): CryptCtx {
   pipe.grain.intensity = 4;
   pipe.grain.animated = true;
 
-  return { shadow, glow, ambient, key };
+  return { shadow, glow, ambient, key, pipe };
 }
 
 /**
@@ -598,7 +600,16 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   }
 
   // --- CAVERNA em volta do santuario (camera alta): rampa de rocha por fora dos muros baixos ---
-  if (ALTA) for (const m of buildCave(scene, { halfX: HALFX, halfZ: HALFZ, seed: def.index + 1 })) track(m);
+  // IDENTIDADE POR ANDAR (cryptTheme): rocha, luz, neblina, etalonagem e particulas pelo INDICE.
+  const THEME = themeFor(def.index);
+  applyGrade(ctx.pipe, THEME);
+  ctx.key.diffuse = Color3.FromHexString(THEME.key.diffuse);
+  const cave = ALTA ? buildCave(scene, { halfX: HALFX, halfZ: HALFZ, seed: def.index + 1, theme: THEME, doorX: 2, altarZ: AZ, layout: L }) : null;
+  if (cave) {
+    for (const m of cave.meshes) track(m);
+    for (const m of cave.glow) ctx.glow.addIncludedOnlyMesh(m);
+  }
+  const atmosphere = ALTA ? createAtmosphere(scene, THEME) : null;
 
   // --- Piso ladrilhado (xadrez + rotacao) + medalhao + tabuas ---
   const tilesA: { x: number; z: number; rotY: number }[] = [];
@@ -825,14 +836,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   //     da cena (ambiente + chave + fagulha + braseiro). As demais ficam emissivas (glow). ---
   // POCAS DE LUZ por tipo de sala (paleta propria). Fundidas por cor/alpha: 1 draw call por grupo
   // (antes: 1 por tocha). O alpha de cada grupo acompanha a gangorra frio->quente (applyPools).
-  const POOL_COL: Record<RoomKind, { torch: string; accent: string; warm: boolean }> = {
-    guarda: { torch: "#ff9a40", accent: "#ff9a40", warm: true },
-    salao: { torch: "#ffb25a", accent: "#ffcf80", warm: true },
-    cisterna: { torch: "#ff9a50", accent: "#43b6cf", warm: false },
-    santuario: { torch: "#ffc070", accent: "#e8c060", warm: true },
-    guardiao: { torch: "#ff6a30", accent: "#ff4a18", warm: true },
-  };
-  const poolCol = POOL_COL[def.kind];
+  const poolCol = THEME.pool; // por andar (antes: por RoomKind, que repete salao e cisterna)
   type PoolGroup = { mesh: Mesh; base: number; mode: "torch" | "warm" | "cold" | "brazier" };
   const poolGroups: PoolGroup[] = [];
   const addPools = (spots: { x: number; z: number; r: number }[], color: string, alpha: number, mode: PoolGroup["mode"]): void => {
@@ -1224,6 +1228,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // malhas do MUNDO (roomRoot) que são LIT; chamas/feixe/decalques (disableLighting) ficam
   // lisos e os atores não estão em roomRoot, então o emissivo de combate deles fica intacto.
   toonifyHierarchy(roomRoot, { skipDisableLighting: true, maxLights: 6 });
+  tintArchitecture(roomRoot, THEME.stone); // pedra de muros e pilares no tom do andar
 
   // Materiais aceitam ate 6 luzes (evita a ambiente ser descartada).
   for (const m of scene.materials) {
@@ -1251,20 +1256,12 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
 
   // W4: IDENTIDADE POR ZONA. Quanto mais fundo a câmara, mais frio/escuro/denso o ar (sem
   // tocar a geometria nem a câmera). 0 = raso (claro), 1 = fundo (monumental, gélido).
-  const ZONE_DEPTH: Record<RoomKind, number> = {
-    guarda: 0.0,
-    salao: 0.35,
-    cisterna: 0.55,
-    santuario: 0.7,
-    guardiao: 1.0,
-  };
-  const depth = ZONE_DEPTH[def.kind] ?? 0.5;
-  // Alvos de cor da virada frio->quente, agora com o FRIO escalado pela profundidade.
-  const COLD_FOG = Color3.Lerp(Color3.FromHexString("#243240"), Color3.FromHexString("#0e1622"), depth);
-  const WARM_FOG = Color3.FromHexString("#241a14");
-  const COLD_AMB = Color3.Lerp(Color3.FromHexString("#9fb4cc"), Color3.FromHexString("#6f86a6"), depth);
-  const WARM_AMB = Color3.FromHexString("#a98f6e");
-  const COLD_INTENSITY = 0.42 - 0.08 * depth; // teto fecha a luz; mantém cor/contraste sem lavar
+  // Alvos de cor da virada frio->quente: vem do TEMA do andar (cryptTheme), nao mais da profundidade.
+  const COLD_FOG = Color3.FromHexString(THEME.fog.cold);
+  const WARM_FOG = Color3.FromHexString(THEME.fog.warm);
+  const COLD_AMB = Color3.FromHexString(THEME.amb.cold);
+  const WARM_AMB = Color3.FromHexString(THEME.amb.warm);
+  const COLD_INTENSITY = THEME.amb.intensity;
   // W4: COREOGRAFIA de baixo para cima. A virada frio->quente nao e um lerp uniforme: a luz
   // quente NASCE no chao (braseiro + decalque), SOBE pelas paredes (oferendas + nevoa) e por
   // fim alcanca a abobada (luz ambiente do "ceu"). t e fatiado em tres estagios sobrepostos.
@@ -1300,12 +1297,14 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       decalMat.emissiveColor.set(decalBaseEmissive.r * g, decalBaseEmissive.g * g, decalBaseEmissive.b * g);
     }
     scene.fogColor = Color3.Lerp(COLD_FOG, WARM_FOG, wallK);
-    ctx.ambient.intensity = COLD_INTENSITY - 0.22 * vaultK; // a abobada esfria por ultimo
+    ctx.ambient.intensity = COLD_INTENSITY - THEME.amb.warmDrop * vaultK; // a abobada esfria por ultimo
     ctx.ambient.diffuse = Color3.Lerp(COLD_AMB, WARM_AMB, vaultK);
-    ctx.key.intensity = 0.62 - 0.2 * k;
+    ctx.key.intensity = THEME.key.intensity - THEME.key.warmDrop * k;
+    cave?.setLit(k);
+    atmosphere?.setLit(k);
   };
   setBrazierLit(0); // a sala nasce FRIA (braseiro apagado)
-  scene.fogDensity = 0.004 + 0.007 * depth; // raso límpido; fundo enevoado (não tocado pela virada)
+  scene.fogDensity = THEME.fog.density; // por andar (não tocado pela virada)
 
   // ===========================================================================================
   // ARENA DO GUARDIÃO (só def.kind === "guardiao"): a gangorra de luz lida no MUNDO + os hazards
@@ -1328,6 +1327,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       const v = clamp01(light);
       if (Math.abs(v - brasaShown) < 0.004) return; // estável: nada a fazer
       brasaShown = v;
+      cave?.setBrasaLight(v);
       // A chama central da Brasa moribunda acompanha o medidor (some quase de todo no breu).
       brazierFlame.ignite = 0.15 + 0.85 * v;
       applyPools(v, v);
@@ -1530,6 +1530,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     arena,
     dispose(): void {
       scene.onBeforeRenderObservable.remove(flicker);
+      atmosphere?.dispose();
       arenaDispose?.();
       for (const f of flames) ctx.glow.removeIncludedOnlyMesh(f.mesh);
       for (const c of casters) ctx.shadow.removeShadowCaster(c);
