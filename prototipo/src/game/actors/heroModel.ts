@@ -80,6 +80,11 @@ export class HeroModel implements CharacterVisual {
   private wFade = 1; // fade de saída planejado da ação corrente (1..0)
   private trail?: TrailMesh; // rastro da lâmina (só ligado no giro do golpe)
   private trailOn = false;
+  // O Babylon erra a mistura de 3+ animações no mesmo osso (a pose vira a de repouso): durante
+  // qualquer mistura com ação só entram no máximo DUAS animações ativas (ação + ação anterior, ou
+  // ação + UM clipe de locomoção `locoDom`, escolhido pela velocidade no começo da ação).
+  private locoDom: "idle" | "walk" | "run" | "sprint" = "idle";
+  private lastSpeed = 0;
   private prevGroup?: AnimationGroup; // ação anterior em mistura de saída
   private prevW = 0;
   // Pesos suavizados da locomoção (idle/walk/run/sprint somam ~1).
@@ -287,6 +292,11 @@ export class HeroModel implements CharacterVisual {
 
   private beginAction(kind: HeroAction, sync: ClipSync | null): void {
     const old = this.actionGroup;
+    if (!old && !this.prevGroup) {
+      // Vindo da locomoção: congela a mistura num único clipe (o da velocidade atual).
+      const sp = this.lastSpeed;
+      this.locoDom = sp < 0.2 ? "idle" : sp <= (ANCHOR.walk + ANCHOR.run) / 2 ? "walk" : sp <= (ANCHOR.run + ANCHOR.sprint) / 2 ? "run" : "sprint";
+    }
     const oldW = this.loaded ? Math.min(this.wIn, this.wFade) : 0;
     this.actionKind = kind;
     this.actionSeq = sync ? sync.seq : -1;
@@ -344,7 +354,8 @@ export class HeroModel implements CharacterVisual {
       for (const k of ["idle", "walk", "run", "sprint"] as const) { const lg = this.clips[k]; if (lg) lg.weight = 0; }
       return;
     }
-    // Pesos: ação corrente (entrada x fade planejado) + ação anterior saindo + locomoção = 1.
+    this.lastSpeed = speed;
+    // Pesos: ação corrente (entrada x fade planejado) + ação anterior saindo OU um clipe de locomoção.
     const g = this.actionGroup;
     const plan = this.sync ? PLANO[this.sync.kind] : undefined;
     const inSec = plan ? plan.blendIn : this.actionKind === "block" ? 0.05 : 0.03;
@@ -352,13 +363,28 @@ export class HeroModel implements CharacterVisual {
     const wa = g ? Math.min(this.wIn, this.wFade) : 0;
     let wo = 0;
     if (this.prevGroup) {
-      this.prevW = Math.max(0, this.prevW - dt / FADE_OUT_SEC);
-      wo = Math.min(this.prevW, 1 - wa);
-      if (this.prevW <= 0) { this.prevGroup.stop(); this.prevGroup = undefined; wo = 0; }
-      else this.prevGroup.weight = wo;
+      if (g) {
+        // Ação -> ação: a anterior cede exatamente o que a nova ainda não ocupou.
+        wo = 1 - wa;
+        if (this.wIn >= 1) { this.prevGroup.stop(); this.prevGroup = undefined; wo = 0; }
+      } else {
+        this.prevW = Math.max(0, this.prevW - dt / FADE_OUT_SEC);
+        wo = this.prevW;
+        if (wo <= 0) { this.prevGroup.stop(); this.prevGroup = undefined; }
+      }
+      if (this.prevGroup) this.prevGroup.weight = wo;
     }
     if (g) g.weight = wa;
-    this.blendLocomotion(dt, grounded ? speed : 0, Math.max(0, 1 - wa - wo));
+    const scale = Math.max(0, 1 - wa - wo);
+    if (g || this.prevGroup) {
+      for (const n of ["idle", "walk", "run", "sprint"] as const) {
+        const lg = this.clips[n];
+        if (lg) lg.weight = n === this.locoDom ? scale : 0;
+        this.w[n] = n === this.locoDom ? 1 : 0;
+      }
+      return;
+    }
+    this.blendLocomotion(dt, grounded ? speed : 0, 1);
   }
 
   /** A brasa da mão pulsa de leve (e a luz-fagulha, que é filha dela, acompanha a posição). */

@@ -40,11 +40,12 @@ export const HERO = {
   // Ataque leve: snappy (responsivo), comprometido, baixo dano. Combo de até 3 (M2.2).
   // Feel (2026-11): o instante de contato do CLIPE (lâmina cruzando a frente) cai no começo da
   // janela ativa (ver heroModel.ts, PLANO). Ciclo 0,38 s (antes 0,40). Dano 10 -> 9 compensa o
-  // ciclo e o hit stop mais curtos (DPS do combo de 3 ~ +/-2% do anterior).
-  light: { startup: 0.1, active: 0.05, recovery: 0.23, damage: 9, knockback: 2, hitStopFrames: 3, poise: 10, cancelAt: 0.3, lunge: 0.35 } as AttackTuning,
+  // ciclo e o hit stop mais curtos (DPS do combo de 3 ~ -1,5% do anterior); poise 10 -> 9 e 14 -> 13
+  // mantêm o poise por segundo.
+  light: { startup: 0.1, active: 0.05, recovery: 0.23, damage: 9, knockback: 2, hitStopFrames: 3, poise: 9, cancelAt: 0.3, lunge: 0.35 } as AttackTuning,
   // 3a do combo: empurrão (knockback forte) e mais peso (spec-combate §3 "3a com empurrão").
   // Cleave: a finalizadora respinga nos inimigos próximos (resposta de horda do moveset normal).
-  lightFinisher: { startup: 0.14, active: 0.06, recovery: 0.3, damage: 11, knockback: 6, hitStopFrames: 6, poise: 14, cleave: 2.4, cancelAt: 0.4, lunge: 0.5 } as AttackTuning,
+  lightFinisher: { startup: 0.14, active: 0.06, recovery: 0.3, damage: 11, knockback: 6, hitStopFrames: 6, poise: 13, cleave: 2.4, cancelAt: 0.4, lunge: 0.5 } as AttackTuning,
   // Janela para encadear o combo: golpear de novo até aqui após o anterior continua a cadeia.
   comboResetSec: 0.45,
 
