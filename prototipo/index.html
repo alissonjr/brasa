@@ -12,8 +12,7 @@
         width: 100%;
         height: 100%;
         overflow: hidden;
-        background: #0a0e14;
-        font-family: system-ui, sans-serif;
+        background: #06080c;
       }
       #renderCanvas {
         width: 100%;
@@ -22,27 +21,12 @@
         touch-action: none;
         outline: none;
       }
-      #hud {
-        position: fixed;
-        top: 12px;
-        left: 12px;
-        padding: 10px 14px;
-        background: rgba(12, 17, 24, 0.6);
-        color: #cdd6e0;
-        font-size: 13px;
-        line-height: 1.6;
-        border-radius: 6px;
-        border: 1px solid rgba(205, 214, 224, 0.2);
-        pointer-events: none;
-        user-select: none;
-      }
-      #hud b {
-        color: #ffb060;
-      }
+      /* Contador de quadros: só com ?perf (dev). */
       #fps {
+        display: none;
         position: fixed;
+        right: 12px;
         bottom: 12px;
-        left: 12px;
         padding: 6px 10px;
         background: rgba(12, 17, 24, 0.6);
         color: #ffb060;
@@ -52,23 +36,69 @@
         pointer-events: none;
         user-select: none;
       }
+      body.perf #fps {
+        display: block;
+      }
+
+      /* Tela de carregamento: as mesmas cores e fontes do design system (tokens.css), com
+         valores de reserva porque o CSS do jogo chega junto com o JavaScript. */
       #loading {
         position: fixed;
         inset: 0;
+        z-index: 10;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
-        color: #cdd6e0;
-        font-size: 16px;
-        background: #0a0e14;
-        z-index: 10;
+        gap: 18px;
+        padding: 24px;
+        box-sizing: border-box;
+        text-align: center;
+        background: radial-gradient(ellipse at 50% 62%, rgba(217, 78, 10, 0.1), transparent 60%), var(--ink-950, #06080c);
       }
-      /* O atributo `hidden` precisa vencer o `display: flex` acima (mais
-         específico que a regra padrão [hidden] { display: none } do navegador). */
-      /* Ajuda antiga e contador de quadros: ficam fora do jogo (o contador volta com ?perf). */
-      #hud { display: none !important; }
-      #fps { display: none !important; }
-      body.perf #fps { display: block !important; left: auto; right: 12px; bottom: 12px; }
+      #loading .ld-mark {
+        font-family: var(--font-display, "Cinzel", Georgia, serif);
+        font-weight: 700;
+        font-size: clamp(46px, 14vw, 84px);
+        letter-spacing: 0.14em;
+        line-height: 1;
+        background: linear-gradient(180deg, var(--gold-100, #fff1cf) 0%, var(--gold-300, #f2c46d) 46%, var(--ember-500, #ff6a13) 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        filter: drop-shadow(0 0 24px rgba(255, 138, 44, 0.35)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.75));
+      }
+      /* Uma brasa que pulsa, a assinatura do título. */
+      #loading .ld-ember {
+        width: 12px;
+        height: 12px;
+        transform: rotate(45deg);
+        background: linear-gradient(0deg, var(--ember-500, #ff6a13), var(--ember-200, #ffd9a8));
+        box-shadow: 0 0 22px rgba(255, 138, 44, 0.55);
+        animation: ld-pulse 1.8s ease-in-out infinite;
+      }
+      @keyframes ld-pulse {
+        0%, 100% { opacity: 0.55; box-shadow: 0 0 14px rgba(255, 138, 44, 0.35); }
+        50% { opacity: 1; box-shadow: 0 0 34px rgba(255, 138, 44, 0.75); }
+      }
+      #loading .ld-text {
+        margin: 0;
+        max-width: 80vw;
+        font-family: var(--font-text, "EB Garamond", Georgia, serif);
+        font-style: italic;
+        font-size: var(--fs-md, 17px);
+        color: var(--text-mid, #bdb299);
+      }
+      #loading.ld-error .ld-text {
+        color: var(--blood-400, #d9473a);
+        font-style: normal;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #loading .ld-ember {
+          animation: none;
+        }
+      }
+      /* O atributo `hidden` precisa vencer o `display: flex` acima. */
       [hidden] {
         display: none !important;
       }
@@ -76,15 +106,16 @@
   </head>
   <body>
     <canvas id="renderCanvas"></canvas>
-    <div id="loading">Carregando física (Havok)...</div>
-    <div id="hud" hidden>
-      <div><b>Clique</b> na tela para travar o mouse</div>
-      <div><b>WASD</b> mover · <b>Shift</b> correr · <b>Espaço</b> pular</div>
-      <div><b>Mouse</b> girar câmera · <b>Scroll</b> zoom</div>
-      <div><b>Esc</b> ou botão <b>Menu</b> (canto superior direito): pausar</div>
+    <div id="loading" role="status" aria-live="polite">
+      <div class="ld-mark">Brasa</div>
+      <div class="ld-ember" aria-hidden="true"></div>
+      <p class="ld-text" id="loading-text">Carregando...</p>
     </div>
     <div id="fps" hidden>-- fps</div>
-    <script>if (/[?&]perf\b/.test(location.search)) document.body.classList.add("perf");</script>
+    <script>
+      if (/[?&]perf\b/.test(location.search)) document.body.classList.add("perf");
+      if (!/^pt/i.test(navigator.language || "pt")) document.getElementById("loading-text").textContent = "Loading...";
+    </script>
     <script type="module" src="/src/app/main.ts"></script>
   </body>
 </html>

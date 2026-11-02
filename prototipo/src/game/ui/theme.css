@@ -5,51 +5,9 @@
    contra laranja-quente (Brasa/braseiro/fagulha). Os NOMES das variáveis são herdados;
    os VALORES agora são a paleta de Brasa, então toda a UI acompanha sem reescrever regras. */
 
-:root {
-  /* Paleta fria-base de Brasa (direcao-de-arte 2.1 / spec-ui-hud-ux 8): a UI nasce em
-     pedra-cripta fria; a BRASA (laranja) é reservada ao fogo e ao item em foco (a
-     "gangorra"). Os nomes de variável são herdados; os valores agora são frios, então
-     toda a UI reage sem reescrever regra a regra. */
-
-  /* Frio: superfícies, pedra, morte */
-  --cripta: #0e1a2b; /* fundo mais profundo (poço) */
-  --ardosia: #1f3247; /* pedra do painel */
-  --aco-frio: #3e5c7e; /* borda/realce frio */
-  --ciano: #5fb7c9; /* ameaça dos mortos (nunca acionável-positivo) */
-
-  /* Quente: SÓ fogo, fagulha e foco (a brasa reservada) */
-  --brasa-nucleo: #ff7a1a; /* o fogo, prompt de acender */
-  --ambar: #ffa63d; /* halo/fagulha cheia */
-  --ouro-fagulha: #ffd27a; /* ponta da chama, realce de foco */
-
-  /* Materiais antigos */
-  --bronze-patina: #7a5a2e; /* bronze FRIO, apagado (moldura, detalhe) */
-  --bronze-aquecido: #c98a3a; /* bronze que pegou a luz da brasa (só no quente) */
-  --osso: #d8cfb8; /* texto/título claro sobre pedra */
-  --vermelho-tico: #c8401c;
-
-  /* Aliases legados: mantêm as regras existentes vivas, agora FRIAS. */
-  --areia: #cdd6e0; /* pedra clara fria */
-  --pergaminho: #d7dee6;
-  --ouro: var(--ambar); /* "destaque quente" => brasa, só no foco/fogo */
-  --ouro-claro: var(--ouro-fagulha);
-  --bronze: var(--bronze-patina); /* moldura fria apagada */
-  --bronze-claro: var(--bronze-aquecido);
-  --rotulo: #8ea4ba; /* rótulo de seção: aço frio (era bronze quente) */
-  --texto: #d6dee8;
-  --texto-suave: #8c9aa8;
-  --borda: #243343; /* pedra escura fria */
-  --borda-clara: #3a5170; /* pedra média (aço apagado) */
-  --painel-1: #1a2a3d; /* pedra do painel (topo) */
-  --painel-2: #122032; /* pedra do painel (meio) */
-  --painel-3: #0a131f; /* o escuro do poço (base) */
-  --perigo: #9a4334;
-  --perigo-borda: #b7322e;
-}
-
 .ui-root {
-  font-family: "EB Garamond", Georgia, serif;
-  color: var(--texto);
+  font-family: var(--font-text);
+  color: var(--text-hi);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -63,8 +21,6 @@
   /* Fora do .ui-root (derrota e braseiro são anexados ao body): garante fonte e cor. */
   font-family: var(--font-text);
   color: var(--text-hi);
-  /* Texto de apoio legível: nas telas de menu o "suave" é o texto de leitura (text-mid). */
-  --texto-suave: var(--text-mid);
   background: radial-gradient(
     ellipse at 50% 38%,
     color-mix(in srgb, var(--ink-800) 40%, transparent),
@@ -234,12 +190,6 @@
 .opt-panels { display: flex; flex-direction: column; min-height: 168px; padding-top: var(--sp-3); }
 .opt-panel { display: flex; flex-direction: column; gap: var(--sp-3); }
 .opt-panel[hidden] { display: none; }
-.opt-note {
-  margin: calc(-1 * var(--sp-1)) 0 var(--sp-1);
-  font-size: var(--fs-sm);
-  font-style: italic;
-  color: var(--text-mid);
-}
 
 /* --- Acessibilidade: reduzir movimento --- */
 html.reduce-motion *,
@@ -288,44 +238,41 @@ html.high-contrast .ds-btn {
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 13px;
-  letter-spacing: 1px;
-  color: var(--osso);
-  padding: 8px 14px;
-  background: linear-gradient(180deg, #223850 0%, #16273a 100%);
-  border: 1px solid var(--borda-clara);
-  border-radius: 4px;
-  box-shadow: inset 0 1px 0 rgba(180, 205, 230, 0.12), 0 1px 3px rgba(0, 0, 0, 0.45);
-  transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-4);
+  height: 36px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-xs);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--gold-200);
+  background: linear-gradient(180deg, var(--ink-700), var(--ink-850));
+  border: var(--line) solid var(--gold-600);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(242, 196, 109, 0.14);
+  transition: color var(--dur-base) ease, border-color var(--dur-base) ease, background var(--dur-base) ease, box-shadow var(--dur-base) ease;
 }
-.hud-pause-btn:hover {
-  background: linear-gradient(180deg, #3a3526 0%, #2a2820 100%);
-  border-color: var(--ambar);
-  color: var(--ouro-fagulha);
-}
-.hud-pause-btn .glyph {
-  font-size: 15px;
-  line-height: 1;
-}
+.hud-pause-btn:hover { color: var(--gold-100); border-color: var(--gold-300); background: linear-gradient(180deg, var(--ink-600), var(--ink-800)); box-shadow: var(--shadow-2), var(--glow-gold); }
+.hud-pause-btn:focus-visible { outline: 2px solid var(--ember-300); outline-offset: 3px; }
+.hud-pause-btn .glyph { font-size: var(--fs-md); line-height: 1; }
 
 /* --- Indicador de autosave (HUD) --- */
 .autosave-indicator {
   position: absolute;
-  bottom: 16px;
+  bottom: var(--sp-4);
   left: 50%;
-  padding: 7px 14px;
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 12px;
-  letter-spacing: 1px;
-  color: var(--ouro);
-  background: rgba(20, 14, 8, 0.78);
-  border: 1px solid rgba(216, 169, 59, 0.3);
-  border-radius: 4px;
+  padding: var(--sp-2) var(--sp-4);
+  font-family: var(--font-display);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.12em;
+  color: var(--gold-200);
+  background: rgba(10, 13, 19, 0.86);
+  border: var(--line) solid var(--gold-700);
+  border-radius: 999px;
   opacity: 0;
   transform: translate(-50%, 6px);
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  transition: opacity var(--dur-slow) ease, transform var(--dur-slow) ease;
   pointer-events: none;
 }
 .autosave-indicator.show {
@@ -567,12 +514,12 @@ html.ui-open .brasa-bar { visibility: hidden; }
   align-items: center;
   gap: 1px;
   min-width: 240px;
-  padding: 10px 22px;
+  padding: var(--sp-3) var(--sp-5);
   text-align: center;
-  background: linear-gradient(180deg, rgba(58, 42, 22, 0.96), rgba(28, 19, 9, 0.96));
-  border: 1px solid var(--bronze-claro);
-  border-radius: 6px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(246, 227, 176, 0.18);
+  background: linear-gradient(180deg, rgba(28, 34, 48, 0.96), rgba(10, 13, 19, 0.96));
+  border: var(--line) solid var(--gold-500);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-3), var(--glow-gold);
   opacity: 0;
   transform: translateY(-10px);
   transition: opacity 0.35s ease, transform 0.35s ease;
@@ -582,20 +529,20 @@ html.ui-open .brasa-bar { visibility: hidden; }
   transform: translateY(0);
 }
 .toast-label {
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 10px;
-  letter-spacing: 2px;
+  font-family: var(--font-display);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.3em;
   text-transform: uppercase;
-  color: var(--bronze-claro);
+  color: var(--gold-400);
 }
 .toast-title {
-  font-family: "Cinzel", Georgia, serif;
-  font-size: 17px;
-  color: var(--ouro-claro);
+  font-family: var(--font-display);
+  font-size: var(--fs-lg);
+  color: var(--gold-100);
 }
 .toast-desc {
-  font-size: 14px;
-  color: var(--texto-suave);
+  font-size: var(--fs-sm);
+  color: var(--text-mid);
 }
 
 /* --- Lista de conquistas (a linha vem de .ds-row) --- */
@@ -726,13 +673,6 @@ html.ui-open .brasa-bar { visibility: hidden; }
   /* Modelo não carregou: esconde o nicho vazio em vez de mostrar caixa preta. */
   display: none;
 }
-.model-stage-hint {
-  font-size: 12px;
-  letter-spacing: 0.5px;
-  color: var(--texto-suave);
-  opacity: 0.7;
-  text-transform: uppercase;
-}
 html.reduce-motion .model-stage-canvas {
   /* Sem auto-rotação implícita aqui (o JS respeita), mas suaviza o fade. */
   transition: none;
@@ -756,82 +696,6 @@ html.reduce-motion .model-stage-canvas {
   bottom: 6%;
   left: 22%;
   right: 22%;
-}
-
-/* --- Nova Jornada (criação de personagem) --- */
-.create-panel {
-  max-width: min(94vw, 560px);
-}
-/* Criação com vitrine 3D: nicho à esquerda (fixo), formulário à direita. */
-.create-panel-spread {
-  max-width: min(95vw, 920px);
-}
-.create-spread {
-  display: grid;
-  grid-template-columns: minmax(210px, 280px) 1fr;
-  gap: 24px;
-  align-items: start;
-  margin: 4px 0;
-}
-.create-stage-col {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  position: sticky;
-  top: 0;
-}
-.create-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-width: 0;
-}
-@media (max-width: 640px) {
-  .create-spread {
-    grid-template-columns: 1fr;
-  }
-  .create-stage-col {
-    position: static;
-  }
-}
-.swatch-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.swatch {
-  appearance: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  font-family: "EB Garamond", Georgia, serif;
-  font-size: 14px;
-  color: var(--texto);
-  background: linear-gradient(180deg, rgba(246, 227, 176, 0.05), rgba(0, 0, 0, 0.14));
-  border: 1px solid var(--borda);
-  border-radius: 4px;
-  transition: border-color 0.14s ease, background 0.14s ease;
-}
-.swatch:hover {
-  border-color: var(--ambar);
-}
-.swatch.selected {
-  border-color: var(--ouro);
-  background: linear-gradient(180deg, rgba(231, 189, 113, 0.12), rgba(0, 0, 0, 0.12));
-}
-.swatch:focus-visible {
-  outline: 2px solid var(--ouro);
-  outline-offset: 2px;
-}
-.swatch-dot {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.4);
-  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.3);
 }
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -1016,167 +880,6 @@ html.reduce-motion .title-cine-name,
 html.reduce-motion .title-cine-opt { animation: none; }
 html.reduce-motion .title-cine-opt.primary { animation: none; }
 
-.menu-backdrop.cinematic {
-  /* Base escura de poço-cripta. O diorama 3D vivo (a Acendedora girando) entra por
-     cima via <canvas>; este gradiente é o que aparece atrás do painel à esquerda. */
-  background:
-    radial-gradient(ellipse at 28% 40%, rgba(20, 28, 42, 0.6), rgba(4, 6, 10, 0.92) 78%),
-    linear-gradient(180deg, #070a10 0%, #0a0e16 55%, #05070c 100%);
-}
-/* Tela-título com diorama: painel à esquerda, a Acendedora ocupa a direita. */
-.menu-backdrop.title-screen {
-  justify-content: flex-start;
-  padding-left: clamp(24px, 7vw, 120px);
-}
-/* O diorama de fundo: ocupa a porção direita da tela, atrás do painel. */
-.title-screen .model-stage-backdrop {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  left: auto;
-  width: 62%;
-  z-index: 0;
-}
-/* Scrim: escurece a esquerda (legibilidade do painel) e funde o diorama ao fundo. */
-.title-scrim {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  background:
-    linear-gradient(90deg, rgba(5, 7, 12, 0.92) 0%, rgba(5, 7, 12, 0.5) 34%, rgba(5, 7, 12, 0) 58%),
-    radial-gradient(ellipse at 70% 50%, transparent 46%, rgba(4, 6, 10, 0.5) 100%);
-}
-.title-screen .menu-panel.cinematic {
-  position: relative;
-  z-index: 2;
-  margin: 0;
-}
-/* Em telas estreitas, o diorama vira fundo inteiro e o painel volta ao centro. */
-@media (max-width: 720px) {
-  .menu-backdrop.title-screen {
-    justify-content: center;
-    padding-left: 0;
-  }
-  .title-screen .model-stage-backdrop {
-    width: 100%;
-  }
-  .title-scrim {
-    background: radial-gradient(ellipse at 50% 42%, transparent 30%, rgba(4, 6, 10, 0.82) 86%);
-  }
-}
-/* Feixe de luz lento atrás do título (god rays sutis). */
-.menu-backdrop.cinematic::before {
-  content: "";
-  position: absolute;
-  inset: -25%;
-  background: conic-gradient(from 90deg at 50% 30%,
-    transparent 0deg, rgba(246, 227, 176, 0.05) 16deg, transparent 34deg,
-    transparent 180deg, rgba(246, 227, 176, 0.045) 200deg, transparent 220deg);
-  animation: titleRays 48s linear infinite;
-  pointer-events: none;
-}
-/* Tabuleta da tela-título: igual à de pausa, com padding e sombra reforçados. */
-.menu-panel.cinematic {
-  max-width: min(92vw, 460px);
-  padding: 30px 40px 36px;
-  gap: 12px;
-  box-shadow:
-    0 30px 80px rgba(0, 0, 0, 0.72),
-    0 2px 0 rgba(0, 0, 0, 0.5),
-    inset 0 0 0 1px rgba(0, 0, 0, 0.45),
-    inset 0 1px 0 rgba(246, 227, 176, 0.14),
-    inset 0 0 60px rgba(0, 0, 0, 0.4);
-}
-/* Cantoneiras de bronze mais marcadas na tela-título. */
-.menu-panel.cinematic::before,
-.menu-panel.cinematic::after {
-  width: 24px;
-  height: 24px;
-  opacity: 0.85;
-  border-color: var(--bronze-claro);
-}
-/* Emblema (selo solar) acima do título. */
-.title-emblem {
-  width: 54px;
-  height: 54px;
-  margin: 2px auto -2px;
-  color: var(--ouro);
-  filter: drop-shadow(0 0 10px rgba(231, 189, 113, 0.35));
-}
-.title-emblem svg {
-  width: 100%;
-  height: 100%;
-}
-.cinematic .menu-title {
-  font-size: clamp(32px, 5.5vw, 44px);
-  letter-spacing: 3px;
-  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.6));
-}
-.cinematic .menu-subtitle {
-  font-size: 18px;
-  margin: -2px 0 12px;
-}
-/* Entrada encadeada: os itens sobem em sequência. */
-.menu-panel.cinematic > .btn {
-  animation: riseIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-.menu-panel.cinematic > .btn:nth-of-type(1) { animation-delay: 0.1s; }
-.menu-panel.cinematic > .btn:nth-of-type(2) { animation-delay: 0.16s; }
-.menu-panel.cinematic > .btn:nth-of-type(3) { animation-delay: 0.22s; }
-.menu-panel.cinematic > .btn:nth-of-type(4) { animation-delay: 0.28s; }
-.menu-panel.cinematic > .btn:nth-of-type(5) { animation-delay: 0.34s; }
-/* CTA sobe na entrada e mantém o pulso dourado em seguida. */
-.menu-panel.cinematic > .btn-primary {
-  animation: riseIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both, ctaGlow 3.2s ease-in-out 0.6s infinite;
-}
-@keyframes riseIn {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: none; }
-}
-/* Divisória ornamental (filete de bronze com losango de ouro ao centro). */
-.menu-divider {
-  position: relative;
-  width: 62%;
-  height: 14px;
-  margin: 0 auto 6px;
-  align-self: center;
-}
-.menu-divider::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--bronze) 22%, var(--bronze) 78%, transparent);
-}
-.menu-divider::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 8px;
-  height: 8px;
-  transform: translate(-50%, -50%) rotate(45deg);
-  background: linear-gradient(135deg, var(--ouro-claro), var(--bronze-claro));
-  box-shadow: 0 0 7px rgba(231, 189, 113, 0.5), inset 0 0 0 1px rgba(0, 0, 0, 0.2);
-}
-/* Versículo de rodapé (atmosférico). */
-.menu-verse {
-  margin: 16px 0 0;
-  font-size: 14px;
-  font-style: italic;
-  text-align: center;
-  letter-spacing: 0.4px;
-  color: var(--texto-suave);
-}
-
-@keyframes titleRays {
-  to { transform: rotate(360deg); }
-}
-
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -1245,65 +948,6 @@ html.reduce-motion .title-cine-opt.primary { animation: none; }
   .cc-hero-hint { display: none; }
 }
 
-/* --- Ponte legada: o tema antigo passa a ler os tokens do design system (preto e ouro). --- */
-:root {
-  --cripta: var(--ink-900);
-  --ardosia: var(--ink-700);
-  --aco-frio: var(--ink-500);
-  --ciano: var(--frost-300);
-  --brasa-nucleo: var(--ember-500);
-  --ambar: var(--ember-400);
-  --ouro-fagulha: var(--gold-200);
-  --bronze-patina: var(--gold-600);
-  --bronze-aquecido: var(--gold-400);
-  --osso: var(--text-hi);
-  --areia: var(--text-mid);
-  --pergaminho: var(--text-hi);
-  --ouro: var(--gold-300);
-  --ouro-claro: var(--gold-200);
-  --bronze: var(--gold-600);
-  --bronze-claro: var(--gold-400);
-  --rotulo: var(--gold-500);
-  --texto: var(--text-hi);
-  --texto-suave: var(--text-lo);
-  --borda: var(--ink-600);
-  --borda-clara: var(--ink-500);
-  --painel-1: var(--ink-700);
-  --painel-2: var(--ink-800);
-  --painel-3: var(--ink-900);
-  --perigo: var(--blood-600);
-  --perigo-borda: var(--blood-400);
-}
-
-/* --- HUD de jogo no design system: chip, bússola, objetivo, menu, avisos --- */
-.hud-pause-btn {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  padding: 0 var(--sp-4);
-  height: 36px;
-  font-family: var(--font-display);
-  font-weight: 700;
-  font-size: var(--fs-xs);
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: var(--gold-200);
-  background: linear-gradient(180deg, var(--ink-700), var(--ink-850));
-  border: 1px solid var(--gold-600);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-1), inset 0 1px 0 rgba(242, 196, 109, 0.14);
-}
-.hud-pause-btn:hover { color: var(--gold-100); border-color: var(--gold-300); background: linear-gradient(180deg, var(--ink-600), var(--ink-800)); box-shadow: var(--shadow-2), var(--glow-gold); }
-.hud-toast {
-  background: linear-gradient(180deg, rgba(28, 34, 48, 0.96), rgba(10, 13, 19, 0.96));
-  border: 1px solid var(--gold-500);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-3), var(--glow-gold);
-}
-.toast-label { color: var(--gold-400); letter-spacing: 0.3em; }
-.toast-title { font-size: var(--fs-lg); color: var(--gold-100); }
-.toast-desc { color: var(--text-mid); }
-.autosave-indicator { color: var(--gold-200); background: rgba(10, 13, 19, 0.86); border-color: var(--gold-700); border-radius: 999px; }
 .brasa-bar.ready { animation: ds-breathe 1.2s ease-in-out infinite; }
 
 /* --- Tela-título no design system: logotipo de ouro e brasa, itens com losango --- */

@@ -95,7 +95,6 @@ const newSeed = (): number => Math.floor(Math.random() * 0x7fffffff) + 1;
 async function main(): Promise<void> {
   const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
   const loading = document.getElementById("loading")!;
-  const hud = document.getElementById("hud")!;
   const fpsEl = document.getElementById("fps")!;
   // Celular/tablet sem teclado: só o aviso, sem carregar o motor. Janela estreita: o aviso
   // cobre o jogo e some quando a janela alarga.
@@ -105,7 +104,7 @@ async function main(): Promise<void> {
   }
   const stage = (msg: string) => {
     console.log(`[app] ${msg}`);
-    loading.textContent = msg;
+    document.getElementById("loading-text")!.textContent = msg;
   };
 
   // --- ENGINE ---
@@ -216,7 +215,7 @@ async function main(): Promise<void> {
       enterRoom: (i: number) => enterRoom(i), // DEV: pula para o andar i (medição de perf / capturas)
       room: () => (currentRoom ? { brazier: { x: currentRoom.brazier.x, z: currentRoom.brazier.z }, exit: currentRoom.exit } : null),
       clear: () => combat.clearEnemies(), // DEV: limpa a sala (libera o relicário)
-      die: () => hero.combat.health.damage(99999), // DEV: derrota
+      die: () => platform.events.emit("hero:died", {}), // DEV: derrota
       win: () => { descentDone = true; }, // DEV: vitória (abre a tela de fim)
     };
   }
@@ -911,7 +910,6 @@ async function main(): Promise<void> {
   function startGame(): void {
     gameActive = true;
     pausedOpen = false;
-    hud.hidden = false;
     pauseBtn.style.display = "";
     gameHud.setVisible(true);
     input.clearPressed();
@@ -938,7 +936,6 @@ async function main(): Promise<void> {
     pauseBtn.style.display = "none";
     gameHud.setVisible(false);
     document.exitPointerLock();
-    hud.hidden = true;
     void doAutosave();
     stopMusic(); // a trilha da descida só toca em jogo
     ui.replaceAll(new MainMenuScreen(ctx));
@@ -1211,8 +1208,10 @@ async function main(): Promise<void> {
 main().catch((err) => {
   console.error(err);
   const loading = document.getElementById("loading");
-  if (loading) {
+  const text = document.getElementById("loading-text");
+  if (loading && text) {
     const msg = err instanceof Error ? err.message : String(err);
-    loading.textContent = F("erroIniciar", { msg });
+    text.textContent = F("erroIniciar", { msg });
+    loading.classList.add("ld-error");
   }
 });
