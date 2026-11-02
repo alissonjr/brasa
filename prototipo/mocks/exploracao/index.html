@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brasa - Exploração (mock de leitura)</title>
+<!-- MOCK DE DECISÃO, não é código do jogo. Mostra o que as specs de exploração prometem:
+     ícones das saídas, leitura de livro, Bancada, HUD com Ferida e pips de Instabilidade.
+     Usa só os tokens e componentes do design system (src/game/ui/ds). Rodar com `npm run dev`
+     e abrir /mocks/exploracao/index.html. Teste de acessibilidade embutido (cinza, sem movimento). -->
+<link rel="stylesheet" href="/src/game/ui/ds/tokens.css">
+<link rel="stylesheet" href="/src/game/ui/ds/components.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(ellipse at 50% -10%, #1a2030 0%, var(--ink-950) 55%); color: var(--text-mid); font-family: var(--font-text); font-size: var(--fs-md); }
+  body.gray .stage-wrap { filter: grayscale(1) contrast(1.05); }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: var(--sp-6) var(--sp-4) 96px; }
+  h1, h2, h3 { font-family: var(--font-display); color: var(--gold-200); letter-spacing: var(--ls-title); margin: 0; }
+  h1 { font-size: var(--fs-2xl); }
+  h2 { font-size: var(--fs-lg); margin-top: var(--sp-7); }
+  p.lead { margin: var(--sp-2) 0 var(--sp-4); color: var(--text-mid); max-width: 70ch; }
+  .tools { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin: var(--sp-4) 0; }
+  .tog { font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text-mid); background: var(--ink-800); border: 1px solid var(--ink-500); border-radius: var(--radius-md); padding: var(--sp-2) var(--sp-3); cursor: pointer; }
+  .tog[aria-pressed="true"] { color: var(--ink-950); background: var(--metal-gold); border-color: var(--gold-300); }
+  .tog:focus-visible, .door:focus-visible, .act:focus-visible, .ped:focus-visible { outline: 2px solid var(--ember-300); outline-offset: 3px; }
+  .grid { display: grid; gap: var(--sp-4); }
+  .g4 { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .panel { background: var(--surface-panel); border: 1px solid var(--gold-700); border-radius: var(--radius-lg); padding: var(--sp-5); box-shadow: var(--shadow-2); }
+  .cap { font-family: var(--font-display); font-size: var(--fs-2xs); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text-lo); }
+
+  /* ---------- Portas ---------- */
+  .door { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--sp-3); padding: var(--sp-5) var(--sp-3) var(--sp-4); background: var(--surface-card); border: 1px solid var(--ink-500); border-radius: var(--radius-lg); color: var(--c, var(--gold-300)); cursor: pointer; font: inherit; user-select: none; touch-action: none; }
+  .door.locked { filter: grayscale(0.9) brightness(0.6); cursor: not-allowed; }
+  .door .frame { position: relative; width: 118px; height: 132px; display: grid; place-items: center; border: 2px solid currentColor; box-shadow: var(--glow); }
+  .door.arco .frame { border-radius: 60px 60px 6px 6px; }
+  .door.anel .frame { height: 118px; margin: 7px 0; border-radius: 50%; }
+  .door.estante .frame::after, .door.bancada .frame::after { content: ""; position: absolute; left: 12px; right: 12px; bottom: 10px; height: 0; border-top: 2px solid currentColor; opacity: .55; }
+  .door.bancada .frame::after { border-top-style: dotted; border-top-width: 4px; }
+  .door.fenda .frame { border-radius: 4px; border-style: dashed; height: 118px; margin: 7px 0; }
+  .door .frame svg { width: 54px; height: 54px; filter: drop-shadow(0 0 8px currentColor); }
+  .door .ring { position: absolute; inset: -9px; border-radius: inherit; background: conic-gradient(currentColor calc(var(--p, 0) * 1turn), transparent 0); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px)); mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px)); opacity: .9; }
+  .door.anel .ring { inset: -9px; border-radius: 50%; }
+  .door .name { font-family: var(--font-display); letter-spacing: var(--ls-title); color: var(--text-hi); font-size: var(--fs-sm); }
+  .door .promise { font-size: var(--fs-sm); color: var(--text-mid); text-align: center; min-height: 2.6em; }
+  .door .tag { font-family: var(--font-display); font-size: var(--fs-2xs); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--ink-950); background: var(--c); border-radius: var(--radius-sm); padding: 2px 8px; }
+  .door .tag span { color: var(--ink-950); }
+  .door:not(.locked) .frame { animation: pulse 2.6s ease-in-out infinite; }
+  .door.committed .frame { animation: none; box-shadow: var(--glow-gold); background: rgba(242, 196, 109, 0.12); }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 10px -2px currentColor; } 50% { box-shadow: 0 0 26px 2px currentColor; } }
+  .c-brasa { --c: var(--ember-400); } .c-estante { --c: var(--gold-300); } .c-bancada { --c: var(--life-400); } .c-fenda { --c: var(--frost-300); }
+
+  /* ---------- Estante ---------- */
+  .ped { display: flex; flex-direction: column; gap: var(--sp-2); align-items: center; text-align: center; padding: var(--sp-4); background: var(--surface-card); border: 1px solid var(--ink-500); border-radius: var(--radius-md); color: var(--c); cursor: pointer; font: inherit; position: relative; transition: opacity var(--dur-slow), filter var(--dur-slow); touch-action: none; user-select: none; }
+  .ped.off { opacity: .35; filter: grayscale(1); cursor: default; }
+  .ped .flame { position: absolute; top: 8px; right: 12px; width: 8px; height: 14px; border-radius: 50% 50% 40% 40%; background: radial-gradient(circle at 50% 70%, #fff6d0, var(--ember-400) 60%, transparent 70%); animation: flick .9s ease-in-out infinite alternate; }
+  .ped.off .flame { display: none; }
+  @keyframes flick { from { transform: scale(1, 1) rotate(-3deg); } to { transform: scale(.85, 1.15) rotate(4deg); } }
+  .ped .t { font-family: var(--font-display); color: var(--text-hi); font-size: var(--fs-sm); letter-spacing: var(--ls-title); }
+  .ped .pips { display: flex; gap: 6px; }
+  .pip { width: 14px; height: 14px; border: 2px solid currentColor; transform: rotate(45deg); border-radius: 2px; }
+  .pip.on { background: currentColor; box-shadow: 0 0 8px currentColor; }
+  .readring { height: 6px; width: 100%; background: var(--ink-950); border: 1px solid var(--gold-700); border-radius: 3px; overflow: hidden; }
+  .readring i { display: block; height: 100%; width: calc(var(--p, 0) * 100%); background: var(--metal-gold); }
+  .relato { min-height: 5.2em; font-style: italic; color: var(--gold-100); border-left: 2px solid var(--gold-500); padding-left: var(--sp-3); margin-top: var(--sp-3); }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-display); letter-spacing: .08em; color: var(--text-hi); background: var(--ink-850); border: 1px solid var(--gold-700); border-radius: 999px; padding: 4px 12px 4px 8px; font-size: var(--fs-sm); }
+  .chip svg { width: 18px; height: 18px; color: var(--gold-300); }
+  .chip.off { opacity: .4; }
+
+  /* ---------- Bancada ---------- */
+  .pavios { display: flex; gap: var(--sp-3); align-items: flex-end; }
+  .pavio { width: 18px; text-align: center; color: var(--gold-300); }
+  .pavio .fl { height: 18px; margin: 0 auto -2px; width: 10px; border-radius: 50% 50% 40% 40%; background: radial-gradient(circle at 50% 70%, #fff6d0, var(--ember-400) 60%, transparent 70%); animation: flick .8s ease-in-out infinite alternate; }
+  .pavio .st { height: 28px; background: linear-gradient(180deg, #f3e8d0, #bdb299); border-radius: 2px; }
+  .pavio.out .fl { opacity: 0; animation: none; } .pavio.out .st { height: 14px; filter: brightness(.6); }
+  .act { display: grid; grid-template-columns: 40px 1fr auto; gap: var(--sp-3); align-items: center; width: 100%; text-align: left; font: inherit; color: var(--text-mid); padding: var(--sp-3); margin-bottom: var(--sp-2); background: var(--surface-card); border: 1px solid var(--ink-500); border-radius: var(--radius-md); cursor: pointer; }
+  .act:hover:not(:disabled) { border-color: var(--gold-500); }
+  .act:disabled { opacity: .4; cursor: not-allowed; }
+  .act strong { font-family: var(--font-display); font-size: var(--fs-sm); color: var(--text-hi); letter-spacing: var(--ls-title); display: block; }
+  .act svg { width: 32px; height: 32px; color: var(--c, var(--gold-300)); }
+  .cost { font-size: var(--fs-xs); color: var(--gold-200); display: flex; gap: 8px; align-items: center; }
+  .cost svg { width: 16px; height: 16px; }
+
+  /* ---------- HUD ---------- */
+  .hud { display: grid; gap: var(--sp-4); }
+  .hpbar { position: relative; height: 26px; background: var(--ink-950); border: 1px solid var(--gold-700); border-radius: var(--radius-sm); padding: 3px; box-shadow: inset 0 2px 4px rgba(0,0,0,.7); }
+  .hpbar .full { position: relative; height: 100%; width: 100%; }
+  .hpbar .fill { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(180deg, var(--blood-400), var(--blood-600)); transition: width 320ms var(--ease-spring); }
+  .hpbar .wound { position: absolute; top: 0; bottom: 0; background: repeating-linear-gradient(135deg, var(--frost-500) 0 3px, var(--ink-800) 3px 7px); border-left: 2px solid var(--frost-300); transition: left 320ms var(--ease-spring), width 320ms var(--ease-spring); }
+  .hpnum { display: flex; justify-content: space-between; font-family: var(--font-display); font-size: var(--fs-xs); letter-spacing: .1em; color: var(--text-lo); margin-top: 6px; }
+  .flasks { display: flex; gap: var(--sp-3); flex-wrap: wrap; }
+  .flask { display: flex; align-items: center; gap: 6px; font-family: var(--font-display); color: var(--text-hi); background: var(--ink-850); border: 1px solid var(--gold-700); border-radius: var(--radius-md); padding: 6px 10px; font-size: var(--fs-sm); }
+  .flask svg { width: 26px; height: 26px; color: var(--c); }
+  .flask.off { opacity: .4; }
+  .kbd { font-family: var(--font-display); font-size: var(--fs-2xs); border: 1px solid var(--gold-600); border-radius: 3px; padding: 1px 6px; color: var(--gold-200); background: var(--ink-950); }
+  .btnrow { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+  .mini { font: inherit; font-size: var(--fs-sm); color: var(--text-hi); background: var(--ink-700); border: 1px solid var(--ink-500); border-radius: var(--radius-md); padding: 6px 12px; cursor: pointer; }
+  .mini:hover { border-color: var(--gold-500); }
+  .toast { min-height: 1.5em; color: var(--gold-200); font-size: var(--fs-sm); }
+
+  /* ---------- Instabilidade ---------- */
+  .strip { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; height: 54px; }
+  .band { position: relative; background: var(--ink-600); border: 1px solid var(--ink-500); display: grid; place-items: center; font-size: var(--fs-2xs); color: var(--text-lo); font-family: var(--font-display); }
+  .band.warn { background: repeating-linear-gradient(135deg, var(--ember-600) 0 4px, var(--ink-700) 4px 9px); color: var(--gold-100); animation: warn .5s steps(2) infinite; }
+  .band.gone { background: #000; border-style: dashed; border-color: var(--ember-600); color: transparent; box-shadow: inset 0 -10px 18px -6px rgba(255, 106, 19, .45); }
+  @keyframes warn { 50% { filter: brightness(1.35); } }
+  .pipsrow { display: flex; gap: 6px; align-items: center; }
+  .crack { display: inline-flex; align-items: center; gap: 4px; color: var(--ember-300); }
+  .crack svg { width: 26px; height: 26px; }
+  .crack.gone { color: var(--text-lo); opacity: .55; }
+  .hint { font-size: var(--fs-xs); color: var(--text-lo); margin-top: var(--sp-2); }
+
+  /* reduced motion (preferência do sistema OU o botão): para tudo que balança, mantém sinais estáticos */
+  body.rm *, body.rm *::before, body.rm *::after { animation: none !important; transition: none !important; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Exploração: mock de leitura</h1>
+  <p class="lead">Página de decisão para as specs <code>spec-exploracao-*.md</code>. Nada aqui é código do jogo. Use os botões para testar o que mais importa: o sinal funciona <b>em cinza</b> e <b>sem movimento</b>? Cada ícone novo (marcado como proposto) nasce no mesmo traço do design system.</p>
+  <div class="tools" role="group" aria-label="Testes de acessibilidade">
+    <button class="tog" id="tgGray" aria-pressed="false">Ver em cinza (daltonismo)</button>
+    <button class="tog" id="tgRm" aria-pressed="false">Reduzir movimento</button>
+    <button class="tog" id="tgText" aria-pressed="false">Texto grande (200%)</button>
+  </div>
+
+  <div class="stage-wrap">
+  <!-- ======================= PORTAS ======================= -->
+  <h2>1. Saídas do andar (após colher a estilha)</h2>
+  <p class="lead">Segure o ponteiro ou a tecla Espaço sobre uma saída por 0,6 s para "entrar" (anel de compromisso). Cada saída tem <b>ícone, forma de moldura, nome e promessa</b>; a cor é só reforço. A trava mostra a saída antes da estilha.</p>
+  <div class="tools"><button class="tog" id="tgLock" aria-pressed="false">Simular: estilha ainda não colhida</button></div>
+  <div class="grid g4" id="doors"></div>
+  <div class="toast" id="doorToast" role="status"></div>
+
+  <!-- ======================= ESTANTE ======================= -->
+  <h2>2. Estante: ler um livro (2,0 s, uma leitura grátis por visita)</h2>
+  <p class="lead">Segure sobre um pedestal para ler. Ao terminar, os outros pedestais perdem a vela (acabou o tempo). A Linha sobe um degrau com um verbo, não com um percentual.</p>
+  <div class="panel">
+    <div class="grid g3" id="peds"></div>
+    <div class="relato" id="relato" role="status" aria-live="polite">Segure sobre um livro para ler.</div>
+    <div style="display:flex; gap:var(--sp-3); align-items:center; margin-top:var(--sp-3); flex-wrap:wrap">
+      <span class="chip" id="chipSab"></span>
+      <button class="mini" id="btnLacrado">Volume lacrado: segunda leitura (12 Fagulhas)</button>
+      <button class="mini" id="btnReset">Reiniciar visita</button>
+    </div>
+  </div>
+
+  <!-- ======================= BANCADA ======================= -->
+  <h2>3. Bancada: preparar remédios (3 pavios)</h2>
+  <p class="lead">Cada preparo gasta um pavio. Nunca há preparo que falha. O Descanso é grátis e existe mesmo sem ingredientes.</p>
+  <div class="panel">
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:var(--sp-3); margin-bottom:var(--sp-4)">
+      <div class="pavios" id="pavios" aria-label="Pavios restantes"></div>
+      <div style="display:flex; gap:var(--sp-2); flex-wrap:wrap" id="stock"></div>
+    </div>
+    <div id="acts"></div>
+    <div class="toast" id="benchToast" role="status"></div>
+  </div>
+
+  <!-- ======================= HUD ======================= -->
+  <h2>4. HUD: vida com Ferida, frascos e Sabedoria</h2>
+  <p class="lead">A Ferida é o trecho hachurado na ponta da barra (forma + padrão, não só cor). Curas só enchem até o teto. Fechar a Ferida abre espaço para a poção.</p>
+  <div class="panel hud">
+    <div>
+      <div class="hpbar" aria-hidden="true"><div class="full"><div class="fill" id="hpFill"></div><div class="wound" id="hpWound"></div></div></div>
+      <div class="hpnum"><span id="hpTxt"></span><span id="woundTxt"></span></div>
+    </div>
+    <div class="flasks" id="flasks"></div>
+    <div class="btnrow">
+      <button class="mini" data-a="hit">Levar 30 de dano</button>
+      <button class="mini" data-a="strike">Acertar um golpe (cauteriza 0,5)</button>
+      <button class="mini" data-a="rec">1: Recuperação (+63)</button>
+      <button class="mini" data-a="ung">3: Unguento</button>
+      <button class="mini" data-a="wait">Esperar 2 minutos parado</button>
+      <button class="mini" data-a="rest">Tela do braseiro (fecha tudo)</button>
+    </div>
+    <div class="toast" id="hudToast" role="status"></div>
+  </div>
+
+  <!-- ======================= INSTABILIDADE ======================= -->
+  <h2>5. Instabilidade: o chão cede (andar 3)</h2>
+  <p class="lead">Faixas de 6 m, da entrada para o relicário. Cada faixa avisa em 4 s (hachura que pisca, depois escurece com borda de brasa). Os pips do HUD acompanham.</p>
+  <div class="panel">
+    <div class="strip" id="strip" aria-hidden="true"></div>
+    <div class="cap" style="margin-top:8px; display:flex; justify-content:space-between"><span>Entrada</span><span>Relicário (platô final)</span></div>
+    <div style="display:flex; align-items:center; gap:var(--sp-4); margin-top:var(--sp-4); flex-wrap:wrap">
+      <span class="cap">Estabilidade</span><span class="pipsrow" id="stab"></span>
+      <button class="mini" id="btnCede">Simular o chão cedendo</button>
+      <button class="mini" id="btnStab">Colher a estilha (estabiliza)</button>
+    </div>
+    <div class="hint">Regra de justiça: só o cataclismo com a estilha por colher derruba o jogador. Faixas isoladas empurram para a faixa segura e dão 1 s de invulnerabilidade.</div>
+  </div>
+  </div>
+</div>
+
+<script type="module">
+  import "/src/game/ui/fonts.ts";
+  import { ICON_PATHS, icon } from "/src/game/ui/ds/icons.ts";
+
+  // ---------- Ícones PROPOSTOS (mesmo traço do DS: grade 24, traço 1.6, sem preenchimento) ----------
+  const P = (d) => `<path d="${d}"/>`;
+  const EXTRA = {
+    hatch: '<rect x="3.5" y="3.5" width="17" height="17" rx="2"/><circle cx="12" cy="10.5" r="3"/>' + P("M12 15.5v3M10.5 17.2l1.5 1.5 1.5-1.5"),
+    jar: P("M7 9h10v1.4a3 3 0 0 1 1 2.2V18a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 6 18v-5.4a3 3 0 0 1 1-2.2z") + P("M8 5.5h8V9H8z") + P("M9.5 15h5"),
+    flask: P("M10 3h4M11 3v4.5L9 10v8a2.5 2.5 0 0 0 2.5 2.5h1A2.5 2.5 0 0 0 15 18v-8l-2-2.5V3") + P("M9 14.5h6"),
+    wound: ICON_PATHS.heart + P("M12 7.4l-1.5 3 2.2 1.4-1.7 3.2"),
+    crack: P("M12 3l-1.6 5 3.2 2.6-2.6 3.6 1.6 6.8") + P("M5 21h14"),
+    candle: P("M12 9v11M9.5 20h5") + P("M12 3c.9 1.3 1.6 2.1 1.6 3.2a1.6 1.6 0 0 1-3.2 0C10.4 5.1 11.1 4.3 12 3z"),
+    root: P("M12 3v8M12 11c-3 1-5 3-5 7M12 11c0 3 0 6 1 9M12 11c3 1 5 2 5 6"),
+    wax: P("M12 3c3 4 5 6.5 5 9.5a5 5 0 0 1-10 0C7 9.5 9 7 12 3z"),
+    contra: ICON_PATHS.shield + P("M9 12h6M12.5 9.5L15 12l-2.5 2.5"),
+  };
+  const ic = (n, size = 24) => {
+    const body = EXTRA[n] ?? ICON_PATHS[n] ?? "";
+    return `<svg class="ds-icon" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
+  };
+  const $ = (s, r = document) => r.querySelector(s);
+  const el = (h) => { const t = document.createElement("template"); t.innerHTML = h.trim(); return t.content.firstElementChild; };
+
+  // ---------- Toggles ----------
+  const tog = (id, cb) => { const b = $(id); b.addEventListener("click", () => { const on = b.getAttribute("aria-pressed") !== "true"; b.setAttribute("aria-pressed", String(on)); cb(on); }); };
+  tog("#tgGray", (on) => document.body.classList.toggle("gray", on));
+  tog("#tgRm", (on) => document.body.classList.toggle("rm", on));
+  tog("#tgText", (on) => { document.querySelector(".wrap").style.zoom = on ? "2" : ""; }); // os tokens --fs-* são em px: zoom escala tudo
+
+  // ---------- 1. Portas ----------
+  const DOORS = [
+    { id: "brasa", cls: "anel c-brasa", icon: "hatch", name: "Alçapão da Brasa", promise: "Cura 40%, banca de poções e uma dádiva.", tag: "Seguro" },
+    { id: "estante", cls: "arco estante c-estante", icon: "book", name: "Estante", promise: "Leia um livro: ganhe um ponto de Sabedoria.", tag: "Saber" },
+    { id: "bancada", cls: "arco bancada c-bancada", icon: "potion", name: "Bancada", promise: "Prepare remédios e feche suas Feridas.", tag: "Preparo" },
+    { id: "fenda", cls: "fenda c-fenda", icon: "eye", name: "Laje rachada", promise: "Algo sopra por baixo. Golpe pesado para abrir.", tag: "Segredo" },
+  ];
+  const doorsEl = $("#doors");
+  let locked = false;
+  const COMMIT = 600;
+  for (const d of DOORS) {
+    const b = el(`<button class="door ${d.cls}" data-id="${d.id}" aria-label="${d.name}. ${d.promise}">
+      <div class="frame">${ic(d.icon, 54)}<div class="ring"></div></div>
+      <div class="name">${d.name}</div><div class="promise">${d.promise}</div><div class="tag"><span>${d.tag}</span></div></button>`);
+    let t0 = 0, raf = 0;
+    const tick = () => { const p = Math.min(1, (performance.now() - t0) / COMMIT); $(".ring", b).style.setProperty("--p", p); if (p >= 1) { commit(); } else raf = requestAnimationFrame(tick); };
+    const commit = () => { cancelAnimationFrame(raf); b.classList.add("committed"); $("#doorToast").textContent = `Entrou em: ${d.name}. A porta se sela atrás de você.`; setTimeout(() => { b.classList.remove("committed"); $(".ring", b).style.setProperty("--p", 0); }, 1400); };
+    const start = () => { if (locked) { $("#doorToast").textContent = "Colha a estilha no relicário para abrir as saídas."; return; } t0 = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); };
+    const stop = () => { cancelAnimationFrame(raf); if (!b.classList.contains("committed")) $(".ring", b).style.setProperty("--p", 0); };
+    b.addEventListener("pointerdown", start); b.addEventListener("pointerup", stop); b.addEventListener("pointerleave", stop); b.addEventListener("pointercancel", stop);
+    b.addEventListener("keydown", (e) => { if (e.code === "Space" && !e.repeat) { e.preventDefault(); start(); } });
+    b.addEventListener("keyup", (e) => { if (e.code === "Space") stop(); });
+    doorsEl.append(b);
+  }
+  tog("#tgLock", (on) => { locked = on; doorsEl.querySelectorAll(".door").forEach((x) => x.classList.toggle("locked", on)); $("#doorToast").textContent = on ? "Saídas travadas: o relicário ainda guarda a estilha." : ""; });
+
+  // ---------- 2. Estante ----------
+  const LINHAS = {
+    lamina: { n: "Lâmina", c: "var(--gold-300)", i: "sword", steps: ["Pulso firme: a janela do combo aumenta.", "Fio longo: o finalizador varre mais longe.", "Peso morto: o pesado começa mais cedo e quebra postura."] },
+    fogo: { n: "Fogo", c: "var(--ember-400)", i: "flame", steps: ["Brasa viva: o golpe de fogo alcança 6,3 m.", "Língua de fogo: o arco do fogo é mais largo.", "Rastro: a Queimadura dura mais e devolve Fagulha."] },
+    contra: { n: "Contragolpe", c: "var(--frost-300)", i: "contra", steps: ["Olho aberto: esquiva perfeita dá +25% no próximo golpe.", "Resposta: bloqueio perfeito acelera o próximo golpe.", "Fio da Brasa: o golpe após um perfeito varre e devolve Fagulha."] },
+  };
+  const BOOKS = [
+    { l: "lamina", t: "Diário de uma Guarda", x: "Descemos em seis. Contei os braseiros até o quarto." },
+    { l: "fogo", t: "Tratado das Acendedoras", x: "Desce. Recolhe cada estilha. No fundo, com todas, a Brasa volta." },
+    { l: "contra", t: "Margens de Marta", x: "O morto bate onde tu estavas. Tu estás em outro lugar." },
+  ];
+  const lvl = { lamina: 0, fogo: 0, contra: 0 };
+  let reads = 1, fagulhas = 40;
+  const pedsEl = $("#peds");
+  const sab = () => lvl.lamina + lvl.fogo + lvl.contra;
+  const drawChip = () => { $("#chipSab").innerHTML = `${ic("book", 18)} Sabedoria ${sab()}  ·  Fagulhas ${fagulhas}`; };
+  const drawPeds = () => {
+    pedsEl.innerHTML = "";
+    BOOKS.forEach((b) => {
+      const L = LINHAS[b.l];
+      const on = reads > 0;
+      const p = el(`<button class="ped ${on ? "" : "off"}" style="--c:${L.c}" aria-label="${b.t}, Linha ${L.n}">
+        <i class="flame"></i>${ic(L.i, 34)}<div class="t">${b.t}</div><div class="cap">Linha: ${L.n}</div>
+        <div class="pips">${[0, 1, 2].map((k) => `<span class="pip ${k < lvl[b.l] ? "on" : ""}"></span>`).join("")}</div>
+        <div class="readring"><i></i></div></button>`);
+      let t0 = 0, raf = 0;
+      const bar = $(".readring i", p);
+      const tick = () => { const q = Math.min(1, (performance.now() - t0) / 2000); bar.parentElement.style.setProperty("--p", q); if (q >= 1) done(); else raf = requestAnimationFrame(tick); };
+      const done = () => {
+        cancelAnimationFrame(raf);
+        if (lvl[b.l] >= 3) return;
+        lvl[b.l] += 1; reads -= 1;
+        $("#relato").innerHTML = `"${b.x}"<br><b>${L.n} ${["I", "II", "III"][lvl[b.l] - 1]}</b>: ${L.steps[lvl[b.l] - 1]}`;
+        drawChip(); drawPeds();
+      };
+      const start = () => { if (!on) return; t0 = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); };
+      const stop = () => { cancelAnimationFrame(raf); bar.parentElement.style.setProperty("--p", 0); };
+      p.addEventListener("pointerdown", start); p.addEventListener("pointerup", stop); p.addEventListener("pointerleave", stop);
+      p.addEventListener("keydown", (e) => { if (e.code === "Space" && !e.repeat) { e.preventDefault(); start(); } });
+      p.addEventListener("keyup", (e) => { if (e.code === "Space") stop(); });
+      pedsEl.append(p);
+    });
+  };
+  $("#btnLacrado").addEventListener("click", () => { if (fagulhas >= 12) { fagulhas -= 12; reads += 1; $("#relato").textContent = "O selo cede. As velas voltam a acender."; drawChip(); drawPeds(); } else $("#relato").textContent = "Fagulha insuficiente."; });
+  $("#btnReset").addEventListener("click", () => { lvl.lamina = lvl.fogo = lvl.contra = 0; reads = 1; fagulhas = 40; $("#relato").textContent = "Segure sobre um livro para ler."; drawChip(); drawPeds(); });
+  drawChip(); drawPeds();
+
+  // ---------- 3. Bancada ----------
+  const st = { pavios: 3, raiz: 2, cera: 1, fag: 14, rec: 1, fur: 0, ung: 0, descanso: true };
+  const ACTS = [
+    { id: "ung", i: "jar", c: "var(--life-400)", n: "Preparar Unguento de Brasa", d: "Fecha toda a Ferida e cura 10%.", cost: { raiz: 2, cera: 1 }, cap: ["ung", 2] },
+    { id: "rec", i: "potion", c: "var(--blood-400)", n: "Destilar Recuperação", d: "Cura 45% de uma vez.", cost: { raiz: 1, fag: 3 }, cap: ["rec", 3] },
+    { id: "fur", i: "flask", c: "var(--ember-400)", n: "Ferver Elixir de Fúria", d: "+60% de dano por 8 s.", cost: { cera: 1, fag: 4 }, cap: ["fur", 2] },
+  ];
+  const NM = { raiz: "root", cera: "wax", fag: "spark" };
+  const drawBench = () => {
+    $("#pavios").innerHTML = [0, 1, 2].map((k) => `<div class="pavio ${k < st.pavios ? "" : "out"}"><div class="fl"></div><div class="st"></div></div>`).join("");
+    $("#stock").innerHTML = [["raiz", st.raiz], ["cera", st.cera], ["fag", st.fag]].map(([k, v]) => `<span class="chip ${v ? "" : "off"}">${ic(NM[k], 18)} ${v}</span>`).join("") +
+      `<span class="chip ${st.rec ? "" : "off"}">${ic("potion", 18)} ${st.rec}</span><span class="chip ${st.fur ? "" : "off"}">${ic("flask", 18)} ${st.fur}</span><span class="chip ${st.ung ? "" : "off"}">${ic("jar", 18)} ${st.ung}</span>`;
+    const box = $("#acts"); box.innerHTML = "";
+    for (const a of ACTS) {
+      const can = st.pavios > 0 && Object.entries(a.cost).every(([k, v]) => st[k] >= v) && st[a.cap[0]] < a.cap[1];
+      const b = el(`<button class="act" style="--c:${a.c}" ${can ? "" : "disabled"}>${ic(a.i, 32)}<div><strong>${a.n}</strong>${a.d}${st[a.cap[0]] >= a.cap[1] ? " (cheio)" : ""}</div>
+        <div class="cost">${Object.entries(a.cost).map(([k, v]) => `${ic(NM[k], 16)} ${v}`).join("  ")}</div></button>`);
+      b.addEventListener("click", () => { for (const [k, v] of Object.entries(a.cost)) st[k] -= v; st[a.cap[0]] += 1; st.pavios -= 1; $("#benchToast").textContent = `${a.n}: pronto. Um pavio se apagou.`; drawBench(); });
+      box.append(b);
+    }
+    const rest = el(`<button class="act" style="--c:var(--gold-300)" ${st.descanso ? "" : "disabled"}>${ic("brazier", 32)}<div><strong>Descanso</strong>Fecha a Ferida e cura 20%. Grátis, uma vez.</div><div class="cost">grátis</div></button>`);
+    rest.addEventListener("click", () => { st.descanso = false; $("#benchToast").textContent = "Você descansa junto à mesa. A Ferida se fecha."; drawBench(); });
+    box.append(rest);
+  };
+  drawBench();
+
+  // ---------- 4. HUD ----------
+  const H = { max: 140, hp: 140, wound: 0, rec: 2, ung: 1, fur: 1 };
+  const draw = () => {
+    const ceil = H.max - H.wound;
+    H.hp = Math.min(H.hp, ceil);
+    $("#hpFill").style.width = `${(H.hp / H.max) * 100}%`;
+    $("#hpWound").style.left = `${(ceil / H.max) * 100}%`;
+    $("#hpWound").style.width = `${(H.wound / H.max) * 100}%`;
+    $("#hpTxt").textContent = `Vida ${Math.round(H.hp)} de ${Math.round(ceil)}`;
+    $("#woundTxt").textContent = H.wound > 0 ? `Ferida ${H.wound.toFixed(1)} (teto de vida ${Math.round(ceil)})` : "Sem ferida";
+    const f = (k, i, c, n, key) => `<span class="flask ${n ? "" : "off"}" style="--c:${c}"><span class="kbd">${key}</span>${ic(i, 26)}× ${n}</span>`;
+    $("#flasks").innerHTML = f("rec", "potion", "var(--blood-400)", H.rec, 1) + f("fur", "flask", "var(--ember-400)", H.fur, 2) + f("ung", "jar", "var(--life-400)", H.ung, 3) +
+      `<span class="chip">${ic("book", 18)} Sabedoria ${sab()}</span>` + `<span class="chip ${H.wound ? "" : "off"}">${ic("wound", 18)} Ferida</span>`;
+  };
+  const say = (t) => { $("#hudToast").textContent = t; };
+  document.querySelectorAll("[data-a]").forEach((b) => b.addEventListener("click", () => {
+    const a = b.dataset.a; const ceil = H.max - H.wound;
+    if (a === "hit") { H.hp = Math.max(1, H.hp - 30); H.wound = Math.min(H.max * 0.4, H.wound + 9); say("Dano 30: vida cai 30 e 9 viram Ferida (30%)."); }
+    if (a === "strike") { H.wound = Math.max(0, H.wound - 0.5); say("Golpe conectado: 0,5 de Ferida se fecha (1,0 com pesado ou fogo)."); }
+    if (a === "rec") { if (H.rec < 1) say("Sem frascos."); else if (H.hp >= ceil) say("Vida cheia até o teto: a poção não foi gasta."); else { H.rec -= 1; H.hp = Math.min(ceil, H.hp + 63); say(`Recuperação enche só até o teto (${Math.round(ceil)}).`); } }
+    if (a === "ung") { if (H.ung < 1) say("Sem Unguento."); else if (H.wound < 7) say("Sem ferida suficiente: o Unguento não foi gasto."); else { H.ung -= 1; H.wound = 0; H.hp = Math.min(H.max, H.hp + 14); say("Unguento: a Ferida se fecha na hora e o teto volta a 140."); } }
+    if (a === "wait") say("Dois minutos parado: nada muda. A Ferida só fecha lutando, com remédio ou no braseiro.");
+    if (a === "rest") { H.wound = 0; H.hp = Math.min(H.max, H.hp + 56); say("Tela do braseiro: Ferida fechada, depois cura 40%."); }
+    draw();
+  }));
+  draw();
+
+  // ---------- 5. Instabilidade ----------
+  const strip = $("#strip");
+  const bands = Array.from({ length: 8 }, (_, i) => { const d = el(`<div class="band">${i + 1}</div>`); strip.append(d); return d; });
+  const stab = $("#stab");
+  const pips = Array.from({ length: 5 }, () => { const d = el(`<span class="crack">${ic("crack", 20)}</span>`); stab.append(d); return d; });
+  let timers = [];
+  const clearT = () => { timers.forEach(clearTimeout); timers = []; };
+  $("#btnCede").addEventListener("click", () => {
+    clearT(); bands.forEach((b) => b.className = "band"); pips.forEach((p) => p.classList.remove("gone"));
+    for (let i = 0; i < 5; i++) {
+      timers.push(setTimeout(() => bands[i].classList.add("warn"), i * 1800));
+      timers.push(setTimeout(() => { bands[i].classList.remove("warn"); bands[i].classList.add("gone"); pips[i].classList.add("gone"); }, i * 1800 + 1500));
+    }
+  });
+  $("#btnStab").addEventListener("click", () => { clearT(); bands.forEach((b) => b.classList.remove("warn")); });
+</script>
+</body>
+</html>
