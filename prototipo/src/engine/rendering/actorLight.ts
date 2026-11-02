@@ -12,7 +12,7 @@ import type { AbstractMesh, Node, Scene } from "@babylonjs/core";
  * materiais limitam as luzes simultâneas; sem isso uma tocha distante podia ocupar a vaga).
  */
 export interface ActorLightOptions {
-  /** Cor da luz (hex). Default: âmbar pálido. */
+  /** Cor da luz (hex). Default: marfim quase neutro (osso claro não pode rosar). */
   color?: string;
   /** Intensidade. Default 1.5 (a sala e escura: ambiente ~0,4 + chave ~0,5). */
   intensity?: number;
@@ -29,7 +29,7 @@ export class ActorLight {
   constructor(scene: Scene, opts: ActorLightOptions = {}) {
     // Inclinada para o lado da câmera (que orbita em -Z): acende as faces voltadas para ela, não só o topo.
     const l = new DirectionalLight("luz_atores", (opts.direction ?? new Vector3(0.2, -0.7, 0.75)).normalize(), scene);
-    l.diffuse = Color3.FromHexString(opts.color ?? "#ffd9ad");
+    l.diffuse = Color3.FromHexString(opts.color ?? "#f4e9dc"); // quase neutra: o osso claro nao pode rosar
     l.specular = Color3.Black();
     l.intensity = opts.intensity ?? 1.5;
     // Sem gerador de sombra; shadowEnabled fica no padrão (true) de propósito: a ordenação de luzes
