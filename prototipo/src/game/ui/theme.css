@@ -1635,3 +1635,48 @@
 .hud-pot { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .hud-pot.off { opacity: 0.4; }
 .hud-potions .ds-kbd { min-width: 20px; height: 20px; font-size: 11px; }
+
+
+/* ===== HUD de jogo: elementos que antes eram montados com estilo solto em main.ts ===== */
+.hud-callout, .hud-weapon, .hud-inscription {
+  position: fixed; left: 50%; transform: translateX(-50%); z-index: 35;
+  padding: var(--sp-2) var(--sp-4);
+  background: rgba(10, 13, 19, 0.86);
+  border: var(--line) solid var(--gold-700);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+  color: var(--gold-200);
+  font: 600 var(--fs-sm) var(--font-display);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-base) var(--ease-out);
+}
+.hud-callout { bottom: 84px; }
+.hud-callout--gold { bottom: 134px; border-color: var(--gold-500); }
+.hud-callout--danger { bottom: 104px; z-index: 36; border-color: var(--blood-600); background: rgba(30, 10, 8, 0.88); color: var(--ember-200); }
+.hud-callout .ds-kbd { margin-right: var(--sp-1); }
+.hud-weapon { left: auto; right: 16px; top: 100px; bottom: auto; transform: none; opacity: 1; border-radius: 999px; color: var(--gold-200); }
+.hud-inscription { bottom: 160px; max-width: 60vw; text-align: center; font: italic 500 var(--fs-md) var(--font-text); color: var(--text-mid); background: rgba(10, 13, 19, 0.6); border-color: var(--gold-800); }
+
+.hud-channel { position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%); z-index: 35; width: 220px; height: 8px;
+  background: var(--ink-900); border: var(--line) solid var(--gold-700); border-radius: 999px; overflow: hidden; opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-out); pointer-events: none; }
+.hud-channel__fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--ember-500), var(--ember-200)); }
+
+.hud-boss { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); z-index: 36; width: 440px; max-width: 80vw;
+  text-align: center; opacity: 0; transition: opacity var(--dur-slow) var(--ease-out); pointer-events: none; }
+.hud-boss__name { margin-bottom: var(--sp-1); color: var(--text-hi); font: 700 var(--fs-sm) var(--font-display); letter-spacing: var(--ls-caps); text-shadow: 0 1px 3px #000; }
+.hud-boss__track { height: 12px; background: var(--ink-950); border: var(--line) solid var(--blood-600); border-radius: 999px; overflow: hidden; box-shadow: var(--shadow-1); }
+.hud-boss__fill { height: 100%; width: 100%; background: linear-gradient(90deg, var(--blood-600), var(--ember-400)); transition: width var(--dur-fast) linear; }
+
+.hud-reticle { position: fixed; width: 34px; height: 34px; border: 2px solid var(--frost-300); border-radius: 50%;
+  box-shadow: var(--glow-frost), inset 0 0 6px rgba(143, 214, 230, 0.4); transform: translate(-50%, -50%); z-index: 34; pointer-events: none; }
+
+.hud-story { position: fixed; left: 50%; top: 38%; transform: translate(-50%, -50%); z-index: 38; max-width: 80vw; text-align: center;
+  color: var(--text-hi); font: 600 var(--fs-xl) var(--font-display); letter-spacing: var(--ls-title);
+  text-shadow: 0 2px 10px #000, var(--glow-ember); opacity: 0; transition: opacity 1s ease; pointer-events: none; }
+.hud-story--small { font-size: var(--fs-lg); }
+
+.hud-fade { position: fixed; inset: 0; background: var(--ink-950); opacity: 0; pointer-events: none; transition: opacity 0.45s ease; z-index: var(--z-menu); }

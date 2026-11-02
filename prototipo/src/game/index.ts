@@ -32,6 +32,7 @@ export {
   createPauseButton,
 } from "./ui/screens";
 export { configureUiSound } from "./ui/uiSound";
+export { mountMuteButton } from "./ui/muteButton";
 export { configureTitleAmbience, startTitleAmbience, stopTitleAmbience } from "./ui/titleAmbience";
 export { configureMusic, startMusic, stopMusic, setMusicState } from "./audio/musicManager";
 export { configureStingers, playStinger } from "./audio/stingers";

@@ -59,13 +59,13 @@ export function startAmbience(): void {
   droneGain.gain.value = 0.0001;
   const lp = a.createBiquadFilter();
   lp.type = "lowpass";
-  lp.frequency.value = 320;
+  lp.frequency.value = 220;
   const d1 = a.createOscillator();
-  d1.type = "triangle";
-  d1.frequency.value = 48;
+  d1.type = "sine";
+  d1.frequency.value = 55;
   const d2 = a.createOscillator();
   d2.type = "sine";
-  d2.frequency.value = 48 * 1.013; // batimento lento (vivo, não estático)
+  d2.frequency.value = 55 * 1.002; // batimento quase imperceptível (vivo, sem zumbido)
   d1.connect(lp);
   d2.connect(lp);
   lp.connect(droneGain).connect(master);
@@ -77,14 +77,14 @@ export function startAmbience(): void {
   dangerGain.gain.value = 0.0001;
   const bp = a.createBiquadFilter();
   bp.type = "bandpass";
-  bp.frequency.value = 220;
-  bp.Q.value = 0.8;
+  bp.frequency.value = 160;
+  bp.Q.value = 0.6;
   const x1 = a.createOscillator();
-  x1.type = "sawtooth";
+  x1.type = "sine";
   x1.frequency.value = 73.4; // ~D2
   const x2 = a.createOscillator();
-  x2.type = "sawtooth";
-  x2.frequency.value = 103.8; // ~G#2 (trítono: tensão)
+  x2.type = "sine";
+  x2.frequency.value = 103.8; // ~G#2 (trítono: tensão, em tom puro)
   x1.connect(bp);
   x2.connect(bp);
   bp.connect(dangerGain).connect(master);
@@ -103,11 +103,11 @@ export function setAmbience(s: { depth?: number; danger?: number; urgency?: numb
   urgency01 = clamp01(s.urgency ?? 0);
 
   // Mestre segue o volume de música; rampa curta evita clique.
-  master.gain.linearRampToValueAtTime(Math.max(0.0001, 0.5 * v), t + 0.4);
+  master.gain.linearRampToValueAtTime(Math.max(0.0001, 0.3 * v), t + 0.4);
   // Drone adensa com a profundidade.
-  droneGain.gain.linearRampToValueAtTime(Math.max(0.0001, (0.18 + 0.32 * depth) * v), t + 0.8);
+  droneGain.gain.linearRampToValueAtTime(Math.max(0.0001, (0.14 + 0.18 * depth) * v), t + 0.8);
   // Perigo entra/sai com crossfade.
-  dangerGain.gain.linearRampToValueAtTime(Math.max(0.0001, 0.34 * danger01 * v), t + 0.6);
+  dangerGain.gain.linearRampToValueAtTime(Math.max(0.0001, 0.16 * danger01 * v), t + 0.6);
 }
 
 /** Avança a batida da Brasa. dtSec em segundos. Cadência acelera com urgência/perigo. */
@@ -123,7 +123,7 @@ export function updateAmbience(dtSec: number): void {
   heartTimer += dtSec;
   if (heartTimer >= interval) {
     heartTimer = 0;
-    heartbeat(a, 0.22 * v * (0.5 + 0.5 * beat), beat);
+    heartbeat(a, 0.12 * v * (0.5 + 0.5 * beat), beat);
   }
 }
 
@@ -165,7 +165,7 @@ export function playWhisper(pan = 0): void {
   bp.frequency.value = 1400;
   bp.Q.value = 2.5;
   const g = a.createGain();
-  g.gain.value = 0.05 * v;
+  g.gain.value = 0.025 * v;
   const panner = a.createStereoPanner();
   panner.pan.value = Math.max(-1, Math.min(1, pan));
   src.connect(bp).connect(g).connect(panner).connect(a.destination);
@@ -193,7 +193,7 @@ export function playStir(count: number): void {
     hp.type = "highpass";
     hp.frequency.value = 2200; // chocalho seco (osso)
     const g = a.createGain();
-    g.gain.value = 0.04 * v;
+    g.gain.value = 0.02 * v;
     src.connect(hp).connect(g).connect(a.destination);
     src.start(at);
   }

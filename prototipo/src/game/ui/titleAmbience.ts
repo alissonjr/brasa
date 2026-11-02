@@ -48,7 +48,7 @@ function hookGesture(): void {
 }
 
 function targetGain(): number {
-  return 0.22 * Math.max(0, Math.min(1, getVolume()));
+  return 0.12 * Math.max(0, Math.min(1, getVolume()));
 }
 
 /** Inicia (ou retoma) o ambiente da tela-título. Idempotente. */
@@ -83,7 +83,7 @@ export function startTitleAmbience(): void {
   // Drone: fundamentais graves levemente desafinadas (calor) + um pad médio baixo.
   const voices: Array<{ f: number; type: OscillatorType; g: number }> = [
     { f: 55, type: "sine", g: 0.6 },
-    { f: 55 * 1.003, type: "sine", g: 0.5 },
+    { f: 55 * 1.002, type: "sine", g: 0.4 },
     { f: 82.4, type: "triangle", g: 0.28 },
     { f: 164.8, type: "sine", g: 0.12 },
   ];
@@ -124,7 +124,7 @@ function crackle(): void {
   bp.frequency.value = 1400 + Math.random() * 1800;
   bp.Q.value = 0.8;
   const g = a.createGain();
-  g.gain.value = 0.06 * vol;
+  g.gain.value = 0.03 * vol;
   src.connect(bp).connect(g).connect(master);
   src.start(t);
   src.stop(t + dur + 0.02);

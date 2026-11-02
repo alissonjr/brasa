@@ -30,6 +30,7 @@ import {
   createAutosaveIndicator,
   createPauseButton,
   configureUiSound,
+  mountMuteButton,
   configureCombatSound,
   healChime,
   configureTitleAmbience,
@@ -103,29 +104,23 @@ async function main(): Promise<void> {
   // --- PLATAFORMA ---
   const platform = buildPlatform();
   setLanguage(platform.settings.get().language); // idioma da UI a partir das preferências
+  // Mudo global: multiplica todos os volumes (efeitos e música) sem tocar nos sliders.
+  const audible = (): number => (platform.settings.get().muted ? 0 : 1);
   const sfxVolume = () => {
     const s = platform.settings.get();
-    return s.masterVolume * s.sfxVolume;
+    return audible() * s.masterVolume * s.sfxVolume;
+  };
+  const musicVolume = () => {
+    const s = platform.settings.get();
+    return audible() * s.masterVolume * s.musicVolume;
   };
   configureUiSound(sfxVolume);
   configureCombatSound(sfxVolume);
-  configureTitleAmbience(() => {
-    const s = platform.settings.get();
-    return s.masterVolume * s.musicVolume;
-  });
-  configureMusic(() => {
-    const s = platform.settings.get();
-    return s.masterVolume * s.musicVolume;
-  });
-  configureStingers(() => {
-    const s = platform.settings.get();
-    return s.masterVolume * s.musicVolume;
-  });
-  // ESTILO (Bloco 4, §4.4): ambiência adaptativa (textura musical -> volume de música).
-  configureAmbience(() => {
-    const s = platform.settings.get();
-    return s.masterVolume * s.musicVolume;
-  });
+  configureTitleAmbience(musicVolume);
+  configureMusic(musicVolume);
+  configureStingers(musicVolume);
+  configureAmbience(musicVolume); // ambiência adaptativa (textura musical -> volume de música)
+  mountMuteButton(platform.settings);
   const persistente = await requestPersistentStorage();
   console.log(`[plataforma] storage persistente: ${persistente}`);
   const profile = platform.profile.current();
@@ -278,7 +273,7 @@ async function main(): Promise<void> {
   let brasaMeter = 0;
   const brasaWrap = document.createElement("div");
   brasaWrap.className = "ds-bar ds-bar--ember brasa-bar";
-  brasaWrap.style.cssText = "position:fixed;left:18px;bottom:22px;z-index:35;width:260px;height:20px;pointer-events:none;display:none;";
+  brasaWrap.style.display = "none";
   const brasaLabel = document.createElement("span");
   brasaLabel.className = "ds-bar__label";
   brasaLabel.textContent = "BRASA";
@@ -304,86 +299,65 @@ async function main(): Promise<void> {
 
   // Aviso na tela quando a câmara é limpa e a passagem abre.
   const promptEl = document.createElement("div");
-  promptEl.style.cssText =
-    "position:fixed;left:50%;bottom:84px;transform:translateX(-50%);z-index:35;padding:10px 20px;border-radius:8px;" +
-    "background:rgba(12,17,24,0.8);color:#ffcf8a;font:600 16px Cinzel,serif;border:1px solid #6e5a3a;opacity:0;" +
-    "transition:opacity .3s ease;pointer-events:none;text-shadow:0 1px 2px #000;white-space:nowrap;";
+  promptEl.className = "hud-callout";
   promptEl.textContent = "Câmara limpa: recupere a estilha de Brasa no relicário";
   document.body.appendChild(promptEl);
 
   // Barra de progresso da canalização do acender (aparece só enquanto canaliza).
   const channelBar = document.createElement("div");
-  channelBar.style.cssText =
-    "position:fixed;left:50%;bottom:64px;transform:translateX(-50%);z-index:35;width:220px;height:8px;" +
-    "border-radius:6px;background:rgba(12,17,24,0.7);border:1px solid #6e5a3a;overflow:hidden;opacity:0;" +
-    "transition:opacity .15s ease;pointer-events:none;";
+  channelBar.className = "hud-channel";
   const channelFill = document.createElement("div");
-  channelFill.style.cssText = "height:100%;width:0%;background:linear-gradient(90deg,#ff7a1c,#ffd089);";
+  channelFill.className = "hud-channel__fill";
   channelBar.appendChild(channelFill);
   document.body.appendChild(channelBar);
 
   // Prompt de EXECUÇÃO: aparece quando há inimigo em vacilo (vida baixa) ao alcance.
   const execEl = document.createElement("div");
-  execEl.style.cssText =
-    "position:fixed;left:50%;bottom:104px;transform:translateX(-50%);z-index:36;padding:7px 16px;border-radius:8px;" +
-    "background:rgba(40,12,8,0.82);color:#ffd089;font:700 15px Cinzel,serif;border:1px solid #c8401c;opacity:0;" +
-    "transition:opacity .12s ease;pointer-events:none;text-shadow:0 1px 2px #000;white-space:nowrap;";
-  execEl.textContent = "[F] Executar";
+  execEl.className = "hud-callout hud-callout--danger";
+  execEl.innerHTML = '<span class="ds-kbd">F</span> Executar';
   document.body.appendChild(execEl);
 
   // Prompt de PEGAR ARMA (captura de arma): aparece quando há uma arma dropada ao alcance.
   const pickupEl = document.createElement("div");
-  pickupEl.style.cssText =
-    "position:fixed;left:50%;bottom:134px;transform:translateX(-50%);z-index:36;padding:6px 14px;border-radius:8px;" +
-    "background:rgba(12,17,24,0.82);color:#ffd089;font:700 14px Cinzel,serif;border:1px solid #caa45a;opacity:0;" +
-    "transition:opacity .12s ease;pointer-events:none;text-shadow:0 1px 2px #000;white-space:nowrap;";
+  pickupEl.className = "hud-callout hud-callout--gold";
   document.body.appendChild(pickupEl);
 
   // HUD da arma equipada (clava/cajado) com cargas restantes.
   const weaponEl = document.createElement("div");
-  weaponEl.style.cssText =
-    "position:fixed;right:16px;top:80px;z-index:35;padding:6px 14px;border-radius:14px;" +
-    "background:rgba(40,24,8,0.8);color:#ffcf8a;font:600 14px Cinzel,serif;border:1px solid #caa45a;" +
-    "pointer-events:none;text-shadow:0 1px 2px #000;display:none;white-space:nowrap;";
+  weaponEl.className = "hud-weapon";
+  weaponEl.style.display = "none";
   document.body.appendChild(weaponEl);
 
   // Barra do CHEFE (Guardião): topo-centro, aparece só quando o chefe está ativo.
   const bossWrap = document.createElement("div");
-  bossWrap.style.cssText =
-    "position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:36;width:440px;max-width:80vw;" +
-    "opacity:0;transition:opacity .3s ease;pointer-events:none;text-align:center;";
+  bossWrap.className = "hud-boss";
   const bossName = document.createElement("div");
-  bossName.style.cssText = "color:#e7d2b0;font:600 15px Cinzel,serif;text-shadow:0 1px 3px #000;margin-bottom:4px;letter-spacing:1px;";
+  bossName.className = "hud-boss__name";
   bossName.textContent = "O GUARDIÃO";
   const bossTrack = document.createElement("div");
-  bossTrack.style.cssText = "height:12px;border-radius:7px;background:rgba(8,10,14,0.8);border:1px solid #7a2a1c;overflow:hidden;";
+  bossTrack.className = "hud-boss__track";
   const bossFill = document.createElement("div");
-  bossFill.style.cssText = "height:100%;width:100%;background:linear-gradient(90deg,#c8401c,#ff8a2c);transition:width .12s linear;";
+  bossFill.className = "hud-boss__fill";
   bossTrack.appendChild(bossFill);
   bossWrap.append(bossName, bossTrack);
   document.body.appendChild(bossWrap);
 
   // Retículo de LOCK-ON: marca o alvo travado, projetado na tela a cada frame.
   const reticleEl = document.createElement("div");
-  reticleEl.style.cssText =
-    "position:fixed;width:34px;height:34px;border:2px solid #bfe6ff;border-radius:50%;" +
-    "box-shadow:0 0 8px rgba(150,225,255,.7),inset 0 0 6px rgba(150,225,255,.5);" +
-    "transform:translate(-50%,-50%);z-index:34;pointer-events:none;display:none;";
+  reticleEl.className = "hud-reticle";
+  reticleEl.style.display = "none";
   document.body.appendChild(reticleEl);
   const reticleWorld = new Vector3();
 
   // Texto de cena (set-pieces): abertura, ecos por andar, reavivar. Fade in/out.
   const storyEl = document.createElement("div");
-  storyEl.style.cssText =
-    "position:fixed;left:50%;top:38%;transform:translate(-50%,-50%);z-index:38;max-width:80vw;text-align:center;" +
-    "color:#e7d2b0;font:600 26px Cinzel,serif;text-shadow:0 2px 10px #000,0 0 24px rgba(255,138,44,0.35);" +
-    "opacity:0;transition:opacity 1s ease;pointer-events:none;letter-spacing:1px;";
+  storyEl.className = "hud-story";
   document.body.appendChild(storyEl);
   let storyTimer = 0;
   const showStory = (text: string, holdMs: number, big = true): void => {
     window.clearTimeout(storyTimer);
     storyEl.textContent = text;
-    storyEl.style.fontSize = big ? "26px" : "18px";
+    storyEl.classList.toggle("hud-story--small", !big);
     storyEl.style.opacity = "1";
     storyTimer = window.setTimeout(() => {
       storyEl.style.opacity = "0";
@@ -416,17 +390,12 @@ async function main(): Promise<void> {
   ];
   // Placa discreta da inscrição (estilo lapidar): aparece ao chegar perto do nicho.
   const inscriptionEl = document.createElement("div");
-  inscriptionEl.style.cssText =
-    "position:fixed;left:50%;bottom:160px;transform:translateX(-50%);z-index:35;max-width:60vw;text-align:center;" +
-    "color:#cdbb95;font:600 15px Cinzel,serif;font-style:italic;letter-spacing:1px;text-shadow:0 1px 3px #000;" +
-    "background:rgba(10,8,5,0.5);border:1px solid rgba(156,115,57,0.35);border-radius:6px;padding:7px 16px;" +
-    "opacity:0;transition:opacity .4s ease;pointer-events:none;white-space:nowrap;";
+  inscriptionEl.className = "hud-inscription";
   document.body.appendChild(inscriptionEl);
 
   // Overlay preto para o fade entre andares.
   const fadeEl = document.createElement("div");
-  fadeEl.style.cssText =
-    "position:fixed;inset:0;background:#05070b;opacity:0;pointer-events:none;transition:opacity .45s ease;z-index:40;";
+  fadeEl.className = "hud-fade";
   document.body.appendChild(fadeEl);
   const fadeTo = (o: number): Promise<void> =>
     new Promise((r) => {
@@ -1145,7 +1114,7 @@ async function main(): Promise<void> {
     brasaWrap.style.display = gameActive && !descending ? "" : "none";
     const dropName = gameActive && !descending ? combat.nearbyDrop() : null;
     if (dropName) {
-      pickupEl.textContent = `[G] Pegar ${dropName}`;
+      pickupEl.replaceChildren(Object.assign(document.createElement("span"), { className: "ds-kbd", textContent: "G" }), ` Pegar ${dropName}`);
       pickupEl.style.opacity = "1";
     } else {
       pickupEl.style.opacity = "0";
