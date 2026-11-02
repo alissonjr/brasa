@@ -72,6 +72,7 @@ import {
   type NodeKind,
   ExploracaoRegistry,
   RouteState,
+  Pocoes,
   ROTA,
   stepCommit,
   exploracaoDefaults,
@@ -301,7 +302,10 @@ async function main(): Promise<void> {
   };
   // Inventário de poções (cargas; comprado na banca do braseiro, usado com Digit1/Digit2).
   // Persiste na run. Começa com 1 Poção de Recuperação (ensina o recurso).
-  const inv = { vida: 1, furia: 0 };
+  // O cinto vive no modelo puro (game/run/pocoes.ts); `inv` é o MESMO objeto (alias): nunca reatribuir.
+  // R1: trocar por `new Pocoes(legadoDoPerfil)` (cinto vazio; a Recuperação de Marta mora no nicho de A1).
+  const pocoes = new Pocoes(undefined, { cinto: { vida: 1 }, marta: false });
+  const inv = pocoes.cinto;
 
   // Contador de Fagulhas (moeda) no HUD.
   const fagulhaEl = document.createElement("div");
@@ -326,7 +330,7 @@ async function main(): Promise<void> {
   const updatePotionHud = (): void => {
     const pot = (key: string, label: string, n: number): string =>
       `<span class="hud-pot${n > 0 ? "" : " off"}"><span class="ds-kbd">${key}</span>${label} ×${n}</span>`;
-    potionsEl.innerHTML = pot("1", T.potRecuperacao, inv.vida) + pot("2", T.potFuria, inv.furia);
+    potionsEl.innerHTML = pot("1", T.potRecuperacao, pocoes.quantos("vida")) + pot("2", T.potFuria, pocoes.quantos("furia"));
     potionsEl.style.display = gameActive ? "" : "none";
   };
 
@@ -867,8 +871,7 @@ async function main(): Promise<void> {
   // Zera a run (jogo novo): Fagulha, poções, dádivas e o herói voltam ao estado-base.
   const resetRun = (): void => {
     fagulhas = 0;
-    inv.vida = 1;
-    inv.furia = 0;
+    pocoes.reiniciar(undefined, { cinto: { vida: 1 }, marta: false }); // cinto e armário de descida nova (o legado do perfil fica)
     purchasedBoons.length = 0;
     runSeed = newSeed(); // nova run: nova semente
     route.reset(runSeed); // novo plano de saídas, sem histórico
