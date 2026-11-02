@@ -1082,6 +1082,21 @@ async function main(): Promise<void> {
     combat.wake(1.0); // despertar do andar atual ao (re)entrar no jogo
     if (!route.node) gameHud.say("eco", ECHOES[floorIndex] ?? "", floorIndex === 0 ? 5200 : 4200); // a antecâmara não tem eco
   }
+  // Do título (ou de um save) para a descida SEM corte seco: escurece por cima do menu, monta a
+  // sala atrás do preto e revela com o herói já no quadro. A simulação só liga depois do preto.
+  let enteringGame = false;
+  const intoGame = async (setup?: () => void | Promise<void>): Promise<void> => {
+    if (enteringGame) return;
+    enteringGame = true;
+    try {
+      await fadeTo(1);
+      await setup?.();
+      startGame();
+      await fadeTo(0);
+    } finally {
+      enteringGame = false;
+    }
+  };
   function pauseGame(): void {
     if (pausedOpen) return;
     gameActive = false;
@@ -1115,22 +1130,22 @@ async function main(): Promise<void> {
     hasAutosave: carregado !== null,
     playtimeSec: () => loadedPlaytime + Math.round((performance.now() - startedAt) / 1000),
     character: () => character,
-    continueGame: () => startGame(),
+    continueGame: () => intoGame(),
     newGame: () => ui.push(new CharacterCreateScreen(ctx)),
-    startNewGame: (c) => {
-      character = c;
-      applyDifficulty();
-      // O nome da heroína (Cinza por padrão) é do personagem; o perfil do jogador fica como está.
-      rev = 0;
-      platform.score.reset(0);
-      platform.progression.load({ chapterId: DEFAULT_CHAPTER, checkpointId: "", objectivesDone: [] });
-      platform.achievements.load([]);
-      codex.load([]); // Crônica nova junto com a jornada nova
-      resetRun(); // descida do zero
-      announceNext = true;
-      enterRoom(0);
-      startGame();
-    },
+    startNewGame: (c) =>
+      intoGame(() => {
+        character = c;
+        applyDifficulty();
+        // O nome da heroína (Cinza por padrão) é do personagem; o perfil do jogador fica como está.
+        rev = 0;
+        platform.score.reset(0);
+        platform.progression.load({ chapterId: DEFAULT_CHAPTER, checkpointId: "", objectivesDone: [] });
+        platform.achievements.load([]);
+        codex.load([]); // Crônica nova junto com a jornada nova
+        resetRun(); // descida do zero
+        announceNext = true;
+        enterRoom(0);
+      }),
     relocalize: (reopen) => {
       ui.clear();
       ui.push(pausedOpen ? new PauseScreen(ctx) : new MainMenuScreen(ctx));
@@ -1141,27 +1156,28 @@ async function main(): Promise<void> {
     applyKeyBindings: (b) => input.setBindings(b),
     loadSlot: async (slot) => {
       const d = await platform.save.load(slot);
-      if (d) {
-        rev = d.rev;
-        platform.score.reset(d.points);
-        const g = readGameSave(d.game);
-        character = g.character;
-        applyDifficulty();
-        platform.progression.load({
-          chapterId: g.chapter || DEFAULT_CHAPTER,
-          checkpointId: g.checkpoint,
-          objectivesDone: g.objectives,
-        });
-        platform.achievements.load(g.achievements);
-        codex.load(g.codex);
-        if (g.run.active) restoreRun(g.run);
-        else {
-          resetRun();
-          announceNext = true;
-          enterRoom(0);
+      await intoGame(() => {
+        if (d) {
+          rev = d.rev;
+          platform.score.reset(d.points);
+          const g = readGameSave(d.game);
+          character = g.character;
+          applyDifficulty();
+          platform.progression.load({
+            chapterId: g.chapter || DEFAULT_CHAPTER,
+            checkpointId: g.checkpoint,
+            objectivesDone: g.objectives,
+          });
+          platform.achievements.load(g.achievements);
+          codex.load(g.codex);
+          if (g.run.active) restoreRun(g.run);
+          else {
+            resetRun();
+            announceNext = true;
+            enterRoom(0);
+          }
         }
-      }
-      startGame();
+      });
     },
     resume: () => {
       ui.clear();
@@ -1226,7 +1242,8 @@ async function main(): Promise<void> {
     if (gameActive) void doAutosave();
   });
 
-  loading.hidden = true;
+  loading.classList.add("ld-out"); // dissolve a tela de carregamento (index.html) em vez de cortá-la
+  window.setTimeout(() => { loading.hidden = true; }, 700);
   fpsEl.hidden = false;
   ui.replaceAll(new MainMenuScreen(ctx));
   startTitleAmbience(); // ambiente de brasa da tela-título (entra após o 1o gesto)
