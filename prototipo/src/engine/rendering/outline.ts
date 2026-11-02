@@ -1,4 +1,4 @@
-import { Color3 } from "@babylonjs/core";
+import { Color3, Material } from "@babylonjs/core";
 import type { AbstractMesh, Node } from "@babylonjs/core";
 
 /**
@@ -55,7 +55,6 @@ function warnOnce(mesh: AbstractMesh): void {
 /** Liga o contorno numa malha. No-op se a malha não tem geometria ou pede `metadata.noOutline`. */
 export function addOutline(mesh: AbstractMesh, opts: OutlineOptions = {}): void {
   if (mesh.getTotalVertices() <= 0) return;
-  if ((mesh.metadata as { noOutline?: boolean } | null)?.noOutline) return;
   // O OutlineRenderer reaproveita as unidades de textura da malha. Com os ossos guardados
   // numa TEXTURA (padrão em malhas skinned), o contorno sobrescreve a unidade e a malha
   // inteira passa a amostrar a textura de ossos como se fosse o albedo (cores neon,
@@ -69,7 +68,15 @@ export function addOutline(mesh: AbstractMesh, opts: OutlineOptions = {}): void 
       return;
     }
     mesh.skeleton.useTextureToStoreBoneMatrices = false;
+    // CRÍTICO: se a malha já foi desenhada (o glb entra na cena antes de o chamador ligar o
+    // contorno), o efeito do material compilou com BONETEXTURE. Trocar o esqueleto para
+    // uniformes NÃO invalida os defines do material: o shader seguia amostrando a textura de
+    // ossos, agora vazia, e a malha sumia (a heroína aparecia só como o casco preto do
+    // contorno). Marcar os atributos como sujos recompila com os ossos em uniformes. Vale para
+    // TODA malha do esqueleto, inclusive as sem contorno (olhos), que compartilham o rig.
+    mesh.material?.markAsDirty(Material.AttributesDirtyFlag);
   }
+  if ((mesh.metadata as { noOutline?: boolean } | null)?.noOutline) return;
   mesh.renderOutline = true;
   mesh.outlineColor = (opts.color ?? DEFAULT_COLOR).clone();
   if (opts.worldWidth !== undefined) {
