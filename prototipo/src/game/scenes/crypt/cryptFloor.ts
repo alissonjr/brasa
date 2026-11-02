@@ -16,7 +16,7 @@ import {
  *    sala; nada é esticado).
  *  - Os detalhes são geometria de apoio: rachaduras em fenda (faixa escura com borda erguida), ossos,
  *    costelas, crânios, entulho (peça do kit), cacos de laje, ralo de ferro, musgo em tufos, tapete,
- *    palha, gravura ritual, e ÁGUA de verdade (plano rebaixado translúcido com ondulação por UV,
+ *    palha, cera votiva, e ÁGUA de verdade (plano rebaixado translúcido com ondulação por UV,
  *    bacias de pedra com borda molhada).
  *  - Orçamento de desenho: laje+detalhes fundidos (+ água, + emissivo) = no máximo 3 malhas.
  *
@@ -660,39 +660,12 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       i++;
     }
   } else if (kind === "santuario") {
-    // gravura ritual: aneis, estrela e runas em fios de ouro (emissivo) sobre sulcos escuros
-    const arc = (rad: number, w: number, y: number, f: Facet, col: RGB): void => {
-      const pts: [number, number][] = [];
-      const N = 72;
-      for (let i = 0; i <= N; i++) { const a = (i / N) * 6.28318; pts.push([cc.x + Math.cos(a) * rad, cc.z + Math.sin(a) * rad]); }
-      ribbon(f, pts, [w], y, col);
-    };
-    const groove = hex("#050509");
-    for (const [rad, w] of [[4.3, 0.12], [3.7, 0.08], [2.2, 0.09]] as const) {
-      arc(rad, w + 0.06, 0.014, detF, groove);
-      arc(rad, w, 0.02, emisF, [1, 1, 1]);
-    }
-    const star: [number, number][] = [];
-    for (let i = 0; i <= 5; i++) {
-      const a = (((i * 2) % 5) / 5) * 6.28318 + Math.PI / 2;
-      star.push([cc.x + Math.cos(a) * 3.7, cc.z + Math.sin(a) * 3.7]);
-    }
-    for (let i = 0; i < 5; i++) {
-      const seg: [number, number][] = [star[i]!, star[i + 1]!];
-      ribbon(detF, seg, [0.1], 0.014, groove);
-      ribbon(emisF, seg, [0.05], 0.02, [1, 1, 1]);
-    }
-    for (let i = 0; i < 16; i++) {
-      const a = (i / 16) * 6.28318;
-      const px = cc.x + Math.cos(a) * 4.0, pz = cc.z + Math.sin(a) * 4.0;
-      const rune: [number, number][] = [[px, pz], [px + Math.cos(a + 1.2) * 0.22, pz + Math.sin(a + 1.2) * 0.22]];
-      ribbon(emisF, rune, [0.045], 0.02, [1, 1, 1]);
-      if (r() < 0.5) ribbon(emisF, [[px + Math.cos(a) * 0.1, pz + Math.sin(a) * 0.1], [px + Math.cos(a) * 0.3, pz + Math.sin(a) * 0.3]], [0.04], 0.02, [1, 1, 1]);
-    }
-    // cera derretida em disco e toco de vela nos quatro cantos do circulo
+    // sem gravura ritual no chao (nada de aneis, estrela ou runas): o santuario se le por cera, velas e ossos
+    // cera derretida em disco e toco de vela, espalhados de forma irregular (sem simetria de circulo)
     for (let i = 0; i < 4; i++) {
-      const a = (i / 4) * 6.28318 + Math.PI / 4;
-      const px = cc.x + Math.cos(a) * 5.0, pz = cc.z + Math.sin(a) * 5.0;
+      const a = (i / 4) * 6.28318 + Math.PI / 4 + (r() - 0.5) * 1.1;
+      const rr0 = 4.2 + r() * 2.2;
+      const px = cc.x + Math.cos(a) * rr0, pz = cc.z + Math.sin(a) * rr0;
       if (Math.hypot(px - EX, pz - EZ) < 4) continue;
       const y = flatY(px, pz) ?? 0;
       const wax: [number, number][] = [];
