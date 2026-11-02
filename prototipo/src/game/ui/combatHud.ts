@@ -55,16 +55,35 @@ const CSS = `
 .combat-feedback.fb-block { box-shadow:inset 0 0 90px 8px rgba(210,150,70,.45); }
 .combat-feedback.fb-perfect { box-shadow:inset 0 0 110px 14px rgba(150,225,255,.55); }
 .combat-feedback.show { opacity:1; transition:opacity .05s ease; }
-/* Dica de controles: teclas em keycap, some após alguns segundos. */
+/* Dicas de controle do onboarding (onboarding.ts): fileira discreta de fichas curtas, uma por
+   ação ainda não feita; cada ficha acende em ouro e some quando o jogador faz a ação. Fica
+   no pé da tela, longe do herói (que fica no centro), e some atrás de qualquer menu. */
 .combat-hint { position:absolute; left:50%; bottom:22px; transform:translateX(-50%);
-  display:flex; align-items:center; gap:7px; pointer-events:none; white-space:nowrap;
+  display:flex; align-items:center; gap:10px; pointer-events:none; white-space:nowrap;
   font-family:var(--font-text,"EB Garamond",Georgia,serif); font-size:15px; color:var(--text-mid,#bdb299);
-  background:rgba(10,13,19,.86); border:1px solid var(--gold-700,#5c4115); border-radius:999px;
-  padding:6px 18px; box-shadow:0 8px 20px rgba(0,0,0,.5); backdrop-filter:blur(4px);
-  opacity:.95; transition:opacity 1s ease; }
-.combat-hint .chint-sep { width:1px; height:14px; background:var(--gold-700,#5c4115); margin:0 6px; }
-.combat-hint .ds-kbd { min-width:22px; height:22px; font-size:11px; }
-.combat-hint.faded { opacity:0; }
+  transition:opacity .35s ease; }
+html.ui-open .combat-hint { opacity:0; }
+.chint { display:flex; align-items:center; gap:7px; padding:5px 14px 5px 7px;
+  background:rgba(10,13,19,.72); border:1px solid var(--gold-700,#5c4115); border-radius:999px;
+  box-shadow:0 6px 16px rgba(0,0,0,.45); opacity:0; transform:translateY(6px);
+  transition:opacity .35s ease, transform .35s ease, border-color .25s ease, box-shadow .25s ease; }
+.chint.in { opacity:.9; transform:none; }
+.chint .ds-kbd { min-width:22px; height:22px; font-size:11px; letter-spacing:.04em; }
+.chint.ok { animation:chint-ok .5s ease forwards; border-color:var(--gold-300,#f2c46d); }
+@keyframes chint-ok {
+  0% { opacity:.9; box-shadow:0 0 0 rgba(255,196,90,0); }
+  35% { opacity:1; box-shadow:0 0 16px rgba(255,196,90,.7); }
+  100% { opacity:0; transform:translateY(-8px); box-shadow:0 0 10px rgba(255,196,90,.3); }
+}
+html.reduce-motion .chint { transform:none; transition:opacity .2s ease; }
+html.reduce-motion .chint.ok { animation:chint-ok-rm .3s ease forwards; }
+@keyframes chint-ok-rm { 0% { opacity:.9; } 100% { opacity:0; } }
+/* Pulso até o primeiro uso (G pegar, R ler): só brilho, sem mover nada. */
+.ob-pulse.ds-kbd, .ob-pulse .ds-kbd { animation:ob-pulse 1.4s ease-in-out infinite; }
+@keyframes ob-pulse { 0%,100% { box-shadow:0 0 0 rgba(255,196,90,0); } 50% { box-shadow:0 0 10px rgba(255,196,90,.85); } }
+html.reduce-motion .ob-pulse.ds-kbd, html.reduce-motion .ob-pulse .ds-kbd { animation:none; box-shadow:0 0 8px rgba(255,196,90,.7); }
+.hud-callout.ob-pulse { animation:ob-pulse 1.4s ease-in-out infinite; }
+html.reduce-motion .hud-callout.ob-pulse { animation:none; box-shadow:0 0 8px rgba(255,196,90,.7); }
 `;
 
 function ensureStyle(): void {
@@ -73,6 +92,13 @@ function ensureStyle(): void {
   s.id = STYLE_ID;
   s.textContent = CSS;
   document.head.appendChild(s);
+}
+
+/** Uma dica de controle: teclas (já com o texto da tecla) e o rótulo curto. */
+export interface HintChip {
+  id: string;
+  keys: string[];
+  label: string;
 }
 
 export class CombatHud {
@@ -92,7 +118,7 @@ export class CombatHud {
   private visible = true;
   private vignetteTimer = 0;
   private feedbackTimer = 0;
-  private hintTimer = 12; // a dica de controles some após ~12 s de jogo
+  private chips = new Map<string, HTMLElement>();
   private lastHealth = -1;
   private lastStamina = -1;
   private lastSparkKey = "";
@@ -119,28 +145,10 @@ export class CombatHud {
     this.vignette = el("div", { class: "damage-vignette" });
     this.feedback = el("div", { class: "combat-feedback" });
     this.hint = el("div", { class: "combat-hint" });
-    const paintHint = (): void => {
-      const hintItems: Array<[string[], string]> = [
-        [[T.tcClique, "J"], T.dicaAtacar],
-        [[T.tcDir, "K"], T.dicaPesado],
-        [["C"], T.dicaEsquiva],
-        [["E"], T.dicaFogo],
-        [["Q"], T.dicaBloqueio],
-        [["T"], T.dicaAlvo],
-      ];
-      this.hint.replaceChildren();
-      hintItems.forEach(([keys, label], i) => {
-        if (i > 0) this.hint.append(el("span", { class: "chint-sep" }));
-        for (const k of keys) this.hint.append(el("span", { class: "ds-kbd", text: k }));
-        this.hint.append(el("span", { text: label }));
-      });
-    };
-    paintHint();
     onLanguageChange(() => {
       lifeLabel.textContent = T.vidaRotulo;
       sparkLabel.textContent = T.fagulhaRotulo;
       resoLabel.textContent = T.ressonanciaRotulo;
-      paintHint();
     });
   }
 
@@ -213,10 +221,6 @@ export class CombatHud {
       this.feedbackTimer -= dt;
       if (this.feedbackTimer <= 0) this.feedback.classList.remove("show");
     }
-    if (this.hintTimer > 0) {
-      this.hintTimer -= dt;
-      if (this.hintTimer <= 0) this.hint.classList.add("faded");
-    }
   }
 
   /** Moldura de feedback positivo (~200 ms). Ignorada se "reduzir flashes" estiver ligado. */
@@ -243,10 +247,33 @@ export class CombatHud {
     this.flash("fb-perfect");
   }
 
-  /** Dispensa a dica de controles imediatamente (ex.: após o 1o ataque). */
-  dismissHint(): void {
-    this.hintTimer = 0;
-    this.hint.classList.add("faded");
+  /**
+   * Mostra exatamente estas dicas de controle (ver onboarding.ts). Ficha que sai da lista
+   * foi cumprida (ou o momento passou): acende em ouro e some; ficha nova entra suave.
+   */
+  setHints(items: HintChip[]): void {
+    const keep = new Set(items.map((i) => i.id));
+    for (const [id, node] of this.chips) {
+      if (keep.has(id)) continue;
+      this.chips.delete(id);
+      node.classList.add("ok");
+      window.setTimeout(() => node.remove(), 500);
+    }
+    items.forEach((item, i) => {
+      let node = this.chips.get(item.id);
+      if (!node) {
+        node = el("div", { class: "chint" });
+        this.chips.set(item.id, node);
+        this.hint.append(node);
+        const fresh = node;
+        window.requestAnimationFrame(() => fresh.classList.add("in"));
+      }
+      node.replaceChildren(
+        ...item.keys.map((k) => el("span", { class: "ds-kbd", text: k })),
+        el("span", { text: item.label }),
+      );
+      node.style.order = String(i);
+    });
   }
 
   /** Pisca a vinheta de dano (chamado quando o herói é atingido - a partir do M2.3). */

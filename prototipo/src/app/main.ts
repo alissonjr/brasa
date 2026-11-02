@@ -60,6 +60,7 @@ import {
   playStir,
   CombatDirector,
   CombatHud,
+  Onboarding,
   DamageNumbers,
   DIFFICULTY_DAMAGE_TAKEN,
   POTIONS,
@@ -985,8 +986,9 @@ async function main(): Promise<void> {
   combatHud.setVisible(false);
   platform.events.on("hero:hit", () => combatHud.flashDamage());
   // Feedback POSITIVO (W6): acerto sem bloqueio -> dourado; bloqueio/parry -> bronze; cura -> verde.
+  // Dicas curtas de controle nas duas primeiras salas da primeira partida (uma vez por instalação).
+  const onboarding = new Onboarding({ hud: combatHud, bindings: () => input.getBindings(), isActive: () => gameActive && !pausedOpen && !ui.hasScreens });
   platform.events.on<{ guarded?: boolean }>("combat:hit", ({ guarded }) => {
-    combatHud.dismissHint();
     if (!guarded) combatHud.flashHit();
   });
   platform.events.on("hero:block", () => combatHud.flashBlock());
@@ -1251,7 +1253,7 @@ async function main(): Promise<void> {
     brasaWrap.style.display = gameActive && !descending ? "" : "none";
     const dropName = gameActive && !descending ? combat.nearbyDrop() : null;
     if (dropName) {
-      pickupEl.replaceChildren(Object.assign(document.createElement("span"), { className: "ds-kbd", textContent: "G" }), ` ${F("pegar", { nome: weaponName(dropName) })}`);
+      pickupEl.replaceChildren(Object.assign(document.createElement("span"), { className: onboarding.pending("pickup") ? "ds-kbd ob-pulse" : "ds-kbd", textContent: "G" }), ` ${F("pegar", { nome: weaponName(dropName) })}`);
       pickupEl.style.opacity = "1";
     } else {
       pickupEl.style.opacity = "0";
@@ -1307,6 +1309,7 @@ async function main(): Promise<void> {
     if (gameActive) {
       combatHud.update(hero.combat.healthFraction, hero.combat.staminaFraction, hero.combat.sparkCharges, hero.combat.sparkChargeMax, dt / 1000);
       combatHud.setResonance(hero.combat.resonanceStreak, hero.combat.resonanceActive);
+      onboarding.update(dt / 1000, { floor: floorIndex, enemiesAlive: combat.enemiesAlive, nearDrop: !!dropName, nearReadable: !!nearReadable });
     }
     const hc = hero.combat;
     damageNumbers.update(dt / 1000, gameActive && !descending ? { hp: hc.healthFraction * hc.maxHealth, max: hc.maxHealth, x: hero.position.x, y: hero.position.y, z: hero.position.z } : null);
@@ -1336,6 +1339,7 @@ async function main(): Promise<void> {
     if (gameActive) {
       updateReadables(); // ler inscrições/pergaminhos ([R] perto)
       if (nearReadable) { promptEl.textContent = T.promptLer; promptEl.style.opacity = "1"; }
+      promptEl.classList.toggle("ob-pulse", !!nearReadable && onboarding.pending("read"));
     }
     if (acc > 250) {
       fpsEl.textContent = `${engine.getFps().toFixed(0)} fps`;
