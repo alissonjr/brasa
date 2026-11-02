@@ -4,6 +4,9 @@ import { createLightPool } from "@engine";
 import type { Layout } from "./cryptLayouts";
 import type { RoomKind } from "./cryptRoom";
 
+export { buildFloorScape } from "./cryptFloor";
+export type { FloorScape } from "./cryptFloor";
+
 /**
  * CAMADA JOGO (Brasa). CENOGRAFIA DO PISO vista de cima (camera alta). Em vez de dezenas de
  * malhas, o chao inteiro e UMA textura procedural (DynamicTexture, canvas 2D) colada na laje
