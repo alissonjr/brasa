@@ -292,20 +292,20 @@ export function ribcage(f: Facet, x: number, y0: number, z: number, yaw: number,
   const c = Math.cos(yaw), s = Math.sin(yaw);
   const to = (lx: number, ly: number, lz: number): V3 => [x + lx * c - lz * s, y0 + ly, z + lx * s + lz * c];
   tube(f, [to(-0.5 * sc, 0.05 * sc, 0), to(0.5 * sc, 0.05 * sc, 0)], [0.035 * sc, 0.035 * sc], 6, shade(col, 0.92), true);
-  const n = 6;
+  const n = 4;
   for (const side of [-1, 1]) {
     for (let i = 0; i < n; i++) {
       const u = -0.42 + (i / (n - 1)) * 0.84;
       const len = (0.34 - Math.abs(u) * 0.18) * sc;
       const pts: V3[] = [];
-      const seg = 6;
+      const seg = 4;
       for (let k = 0; k <= seg; k++) {
         const t = (k / seg) * Math.PI * 0.82;
         pts.push(to(u * sc, 0.05 * sc + Math.sin(t) * len * 0.9, side * (0.03 * sc + (1 - Math.cos(t)) * len * 0.55)));
       }
       // as costelas apoiam no chao: sem nada abaixo de y0
       const rr = Array.from({ length: seg + 1 }, (_, k) => (0.024 - k * 0.0022) * sc);
-      tube(f, pts, rr, 5, col, true);
+      tube(f, pts, rr, 4, col, true);
     }
   }
 }
@@ -333,7 +333,7 @@ export function tuft(f: Facet, x: number, y0: number, z: number, size: number, b
     const h = size * (0.5 + r() * 0.7);
     const lean = size * (0.15 + r() * 0.3);
     const ap: V3 = [bx + Math.cos(an) * lean, y0 + h, bz + Math.sin(an) * lean];
-    const w = size * 0.09;
+    const w = size * 0.17;
     const b0: V3 = [bx + Math.cos(an + 2.1) * w, y0, bz + Math.sin(an + 2.1) * w];
     const b1: V3 = [bx + Math.cos(an + 4.2) * w, y0, bz + Math.sin(an + 4.2) * w];
     const b2: V3 = [bx + Math.cos(an) * w, y0, bz + Math.sin(an) * w];
@@ -483,8 +483,8 @@ export function makeWaterTexture(scene: Scene): DynamicTexture {
       for (const w of waves) s += Math.sin(((w.kx * x + w.ky * y) / N) * Math.PI * 2 + w.ph);
       const f = Math.abs(s) / 2; // 0 sobre as linhas
       const line = Math.pow(Math.max(0, 1 - f / 0.32), 2.2);
-      const base = 0.5;
-      const v = Math.min(1, base + line * 0.5);
+      const base = 0.42;
+      const v = Math.min(1, base + line * 0.58);
       const i = (y * N + x) * 4;
       img.data[i] = Math.round(255 * (0.55 * v));
       img.data[i + 1] = Math.round(255 * (0.86 * v));
@@ -510,6 +510,8 @@ export interface KitGeo {
   col: Float32Array; // rgb por vertice
   idx: Uint32Array;
   size: { x: number; y: number; z: number };
+  /** false apos decimar: as normais nao valem como dica de face (a ordem dos vertices ja esta certa). */
+  hinted: boolean;
 }
 
 type ColorMat = { albedoColor?: { r: number; g: number; b: number }; diffuseColor?: { r: number; g: number; b: number } };
@@ -518,7 +520,7 @@ type ColorMat = { albedoColor?: { r: number; g: number; b: number }; diffuseColo
  * Extrai geometria de uma peca do kit (so cores planas) sem passar por MergeMeshes: le cada malha,
  * aplica a matriz de mundo, e guarda a cor do material por vertice. Base em y=0, centrada em xz.
  */
-export function bakeKitPiece(container: AssetContainer | undefined): KitGeo | null {
+export function bakeKitPiece(container: AssetContainer | undefined, cell = 0): KitGeo | null {
   if (!container) return null;
   const entries = container.instantiateModelsToScene(undefined, false);
   const root = entries.rootNodes[0];
@@ -562,9 +564,40 @@ export function bakeKitPiece(container: AssetContainer | undefined): KitGeo | nu
   }
   const cx = (minX + maxX) / 2, cz = (minZ + maxZ) / 2;
   for (let i = 0; i < P.length; i += 3) { P[i] = P[i]! - cx; P[i + 1] = P[i + 1]! - minY; P[i + 2] = P[i + 2]! - cz; }
+  if (cell > 0) {
+    // decimacao por agrupamento de vertices (grade): colapsa detalhe fino que nao se le a 15 m de camera
+    const key = new Map<string, number>();
+    const np: number[] = [], nc: number[] = [], cnt: number[] = [];
+    const remap: number[] = [];
+    for (let i = 0; i < P.length; i += 3) {
+      const k = `${Math.round(P[i]! / cell)},${Math.round(P[i + 1]! / cell)},${Math.round(P[i + 2]! / cell)}`;
+      let id = key.get(k);
+      if (id === undefined) { id = np.length / 3; key.set(k, id); np.push(0, 0, 0); nc.push(0, 0, 0); cnt.push(0); }
+      np[id * 3] = np[id * 3]! + P[i]!; np[id * 3 + 1] = np[id * 3 + 1]! + P[i + 1]!; np[id * 3 + 2] = np[id * 3 + 2]! + P[i + 2]!;
+      nc[id * 3] = nc[id * 3]! + C[i]!; nc[id * 3 + 1] = nc[id * 3 + 1]! + C[i + 1]!; nc[id * 3 + 2] = nc[id * 3 + 2]! + C[i + 2]!;
+      cnt[id] = cnt[id]! + 1;
+      remap.push(id);
+    }
+    for (let id = 0; id < cnt.length; id++) for (let k = 0; k < 3; k++) { np[id * 3 + k] = np[id * 3 + k]! / cnt[id]!; nc[id * 3 + k] = nc[id * 3 + k]! / cnt[id]!; }
+    const seen = new Set<string>();
+    const ni: number[] = [];
+    for (let i = 0; i < I.length; i += 3) {
+      const a = remap[I[i]!]!, b = remap[I[i + 1]!]!, c = remap[I[i + 2]!]!;
+      if (a === b || b === c || a === c) continue;
+      const sk = [a, b, c].sort((x, y) => x - y).join(",");
+      if (seen.has(sk)) continue;
+      seen.add(sk);
+      ni.push(a, b, c);
+    }
+    P.length = 0; C.length = 0; I.length = 0;
+    P.push(...np); C.push(...nc); I.push(...ni);
+    N.length = 0;
+    for (let i = 0; i < P.length; i++) N.push(i % 3 === 1 ? 1 : 0);
+  }
   return {
     pos: new Float32Array(P), nor: new Float32Array(N), col: new Float32Array(C), idx: new Uint32Array(I),
     size: { x: maxX - minX, y: maxY - minY, z: maxZ - minZ },
+    hinted: cell <= 0,
   };
 }
 
@@ -590,6 +623,6 @@ export function placeKit(f: Facet, k: KitGeo, x: number, y: number, z: number, s
     }
     const nv = k.idx[i]!;
     const nrm = tf(k.nor[nv * 3]!, k.nor[nv * 3 + 1]!, k.nor[nv * 3 + 2]!);
-    f.tri(tri[0]!, tri[1]!, tri[2]!, [(cr0 / 3) * tint[0], (cg0 / 3) * tint[1], (cb0 / 3) * tint[2]], nrm);
+    f.tri(tri[0]!, tri[1]!, tri[2]!, [(cr0 / 3) * tint[0], (cg0 / 3) * tint[1], (cb0 / 3) * tint[2]], k.hinted ? nrm : undefined);
   }
 }

@@ -51,10 +51,10 @@ interface Pal {
   moss: [number, number, number];
 }
 const PAL: Record<RoomKind, Pal> = {
-  guarda: { slabs: [[218, 9, 34], [32, 7, 33], [222, 9, 28], [205, 7, 37]], joint: "#07090c", moss: [100, 22, 20] },
-  salao: { slabs: [[32, 8, 34], [215, 8, 32], [26, 9, 29], [40, 7, 37]], joint: "#08080b", moss: [90, 18, 18] },
-  cisterna: { slabs: [[188, 14, 27], [160, 12, 24], [212, 11, 22], [170, 16, 30]], joint: "#050a0c", moss: [118, 30, 22] },
-  santuario: { slabs: [[252, 8, 37], [42, 9, 38], [235, 10, 29], [270, 7, 33]], joint: "#08080d", moss: [110, 16, 18] },
+  guarda: { slabs: [[218, 9, 34], [32, 7, 33], [222, 9, 28], [205, 7, 37]], joint: "#07090c", moss: [100, 26, 28] },
+  salao: { slabs: [[32, 8, 34], [215, 8, 32], [26, 9, 29], [40, 7, 37]], joint: "#08080b", moss: [90, 22, 26] },
+  cisterna: { slabs: [[188, 14, 27], [160, 12, 24], [212, 11, 22], [170, 16, 30]], joint: "#050a0c", moss: [112, 34, 30] },
+  santuario: { slabs: [[252, 8, 37], [42, 9, 38], [235, 10, 29], [270, 7, 33]], joint: "#08080d", moss: [110, 20, 26] },
   guardiao: { slabs: [[262, 8, 21], [10, 12, 22], [240, 9, 16], [20, 10, 26]], joint: "#030205", moss: [60, 10, 12] },
 };
 
@@ -98,7 +98,8 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
 
   // --- zonas proibidas para peca em relevo ---
   const taken: Spot[] = [];
-  for (const p of L.pillars) taken.push({ x: p.x, z: p.z, r: 1.7 });
+  for (const p of L.pillars) taken.push({ x: p.x, z: p.z, r: 1.5 });
+  const wTaken: Spot[] = [...L.pillars.map((p) => ({ x: p.x, z: p.z, r: 0.95 })), { x: EX, z: EZ, r: 3.6 }];
   taken.push({ x: EX, z: EZ, r: 3.6 });
   const NICHE_Z = -(HZ - 5);
   const zS = -(HZ - 4);
@@ -114,6 +115,8 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     { x0: HX - 3.2, x1: HX, z0: NICHE_Z - 1.9, z1: NICHE_Z + 1.9 }, // nicho
     { x0: -5.6, x1: 5.6, z0: AZ - 4.0, z1: HZ }, // estrado
     { x0: -4, x1: 5.5, z0: -HZ, z1: -HZ + 2.8 }, // porta
+    { x0: 5.0, x1: 9.0, z0: 1.0, z1: 5.0 }, { x0: -9.0, x1: -5.0, z0: 1.0, z1: 5.0 }, // potes
+    { x0: 1.4, x1: 4.6, z0: 2.4, z1: 5.6 }, { x0: -4.6, x1: -1.4, z0: 2.4, z1: 5.6 },
   ];
   const inRect = (x: number, z: number, m: number, rc: Rect): boolean => x > rc.x0 - m && x < rc.x1 + m && z > rc.z0 - m && z < rc.z1 + m;
   const onProp = (x: number, z: number, m: number): boolean => propRects.some((rc) => inRect(x, z, m, rc));
@@ -129,16 +132,20 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
   const ponds: Pond[] = [];
   const holes: Rect[] = [{ x0: EX - 1.3, x1: EX + 1.3, z0: EZ - 1.3, z1: EZ + 1.3 }];
   const bandX = L.calm.rx + 0.6; // |x| minimo das bacias (fora da faixa de combate)
-  const placeWater = (w: number, d: number, tries = 60): { x: number; z: number } | null => {
+  const placeWater = (w: number, d: number, circle = false, tries = 500): { x: number; z: number } | null => {
     for (let t = 0; t < tries; t++) {
       const side = r() < 0.5 ? -1 : 1;
-      const x = side * (bandX + w / 2 + r() * Math.max(0.01, HX - 1.4 - bandX - w));
+      const x = side * (bandX + w / 2 + r() * Math.max(0.01, HX - 0.7 - bandX - w));
       const z = (r() - 0.5) * (HZ * 2 - d - 5);
       const rc: Rect = { x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2 };
       if (Math.abs(x) - w / 2 < bandX - 0.3) continue;
-      if (Math.abs(x) + w / 2 > HX - 1.0) continue;
+      if (Math.abs(x) + w / 2 > HX - 0.7) continue;
       if (propRects.some((p) => !(rc.x1 + 0.8 < p.x0 || rc.x0 - 0.8 > p.x1 || rc.z1 + 0.8 < p.z0 || rc.z0 - 0.8 > p.z1))) continue;
-      if (taken.some((tk) => Math.hypot(Math.max(rc.x0 - tk.x, 0, tk.x - rc.x1), Math.max(rc.z0 - tk.z, 0, tk.z - rc.z1)) < tk.r + 0.4)) continue;
+      const bad = wTaken.some((tk) => {
+        if (circle) return Math.hypot(tk.x - x, tk.z - z) < tk.r + w / 2 + 0.4;
+        return Math.hypot(Math.max(rc.x0 - tk.x, 0, tk.x - rc.x1), Math.max(rc.z0 - tk.z, 0, tk.z - rc.z1)) < tk.r + 0.4;
+      });
+      if (bad) continue;
       return { x, z };
     }
     return null;
@@ -151,6 +158,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       const rc: Rect = { x0: tp.x - tw / 2, x1: tp.x + tw / 2, z0: tp.z - td / 2, z1: tp.z + td / 2 };
       basins.push({ rect: rc, kind: "tanque" });
       taken.push({ x: tp.x, z: tp.z, r: Math.hypot(tw, td) / 2 + 0.5 });
+      wTaken.push({ x: tp.x, z: tp.z, r: Math.max(tw, td) / 2 + 0.3 });
     }
     const cl = long ? 6.5 + r() * 2 : 4.6 + r() * 1.2;
     const cw = 1.15;
@@ -159,12 +167,14 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       const rc: Rect = { x0: cp.x - cw / 2, x1: cp.x + cw / 2, z0: cp.z - cl / 2, z1: cp.z + cl / 2 };
       basins.push({ rect: rc, kind: "canal" });
       taken.push({ x: cp.x, z: cp.z, r: cl / 2 + 0.3 });
+      wTaken.push({ x: cp.x, z: cp.z, r: cl / 2 + 0.2 });
     }
     const pr = 1.5 + r() * 0.5;
-    const pp = placeWater(pr * 2 + 1.2, pr * 2 + 1.2);
+    const pp = placeWater(pr * 2 + 1.2, pr * 2 + 1.2, true);
     if (pp) {
       ponds.push({ x: pp.x, z: pp.z, r0: pr, phase: [r() * 6.28, r() * 6.28, r() * 6.28], ang: r() * 6.28 });
       taken.push({ x: pp.x, z: pp.z, r: pr + 1.0 });
+      wTaken.push({ x: pp.x, z: pp.z, r: pr + 0.6 });
     }
     for (const b of basins) holes.push(b.rect);
   }
@@ -184,11 +194,11 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
   const slabs: Slab[] = [];
   {
     const X0 = -HX - 0.45, X1 = HX + 0.45, Z0 = -HZ - 0.45, Z1 = HZ + 0.45;
-    const rows = split(Z1 - Z0, 2.35, r, 0.22);
+    const rows = split(Z1 - Z0, 2.0, r, 0.22);
     let z = Z0;
     const gap = 0.032;
     for (const d of rows) {
-      const widths = split(X1 - X0, 2.7, r, 0.3);
+      const widths = split(X1 - X0, 2.35, r, 0.3);
       let x = X0;
       for (const w of widths) {
         const base: Rect = { x0: x, x1: x + w, z0: z, z1: z + d };
@@ -229,7 +239,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     if (s.kind === "raised") l += 3;
     let col = hsl(hue, sat, l);
     if (wallDist < 1.8) col = shade(col, 0.8 + 0.1 * wallDist / 1.8);
-    if (kind === "cisterna" && nearWater(cx, cz, 2.2)) col = mix(col, hsl(165, 28, 16), 0.42);
+    if (kind === "cisterna" && nearWater(cx, cz, 2.2)) col = mix(col, hsl(170, 22, 18), 0.3);
     if (burn) {
       const dd = Math.hypot(cx - cc.x, cz - cc.z);
       col = shade(col, 0.55 + 0.45 * Math.min(1, dd / 8));
@@ -383,7 +393,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     slope(detF, rm, yb + lipH, ro, yb, shade(lipCol, 0.8), [0, 1, 0]);
   };
   {
-    const nCr = Math.round(rimArea / (kind === "guardiao" ? 7 : kind === "guarda" ? 15 : 10));
+    const nCr = Math.round(rimArea / (kind === "guardiao" ? 3.5 : kind === "guarda" ? 7 : 5));
     let made = 0;
     for (let t = 0; t < nCr * 8 && made < nCr; t++) {
       const s = slabs[Math.floor(r() * slabs.length)]!;
@@ -404,8 +414,12 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
   // =============================================================================================
   // 4) PECAS DE APOIO
   // =============================================================================================
-  const skull = bakeKitPiece(pieces.skull);
-  const rubbleKit = bakeKitPiece(pieces.rubble);
+  const tally: Record<string, number> = {};
+  let tmark = detF.triCount;
+  const mark = (n: string): void => { tally[n] = (tally[n] ?? 0) + detF.triCount - tmark; tmark = detF.triCount; };
+  mark("cracks");
+  const skull = bakeKitPiece(pieces.skull, 0.17);
+  const rubbleKit = bakeKitPiece(pieces.rubble, 0.16);
   const boneCol = hex("#c9c1a5");
   const rockCol = (): RGB => hsl(205 + (r() - 0.5) * 30, 7 + r() * 5, 21 + r() * 7);
 
@@ -463,11 +477,11 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
   };
 
   const dens: Record<RoomKind, { rubble: number; bones: number; shards: number; skulls: number }> = {
-    guarda: { rubble: 1 / 26, bones: 1 / 52, shards: 1 / 22, skulls: 1 / 90 },
-    salao: { rubble: 1 / 28, bones: 1 / 44, shards: 1 / 22, skulls: 1 / 80 },
-    cisterna: { rubble: 1 / 16, bones: 1 / 26, shards: 1 / 16, skulls: 1 / 60 },
-    santuario: { rubble: 1 / 34, bones: 1 / 40, shards: 1 / 26, skulls: 1 / 70 },
-    guardiao: { rubble: 1 / 14, bones: 1 / 30, shards: 1 / 12, skulls: 1 / 60 },
+    guarda: { rubble: 1 / 11, bones: 1 / 24, shards: 1 / 10, skulls: 1 / 40 },
+    salao: { rubble: 1 / 12, bones: 1 / 20, shards: 1 / 10, skulls: 1 / 36 },
+    cisterna: { rubble: 1 / 7, bones: 1 / 14, shards: 1 / 7, skulls: 1 / 28 },
+    santuario: { rubble: 1 / 14, bones: 1 / 18, shards: 1 / 11, skulls: 1 / 32 },
+    guardiao: { rubble: 1 / 6, bones: 1 / 13, shards: 1 / 5, skulls: 1 / 26 },
   };
   const D = dens[kind];
 
@@ -478,6 +492,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     rubbleCluster(x, z, flatY(x, z)!, r());
     i++;
   }
+  mark("entulho");
   // montes de ossos (ossos + cranio + costelas)
   for (let i = 0, n = Math.round(rimArea * D.bones), tr = 0; i < n && tr < n * 20; tr++) {
     const [x, z] = rimPoint();
@@ -485,6 +500,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     boneGroup(x, z, flatY(x, z)!, r() < 0.3);
     i++;
   }
+  mark("ossos");
   // cranios soltos
   for (let i = 0, n = Math.round(rimArea * D.skulls), tr = 0; skull && i < n && tr < n * 20; tr++) {
     const [x, z] = rimPoint();
@@ -493,6 +509,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     placeKit(detF, skull, x, flatY(x, z)! - 0.03, z, 0.3 + r() * 0.1, r() * 6.28, [0.92 + r() * 0.1, 0.9 + r() * 0.1, 0.84 + r() * 0.1], (r() - 0.5) * 0.5, (r() - 0.5) * 0.5);
     i++;
   }
+  mark("cranios");
   // cacos de laje quebrada soltos (a maior parte perto de lajes erguidas e paredes)
   for (let i = 0, n = Math.round(rimArea * D.shards), tr = 0; i < n && tr < n * 20; tr++) {
     const [x, z] = rimPoint();
@@ -502,6 +519,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     shard(detF, x, flatY(x, z)!, z, 0.3 + r() * 0.5, 0.045 + r() * 0.06, r, shade(sl.col, 1.05 + r() * 0.15));
     i++;
   }
+  mark("cacos");
   // cacos e entulho junto de cada laje erguida (de onde saiu o pedaco)
   for (const s of slabs) {
     if (s.kind !== "raised" || r() > 0.7) continue;
@@ -514,6 +532,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     shard(detF, side + (r() - 0.5) * 0.4, flatY(side, z)!, z + (r() - 0.5) * 0.5, 0.25 + r() * 0.2, 0.05, r, shade(s.col, 1.1));
   }
 
+  mark("erguidas");
   // =============================================================================================
   // 5) ASSINATURA POR TIPO DE SALA
   // =============================================================================================
@@ -555,13 +574,13 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       if (t < 0.5) mossTargets.push([rc.x0 + r() * (rc.x1 - rc.x0), (r() < 0.5 ? rc.z0 - out : rc.z1 + out)]);
       else mossTargets.push([(r() < 0.5 ? rc.x0 - out : rc.x1 + out), rc.z0 + r() * (rc.z1 - rc.z0)]);
     }
-    for (let i = 0; i < Math.round(rimArea / 5); i++) mossTargets.push(rimPoint());
+    for (let i = 0; i < Math.round(rimArea / 2.2); i++) mossTargets.push(rimPoint());
     for (const [x, z] of mossTargets) {
       if (inCalm(L, x, z, 1.02) || nearTaken(x, z, -1.2) || stage(x, z) || Math.abs(x) > HX - 0.5 || Math.abs(z) > HZ - 0.5) continue;
       const y = flatY(x, z);
       if (y === null) continue;
       if (inPond(x, z, -0.45)) continue;
-      mossAt(x, z, y, 0.16 + r() * 0.16, 3 + Math.floor(r() * 4));
+      mossAt(x, z, y, 0.22 + r() * 0.22, 4 + Math.floor(r() * 4));
     }
     // ralo de ferro: anel, boca escura e grade (peca 3D)
     for (let t = 0; t < 80; t++) {
@@ -735,6 +754,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       i++;
     }
   }
+  mark("assinatura");
   // tufos de mofo discretos nos demais tipos (so cantos)
   if (kind !== "cisterna" && kind !== "guardiao") {
     for (let i = 0, tr = 0; i < 6 && tr < 60; tr++) {
@@ -781,8 +801,9 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     wm.diffuseColor = Color3.Black();
     wm.specularColor = Color3.Black();
     wm.emissiveTexture = waterTex;
-    wm.emissiveColor = new Color3(0.2, 0.46, 0.5);
-    wm.alpha = 0.8;
+    wm.emissiveColor = new Color3(0.01, 0.04, 0.05);
+    waterTex.level = 0.5;
+    wm.alpha = 0.86;
     wm.backFaceCulling = false;
     waterMesh.material = wm;
     waterMesh.receiveShadows = false;
@@ -803,6 +824,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     meshes.push(emisMesh);
   }
 
+  if (import.meta.env.DEV) console.info("[piso] " + JSON.stringify({ kind, slabs: slabs.length, tris: floorF.triCount + detF.triCount + waterF.triCount + emisF.triCount, floor: floorF.triCount, det: detF.triCount, water: puddles, tally, skullTris: skull ? skull.idx.length / 3 : 0, rubbleTris: rubbleKit ? rubbleKit.idx.length / 3 : 0 }));
   const tris = floorF.triCount + detF.triCount + waterF.triCount + emisF.triCount;
   return {
     meshes,
