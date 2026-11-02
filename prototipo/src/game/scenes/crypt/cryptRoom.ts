@@ -1608,6 +1608,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       scene.onBeforeRenderObservable.remove(flicker);
       atmosphere?.dispose();
       arenaDispose?.();
+      sideDoorFx?.dispose();
       if (flameBase) ctx.glow.removeIncludedOnlyMesh(flameBase);
       for (const c of casters) ctx.shadow.removeShadowCaster(c);
       for (const a of aggregates) a.dispose();

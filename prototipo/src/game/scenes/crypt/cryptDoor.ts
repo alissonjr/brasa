@@ -21,6 +21,8 @@ const VEIL_ALPHA = 0.6;
 
 export interface SideDoorFx {
   setOpen(open: boolean): void;
+  /** Solta o veu do GlowLayer (as malhas morrem com a sala; o glow nao as esquece sozinho). */
+  dispose(): void;
 }
 
 export function buildSideDoor(scene: Scene, glow: GlowLayer, parent: TransformNode, spot: DoorSpot, kind: NodeKind): SideDoorFx {
@@ -57,6 +59,9 @@ export function buildSideDoor(scene: Scene, glow: GlowLayer, parent: TransformNo
         pool.setEnabled(false);
         veilMat.alpha = 0;
       }
+    },
+    dispose(): void {
+      glow.removeIncludedOnlyMesh(veil);
     },
   };
 }
