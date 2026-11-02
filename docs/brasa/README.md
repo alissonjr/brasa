@@ -42,6 +42,7 @@ cada doc de elemento termina com checklist de aceite (DoD).
 - [`spec-ui-hud-ux.md`](spec-ui-hud-ux.md) - HUD, menus, acessibilidade.
 - [`spec-set-pieces.md`](spec-set-pieces.md) - momentos roteirizados (acender a Brasa, despertares, queda).
 - [`spec-vertical-slice-cripta.md`](spec-vertical-slice-cripta.md) - a descida jogável de 5-7 salas + chefe; substitui o spec do protótipo de Jericó.
+- [`spec-exploracao-indice.md`](spec-exploracao-indice.md) - exploração gradual: portas e antecâmaras, livros e Sabedoria, poções e Bancada, cenário vivo (índice, ordem, riscos e decisões; specs irmãs `spec-exploracao-*.md`).
 
 ## Processo
 - [`plano-de-producao.md`](plano-de-producao.md) - etapas, marcos, ordem de construção.

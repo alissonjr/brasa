@@ -261,6 +261,8 @@ export interface CaveOpts {
 export interface CaveBuild {
   /** Todas as malhas da caverna (o chamador as prende na sala). */
   meshes: Mesh[];
+  /** Colisores das pecas de cena dentro da sala (o chamador cria as caixas). */
+  colliders: { cx: number; cz: number; w: number; d: number }[];
   /** Malhas que entram no GlowLayer. */
   glow: Mesh[];
   /** Brasa acesa (0..1): veios e cristais ganham vida. */
@@ -299,6 +301,7 @@ export function buildCave(scene: Scene, o: CaveOpts): CaveBuild {
     geoGlow: new P.Geo(),
     geoWater: new P.Geo(),
     stains: [],
+    colliders: [],
   };
 
   // Patamares nivelados onde as pecas de cena precisam de chao (corta a rampa, nunca a eleva).
@@ -310,12 +313,9 @@ export function buildCave(scene: Scene, o: CaveOpts): CaveBuild {
   };
 
   // Posicoes das pecas de cena (decididas antes do relevo para abrir os patamares).
-  const n = P.rimPoint(ctx, "n", 0, 4.4);
   const sRim = P.rimPoint(ctx, "s", 0, 3.6);
-  let tombAt: { x: number; z: number } | null = null;
   let campAt: { x: number; z: number } | null = null;
   let gratesAt: { x: number; z: number; ry: number }[] = [];
-  if (th.set === "tumulo") tombAt = pad(-5.5, n.z, 3.2);
   if (th.set === "acampamento") campAt = pad(-7.5, sRim.z + 0.4, 3);
   if (th.set === "grades") {
     gratesAt = [
@@ -464,11 +464,24 @@ export function buildCave(scene: Scene, o: CaveOpts): CaveBuild {
 
   switch (th.set) {
     case "tumulo":
-      if (tombAt) P.tomb(ctx, tombAt.x, tombAt.z, 0.2);
+      {
+        // tumulo arrombado por dentro, encostado no muro norte (fora da faixa de combate), com colisor
+        const tx = -o.halfX * 0.72;
+        const tz = o.halfZ - 1.9;
+        P.openTomb(ctx, tx, tz, Math.PI, 0.04);
+        ctx.colliders.push({ cx: tx, cz: tz - 0.4, w: 2.5, d: 1.5 });
+      }
       P.lightShafts(ctx, 4);
       break;
     case "acampamento":
       if (campAt) P.camp(ctx, campAt.x, campAt.z);
+      {
+        // manto rasgado de Acendedora e fagulha apagada, junto ao muro sul (fora da faixa de combate)
+        const mx = -o.halfX * 0.62;
+        const mz = -o.halfZ + 1.9;
+        P.tornCloak(ctx, mx, mz, Math.PI, 0.12, P.col("#8c3636"));
+        P.deadSpark(ctx, mx + 1.7, mz + 0.1, 0.12);
+      }
       break;
     case "cascata":
       P.lake(ctx);
@@ -480,7 +493,9 @@ export function buildCave(scene: Scene, o: CaveOpts): CaveBuild {
       P.grates(ctx, gratesAt);
       break;
     case "ossuario":
-      P.twoRemains(ctx);
+      // uma Acendedora voltou ate a porta (cabeca para o vao); a outra desceu mais fundo (braco para a saida)
+      P.acendedoraRemains(ctx, o.halfX * 0.36, -o.halfZ + 1.9, -Math.PI / 2, 0.12, P.col("#3a4a78"), "supina");
+      P.acendedoraRemains(ctx, -o.halfX * 0.5, o.halfZ - 2.3, Math.PI / 2, 0.12, P.col("#6e3c28"), "curvada");
       P.ossuary(ctx, "e", 4);
       P.ossuary(ctx, "w", -4);
       break;
@@ -557,6 +572,7 @@ export function buildCave(scene: Scene, o: CaveOpts): CaveBuild {
   const grad = th.set === "fissura" || th.set === "cratera" || th.set === "grades";
   return {
     meshes,
+    colliders: ctx.colliders,
     glow: glowMeshes,
     setLit(t: number): void {
       if (!emMat || !grad) return;
