@@ -93,18 +93,18 @@ Duas amarras técnicas que a solução precisa respeitar `[CÓDIGO]`:
 | Ladino e Espreitador (`rogue`, `espreitador`) | **Adaga do Rol** | Ritmo e flanco: rápida, dobra o golpe pelas costas | Contragolpe | 28 golpes | KayKit Adventurers `dagger` |
 | Arqueiro (`arqueiro`) | **Besta da Guarda** | Distância: virote reto, perfurante no pesado | Fogo | 10 virotes | KayKit Skeletons `Skeleton_Crossbow` |
 | Conjurador (`conjurador`) | **Cajado de Cinza** | Área e fogo: orbe lento que queima, coluna marcada no chão | Fogo | 8 cargas | KayKit Skeletons `Skeleton_Staff` |
-| Brutamonte e Pesado (`brutamonte`, `heavy`) | **Clava do Bruto** | Esmagar: lenta, o pesado atordoa em área | Lâmina | 10 golpes | procedural |
+| Brutamonte (`brutamonte`) | **Clava do Bruto** | Esmagar: lenta, o pesado atordoa em área | Lâmina | 10 golpes | procedural |
 | Antigo (`antigo`) | **Machado do Antigo** | Romper: arco largo que abre a guarda do escudo | Lâmina | 12 golpes | KayKit Skeletons `Skeleton_Axe` |
-| Sentinela (`sentinela`) | **Escudo da Sentinela** | Guardar: bloqueio sem custo, o golpe vira empurrão | Contragolpe | 8 defesas | KayKit Skeletons `Skeleton_Shield_Large_A` |
+| Sentinela e Pesado (`sentinela`, `heavy`) | **Escudo da Sentinela** | Guardar: bloqueio sem custo, o golpe vira empurrão | Contragolpe | 8 defesas | KayKit Skeletons `Skeleton_Shield_Large_A` |
 | Guardião (chefe) | **Lâmina da Primeira** (relíquia) | O preço: mais forte, bebe a sua vida | (nenhuma) | sem Fio, custa vida | procedural |
 | `minion`, `demonio` | nenhuma | o minion é o povo comum, sem arma de ofício; o demônio é monstro, não é do povo | | | |
 
 Por que `demonio` e `minion` não largam: o canon diz que os mortos são o povo do reino (seção 0 da narrativa);
 o aldeão não tem ofício que lhe dê uma arma, e o demônio (Quaternius Monsters) é exceção registrada, não é gente.
-Ambos continuam largando Essência e Fagulha. O `heavy` usa o mesmo modelo da Sentinela, por isso larga a Clava como
-brutamonte (o "mini-bruto" do bestiário 3.4) e **não** o escudo, que fica exclusivo da Sentinela.
+Ambos continuam largando Essência e Fagulha. O `heavy` é o morto com escudo e elmo (`guards: true`, modelo da Sentinela, "silhueta de quem bloqueia"), por isso larga o **Escudo**, junto com a Sentinela; a Clava fica só com o Brutamonte (hoje o `heavy` larga uma clava, uma arma que a silhueta dele não carrega: diagnóstico 7).
+O `antigo` deixa de largar clava e passa a largar o Machado.
 
-Taxas de drop `[A DEFINIR]` (recomendação): Sentinela 100%, Brutamonte 100%, Antigo 70%, Conjurador 60%, Pesado 70%,
+Taxas de drop `[A DEFINIR]` (recomendação): Sentinela 100%, Brutamonte 100%, Antigo 70%, Conjurador 60%, Pesado 70% (Escudo),
 Arqueiro 45%, Guarda 40%, Ladino 35%, Espreitador 35%. No máximo **2 drops no chão** ao mesmo tempo (o 3º dissolve o mais antigo), sem expirar por tempo.
 
 ### 2.3 Referência de números e como compor `[CÓDIGO]` `[MEDIDO]`
@@ -217,11 +217,11 @@ playtest, na régua de `tuning.ts`.
 - **Equilíbrio:** orbe direto 12/0,70 = **17,1 (-26%)**, mais a Queimadura (2 por segundo por pilha, +10% de dano tomado) e o respingo: ~21 e x2 em grupos. Perde para o bronze em 1 contra 1 e ganha contra hordas e contra os que ficam parados.
 - **Sinergias.** Fogo II (leque mais largo) alarga a Nova; Fogo III dá +1 s de Queimadura nas Colunas. Queimador (dádiva) soma pilhas. O cajado é a melhor arma para a gangorra de luz do Guardião (cada acerto reacende).
 
-#### 2.4.5 Clava do Bruto (Brutamonte e Pesado)
+#### 2.4.5 Clava do Bruto (Brutamonte)
 
 - **Silhueta e nome.** Cabo grosso e cabeça em cone invertido com cinta e tachas de ferro; a maior massa do conjunto,
   lê-se como "pancada" mesmo vista de cima. Cor: ouro (Lâmina, pela Linha do pesado).
-- **Quem a larga.** O Brutamonte (e o Pesado). Lore: a viga com que os carregadores empurravam as lajes das câmaras.
+- **Quem a larga.** O Brutamonte (só ele). Lore: a viga com que os carregadores empurravam as lajes das câmaras.
 - **O que a distingue.** **Esmagar.** Tudo é lento e legível (o próprio inimigo vê o golpe vir) e **sem lunge e sem
   cancelamento** (não dá para cancelar a recuperação em esquiva): ela compromete. Em troca, o leve já cambaleia
   médios em 2 golpes e o pesado é um terremoto que atordoa tudo em 3,0 m.
@@ -257,12 +257,12 @@ playtest, na régua de `tuning.ts`.
 - **Equilíbrio:** combo = 46 em 1,74 s = **26,4 (+15%)** por alvo (x até 3); pesado 40 (+23%). Pagam: 8 de estamina por golpe (a cadência cheia gasta 14,8 por segundo, comendo a reserva de esquiva), sem cancelamento e alcance de 2,2 m em cone (menos que a lança).
 - **Sinergias.** Lâmina II alarga o cone em 20 graus e +0,6 m. Contra o Guardião, que guarda no overhead, abre a guarda por 3 s (aproveita a janela do cambaleio de luz).
 
-#### 2.4.7 Escudo da Sentinela (Sentinela)
+#### 2.4.7 Escudo da Sentinela (Sentinela e Pesado)
 
 - **Silhueta e nome.** Escudo alto e largo de aço com aro de bronze e **máscara de crânio** no umbo; o único que a
   heroína segura **de frente**, como parede (silhueta de círculo achatado, diferente de qualquer arma de haste).
   Cor: gelo (Contragolpe).
-- **Quem a larga.** A Sentinela (bestiário 3.2: "teimosia póstuma", o guarda que não cede a porta).
+- **Quem a larga.** A Sentinela e o Pesado, os dois mortos com escudo (bestiário 3.2: "teimosia póstuma", o guarda que não cede a porta).
 - **O que a distingue.** **Guardar.** Com o escudo, o **bloqueio** (Q) **não gasta estamina**: cada golpe aparado gasta
   1 de Fio (2 se for pesado). A janela de bloqueio perfeito ganha +0,08 s; o perfeito faz o **Rebate**: o atacante
   perde 60 de poise e é empurrado 3 m. O golpe leve é um **golpe de escudo** (dano 6, poise 30): cambaleia rápido, mata devagar.
@@ -413,7 +413,7 @@ ganha um `weaponHit(kind)` e um `weaponBreak(kind)`; nada de arquivo novo se a s
 
 Ao pegar uma arma pela primeira vez: marca `arma:<id>` no save (permanente, como `markRead`/`markFloor`), toast "Crônica:
 a lança da Guarda" e um nicho novo da categoria **relatos** em `codex.ts` (andar de origem da família, gravura nova em
-`illustrations.ts` com o ícone da arma). Os textos abaixo respeitam o canon: os mortos são o povo do reino; outras
+`illustrations.ts` com o ícone da arma). Os textos abaixo são rascunho (`[A DEFINIR]` autoria final, como na spec de Sabedoria) e respeitam o canon: os mortos são o povo do reino; outras
 Acendedoras desceram antes; o nome do reino não é afirmado; nada de gore.
 
 | Arma | Título do relato | Subtítulo | Texto (2 parágrafos curtos) |
@@ -421,9 +421,9 @@ Acendedoras desceram antes; o nome do reino não é afirmado; nada de gore.
 | Lança da Guarda | A lança da Guarda | Quem vigiava a boca do poço. | "A Guarda do poço levava lança porque o frio não se enfrenta de perto: a ponta o mantém à distância de um braço. Os guardas desceram com os seus mortos, para não os deixar sozinhos." / "O cabo tem marcas de quem o apoiou no chão por gerações. Quem a empunha aprende a medida certa: nem perto demais, nem longe." |
 | Adaga do Rol | A adaga do Rol | Quem riscava os nomes na pedra. | "Nas câmaras há paredes inteiras de nomes, e alguém teve de gravá-los. Os do Rol carregavam uma lâmina curta e não faziam outra coisa: cada corte, uma letra de um morto." / "Hoje a lâmina anda no escuro como andava nas paredes: de lado, de costas, sem fazer ruído." |
 | Besta da Guarda | A besta dos vigias | Quem guardava o corredor de longe. | "Os vigias ficavam onde o corredor se abre, porque dali se vê tudo o que desce. A besta é de quem tem paciência: arma, espera, solta." / "Mesmo mortos, miram com a calma de quem sabe que o corredor só tem uma entrada." |
-| Cajado de Cinza | O cajado de cinza | Quem alimentava o fogo pequeno. | "Antes de haver Acendedoras de ofício, havia quem cuidasse dos braseiros com a ponta de uma vara, soprando a cinza até voltar a ser brasa." / "O topo guarda um resto de calor. Quem o empunha sente que ele pede para ser gasto, e não para ser guardado." |
+| Cajado de Cinza | O cajado de cinza | Quem alimentava o fogo pequeno. | "Os braseiros precisavam de quem os cuidasse com a ponta de uma vara, soprando a cinza até voltar a ser brasa." / "O topo guarda um resto de calor. Quem o empunha sente que ele pede para ser gasto, e não para ser guardado." |
 | Clava do Bruto | A clava dos carregadores | Quem fechou as câmaras com pedra. | "As portas de pedra não se fecharam sozinhas. Os carregadores empurravam as lajes com uma viga, e a viga, ao fim, virou arma de quem não sabia fazer outra coisa que não fosse empurrar." / "É lenta e todos veem o golpe chegar. Mas o que ela alcança, ela quebra." |
-| Machado do Antigo | O machado de quem abriu o poço | Quem cavou a pedra antes da ordem. | "Os mais antigos dos mortos são os que cavaram o poço. O machado é de talhar rocha, não de lutar, e por isso não pede licença a nenhum escudo." / "O fio é grosso e velho, e foi afiado tantas vezes que já quase não lembra a forma original." |
+| Machado do Antigo | O machado de quem abriu o poço | Quem cavou a pedra do poço. | "Os mais antigos dos mortos são os que cavaram o poço. O machado é de talhar rocha, não de lutar, e por isso não pede licença a nenhum escudo." / "O fio é grosso e velho, e foi afiado tantas vezes que já quase não lembra a forma original." |
 | Escudo da Sentinela | O escudo da Sentinela | A que não cedeu a porta. | "Cada porta de pedra teve uma sentinela, e a sentinela ficou. O escudo traz o nome dela riscado por dentro, de onde só ela via." / "Ainda segura a porta, mesmo depois de a porta não segurar mais nada." |
 | Lâmina da Primeira | A lâmina de bronze, queimada | A mesma que Cinza carrega. | "É uma espada curta de folha, de bronze, igual à da heroína, só que escurecida por dentro como quem ardeu por muito tempo. A Primeira também começou assim: com uma lâmina pequena e uma fagulha no peito." / "Ela dá o que se pede. E cobra de quem a pede." |
 
@@ -515,7 +515,7 @@ Hoje a arma capturada é um nó flutuante (diagnóstico 5). Proposta:
 1. A arma capturada vai para `hand_r` (o mesmo osso e o mesmo encaixe da espada de bronze: posição (-0,035; 0,01; 0), rotação (π/2, 0, 0)), e a espada de bronze (`sword`, `sword_tip`, `sword_trail`) é **ocultada** enquanto isso. Conferido no mock: o osso está sem escala (1,0008), então o tamanho do modelo normalizado vale em metros.
 2. Cada arma tem uma **pose de empunhadura** (`hold`: posição e rotação no osso), medida no mock: lança e cajado **em pé** (rotação (π, 0, 0), a ponta sobe ao lado do corpo), escudo **de frente** (rotação (0, π/2, 0), como parede), as demais com o encaixe padrão. Os valores ficam em `WeaponDef.hold`.
 3. O rastro (`TrailMesh`) muda de cor por Linha e passa a nascer na ponta da arma segurada (nó `weapon_tip` por arma).
-4. **Mortos com a arma na mão:** o mesmo modelo, em `hand_r` do morto, em **instâncias** (`createInstance`) de um único mesh por tipo: N mortos com a mesma arma custam 1 chamada de desenho. Só as famílias que largam arma a carregam. O drop é **o mesmo objeto** que ele segurava (a arma "cai"): isso resolve o diagnóstico 1. Captura: `nos-mortos.png`.
+4. **Mortos com a arma na mão:** o mesmo modelo, em `hand_r` do morto (confirmado nos `morto_*.glb`: guerreiro, ladino, conjurador, antigo, sentinela), em **instâncias** (`createInstance`) de um único mesh por tipo: N mortos com a mesma arma custam 1 chamada de desenho. Só as famílias que largam arma a carregam. **Exceção:** o Brutamonte (`yeti.glb`) e o Espreitador (`ninja.glb`) são monstros Quaternius **sem osso de mão** (só `UpperArm.R` e `LowerArm.R`; checado nos nós do glb): a Clava e a Adaga entram presas ao fim de `LowerArm.R` com um deslocamento medido caso a caso (a mão do monstro é a malha do antebraço). É o ponto mais incerto da empunhadura e vai para a fase 2 como spike; se não ficar legível, o Brutamonte e o Espreitador largam a arma sem a carregar antes. O drop é **o mesmo objeto** que ele segurava (a arma "cai"): isso resolve o diagnóstico 1. Captura: `nos-mortos.png`.
 5. Limites: mão única (sem segunda mão nem IK); em golpe a arma acompanha a mão do clipe, então lança e cajado "varrem" em vez de estocar até a fase 3 validar os clipes (seção 4.5).
 
 ![mortos](img/armas/nos-mortos.png)
@@ -556,6 +556,7 @@ dizem "< 60"; atualizar, ver 5.4). Cada arma: **1 a 2 malhas**. Custo previsto: 
 (1 arma + 1 halo) = 4; mortos com arma em **instâncias** = +1 por tipo (até ~4 tipos por sala) = +4;
 total **+9 a +10** (10% do teto), contra os ~30 que 3 clavas de hoje já custam. Sem luz dinâmica nova (o halo é
 `createLightPool`, sem luz); o orbe do cajado usa o emissivo do material (sem `PointLight`).
+**Passes extras `[CÓDIGO]`:** o contorno (`outlineHierarchy`, `renderOutline`) desenha a malha uma 2a vez, e uma malha que projeta sombra (`addShadowCaster`) entra no passe de sombra. Por isso as armas (na mão, no chão e nos mortos) levam `metadata.noOutline` (como a espada de bronze já faz) e **não** são registradas como `shadowCaster` (o herói registra os filhos só no carregamento, então a arma anexada depois já fica de fora; manter assim); o aterramento fica com a sombra de contato do ator. Sem isso o custo estimado dobra (+1 por malha por passe).
 
 ### 5.1 Fases
 
@@ -583,6 +584,7 @@ feedback ("modelos diferentes" e "não está claro o que faz"). As demais entram
 - **Atlas.** As armas KayKit usam 2 texturas (knight e skeleton); fundir as duas num atlas único permite 1 material para todas. Se não fundir, são 2 materiais (ok).
 - **Brilho de Sabedoria.** Exige 1 material por tipo de arma (não por instância); 8 materiais no pior caso.
 - **Poder.** Fúria com Clava e Lâmina com Golpista são os candidatos a teto (2.4.5, 2.4.8).
+- **Brutamonte e Espreitador sem osso de mão** (seção 4.4): empunhadura por deslocamento no antebraço, sem garantia de leitura.
 - **Arma na mão dos mortos** muda a leitura do inimigo (mais itens na silhueta); testar o teste de silhueta em preto da direção de arte (3.1).
 
 ### 5.4 Impacto nos docs existentes
@@ -625,6 +627,7 @@ feedback ("modelos diferentes" e "não está claro o que faz"). As demais entram
 - **Clipes** de estocada, tiro e bloqueio com escudo: hipótese da seção 4.5.
 - **Taxas de drop** e **tamanho do Fio** por arma dependem de quantos mortos de cada família há por sala (`ROSTER` de `main.ts`).
 - **Som:** a descrição por tipo está feita; a síntese em `combatSound.ts` não.
+- **Brutamonte e Espreitador** (monstros sem osso de mão) carregam a arma só se o spike de `LowerArm.R` funcionar.
 - **Gravuras** dos relatos (4 prioritárias) e a **pose de golpe** de cada arma na câmera alta (só um quadro foi visto).
 - **Kenney Mini Dungeon, Quaternius Medieval Weapons e MegaKit** não foram baixados; ficam como alternativa se o conjunto crescer.
 - **Validação no Chrome real** do usuário: as capturas foram feitas com Chromium no GPU local (ANGLE, Intel), não no navegador do usuário; conferir a leitura do halo e das silhuetas lá.

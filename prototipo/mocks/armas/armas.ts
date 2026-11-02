@@ -2,7 +2,7 @@ import {
   AbstractMesh, ArcRotateCamera, Color3, Color4, ColorCurves, Engine, HemisphericLight, ImageProcessingConfiguration, ImportMeshAsync, Matrix, Mesh,
   MeshBuilder, PointLight, Scene, SceneInstrumentation, StandardMaterial, TransformNode, Vector3, VertexBuffer, PBRMaterial,
 } from "@babylonjs/core";
-import type { AssetContainer, Material } from "@babylonjs/core";
+import type { AssetContainer } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF";
 import { createLightPool, getActorLight, loadContainer } from "@engine";
 import { loadAnimLibrary, retargetClips, semContornoNosOlhos } from "../../src/game/actors/quaterniusRig";
@@ -263,7 +263,6 @@ async function build(c: Cand): Promise<Built> {
   }
   const h = Math.max(1e-6, mx.y - mn.y);
   const s = c.len / h;
-  console.log('dbg ' + c.id + ' size=' + mx.subtract(mn).asArray().map((v) => v.toFixed(3)).join('x') + ' s=' + s.toFixed(3));
   const holder = new TransformNode("h_" + c.id, scene);
   wrap.parent = holder;
   wrap.position.set(-((mn.x + mx.x) / 2), -(mn.y + c.grip * h), -((mn.z + mx.z) / 2));
@@ -279,8 +278,6 @@ async function build(c: Cand): Promise<Built> {
   holder.setEnabled(false);
   return { node: holder, meshes, tris, draws, kb };
 }
-
-function setVisible(n: TransformNode, v: boolean): void { n.setEnabled(v); }
 
 // ---------- Rótulos HTML ----------
 const labelsEl = document.getElementById("labels")!;
@@ -517,4 +514,3 @@ async function main(): Promise<void> {
 engine.runRenderLoop(() => { scene.render(); updateLabels(); });
 window.addEventListener("resize", () => engine.resize());
 main().catch((e) => { console.error(e); document.title = "ERRO " + e; (g as { __erro?: string }).__erro = String(e); });
-void setVisible; void ([] as Material[]);
