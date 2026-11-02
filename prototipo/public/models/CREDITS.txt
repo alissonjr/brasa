@@ -46,3 +46,24 @@ Quaternius - Universal Base Characters (Standard, gratuita), Modular Character O
           https://opengameart.org/content/universal-animation-library-2
   Receita reproduzivel: tools/personagens/gerar.py (Blender 4.5 + Pillow). Os pacotes brutos NAO
   estao no repositorio. O pacote "Bestiary - Dungeon Monsters" (licenca QAL, nao CC0) NAO e usado.
+
+--- ARMAS CAPTURADAS: PACOTES AVALIADOS (pesquisa 2026-11-02; NAO integrados ao jogo) ---
+Cada pacote vive na sua pasta em public/models/armas/. Ver docs/brasa/spec-armas-capturadas.md.
+
+KayKit - Character Pack: Adventurers 1.0 (Kay Lousberg)  [CC0 1.0, ver armas/kaykit-adventurers/LICENSE.txt]
+  Arquivos: so as armas e escudos em glTF (.gltf + .bin) e as 4 texturas de paleta (14 a 17 KB cada).
+  Fonte: https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0 (Assets/gltf)
+  Baixado em 2026-11-02. Escolhido para: Adaga do Rol (dagger.gltf).
+
+KayKit - Character Pack: Skeletons 1.0 (Kay Lousberg)  [CC0 1.0, ver armas/kaykit-skeletons/LICENSE.txt]
+  Arquivos: Skeleton_Axe, Blade, Crossbow, Quiver, Shield_*, Staff, Arrow (.gltf + .bin) e skeleton_texture.png.
+  Fonte: https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0 (Assets/gltf)
+  Baixado em 2026-11-02. Escolhidos para: Besta da Guarda, Cajado de Cinza, Machado do Antigo, Escudo da Sentinela.
+
+Tedium Interactive - Melee Weapons (OpenGameArt)  [CC0, ver armas/oga-melee-weapons/LICENSE.txt]
+  Fonte: https://opengameart.org/content/melee-weapons-0 . FBX convertido para GLB (FBX2glTF). So candidato.
+
+Quaternius - Ultimate RPG Items Pack (2019)  [CC0 1.0, ver armas/quaternius-ultimate-rpg-items/License.txt]
+  Fonte: https://opengameart.org/content/low-poly-rpg-pack . 7 itens convertidos de FBX. So candidato.
+
+Procedurais por codigo (sem pacote): Lanca da Guarda, Clava do Bruto, Lamina da Primeira (mocks/armas/armas.ts).
