@@ -42,6 +42,7 @@ import {
   installDesktopNotice,
   configureCombatSound,
   healChime,
+  denyBlip,
   configureTitleAmbience,
   startTitleAmbience,
   stopTitleAmbience,
@@ -67,6 +68,8 @@ import {
   type StringKey,
   type CharacterSave,
   type RunSave,
+  ExploracaoRegistry,
+  exploracaoDefaults,
 } from "@game";
 import { SAVE_SCHEMA_VERSION, requestPersistentStorage } from "@platform";
 import type { Quality, SaveData } from "@platform";
@@ -263,6 +266,9 @@ async function main(): Promise<void> {
   let fagulhas = 0; // moeda: cinza quente dos mortos, gasta nas dádivas do braseiro
   let runActive = false; // há uma descida em andamento (para persistência/retomar)
   let runSeed = newSeed(); // semente da run: jitter de posição e ordem de oferta determinísticos
+  // EXPLORAÇÃO (docs/brasa/spec-exploracao-indice.md): os sistemas (livros, poções, cenário) se
+  // registram aqui, cada um com UMA linha; o `main.ts` só dispara os eventos.
+  const explor = new ExploracaoRegistry();
   let timedRun = false; // a descida foi jogada do começo nesta sessão (vale para o leaderboard)
   let runStartedAt = 0; // performance.now() do início da descida cronometrada
   const purchasedBoons: string[] = []; // nomes das dádivas compradas (reaplicadas ao carregar)
@@ -501,6 +507,7 @@ async function main(): Promise<void> {
       gameHud.say("eco", ECHOES[i] ?? "", 4200); // eco/memória do andar
       playWhisper(Math.sign(currentRoom.inscriptionPos.x) * 0.6); // o eco sussurra do nicho
     }
+    explor.onEnterFloor(i);
   };
 
   // Dádivas da Brasa: compradas no relicário (custam Fagulha). Cada descida oferece 3 do
@@ -653,6 +660,7 @@ async function main(): Promise<void> {
         fragmentTaken = true;
         fragments += 1;
         passageOpen = true;
+        explor.onFragmentTaken();
         currentRoom.setCleared(true); // abre o alçapão + acende o feixe da passagem
         currentRoom.setBrazierLit(1); // lampejo do relicário ao ceder a estilha (não permanece)
         window.setTimeout(() => currentRoom?.setBrazierLit(0), 900); // e some logo (sem fogo no andar)
@@ -693,6 +701,7 @@ async function main(): Promise<void> {
     if (defeated || !gameActive) return;
     defeated = true;
     gameActive = false;
+    explor.onHeroDied();
     playStinger("derrota"); // a fagulha apagou (queda menor fria)
     document.exitPointerLock();
     showDefeat();
@@ -704,6 +713,7 @@ async function main(): Promise<void> {
     inv.vida = run.pocaoVida;
     inv.furia = run.pocaoFuria;
     runSeed = run.seed > 0 ? run.seed : newSeed(); // legado (seed 0): gera uma para esta retomada
+    explor.restore(run);
     timedRun = false; // run retomada não conta para o leaderboard (tempo não é justo)
     purchasedBoons.length = 0;
     const all = [...BOONS, FREE_BOON];
@@ -726,6 +736,7 @@ async function main(): Promise<void> {
     inv.furia = 0;
     purchasedBoons.length = 0;
     runSeed = newSeed(); // nova run: nova semente
+    explor.forget();
     timedRun = true; // jogada do começo nesta sessão: vale para o leaderboard
     runStartedAt = performance.now();
     descentDone = false;
@@ -744,11 +755,17 @@ async function main(): Promise<void> {
   // o efeito se houver carga e o herói puder beber (fora de golpe/conjuração).
   const tryPotions = (): void => {
     if (input.consumePressed("potion1") && inv.vida > 0 && hero.combat.canDrink) {
-      inv.vida -= 1;
-      hero.combat.heal(hero.combat.maxHealth * POTIONS.vida.healFrac);
-      combatHud.flashHeal();
-      healChime();
-      updatePotionHud();
+      if (hero.combat.healthFraction >= 0.999) {
+        // Guarda contra desperdício: com a vida cheia a carga NÃO é gasta (negativo curto + aviso).
+        gameHud.toast(T.potVidaCheia, 1400);
+        denyBlip();
+      } else {
+        inv.vida -= 1;
+        hero.combat.heal(hero.combat.maxHealth * POTIONS.vida.healFrac);
+        combatHud.flashHeal();
+        healChime();
+        updatePotionHud();
+      }
     }
     if (input.consumePressed("potion2") && inv.furia > 0 && hero.combat.canDrink) {
       inv.furia -= 1;
@@ -776,6 +793,7 @@ async function main(): Promise<void> {
     // O diretor avança hit stop + alvos e devolve o dt de combate (0 no freeze) do herói.
     const combatDt = combat.update(dt);
     hero.update(combatDt, input, camera);
+    explor.update(combatDt); // sistemas de exploração avançam com o dt de combate (hit-stop não conta)
   });
   scene.onBeforeRenderObservable.add(() => {
     const dt = engine.getDeltaTime() / 1000;
@@ -871,6 +889,8 @@ async function main(): Promise<void> {
           pocaoFuria: inv.furia,
           upgrades: purchasedBoons,
           seed: runSeed,
+          ...exploracaoDefaults(), // campos de exploração: padrão, sobrescrito pelo que cada sistema possui
+          ...explor.snapshot(),
         },
       },
     };

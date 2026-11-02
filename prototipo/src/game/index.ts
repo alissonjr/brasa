@@ -74,7 +74,7 @@ export type { CodexEntry, CodexCategory, CodexFloor, CodexDecal } from "./conten
 export { DEFAULT_CHARACTER, readCharacter, MANTOS, DONS, DIFFICULTIES, mantoColor } from "./content/character";
 export type { CharacterSave, Difficulty } from "./content/character";
 export { CombatDirector } from "./combat/combatDirector";
-export { configureCombatSound, healChime } from "./combat/combatSound";
+export { configureCombatSound, healChime, denyBlip } from "./combat/combatSound";
 export { DIFFICULTY_DAMAGE_TAKEN, POTIONS, ABSORB } from "./combat/tuning";
 export { CombatHud } from "./ui/combatHud";
 export { DamageNumbers } from "./ui/damageNumbers";

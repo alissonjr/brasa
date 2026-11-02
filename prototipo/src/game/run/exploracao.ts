@@ -17,8 +17,11 @@ export interface ExploracaoHooks {
   restore?(run: RunSave): void; // reaplica (idempotente)
 }
 
-/** Campos do `RunSave` que pertencem aos sistemas de exploração (os que `snapshot` pode devolver). */
-const OWNED: (keyof RunSave)[] = ["rota", "no", "gasto", "secretos", "sabedoria", "livros", "raiz", "cera", "unguento", "ferida"];
+/**
+ * Campos do `RunSave` que os sistemas registrados possuem (os que `snapshot` pode devolver).
+ * `rota`, `no` e `gasto` NÃO entram: pertencem ao `RouteState` que o `main.ts` guarda.
+ */
+const OWNED: (keyof RunSave)[] = ["secretos", "sabedoria", "livros", "raiz", "cera", "unguento", "ferida"];
 
 /**
  * Registro de sistemas. Também CARREGA os campos de exploração do save lido: o que nenhum
