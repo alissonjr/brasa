@@ -208,3 +208,33 @@ export class RouteState {
     return { rota: [...this.rota], no: node ? formatNo(node.node, node.from) : "", gasto: node ? [...this.gasto] : [] };
   }
 }
+
+/** Compromisso de uma saída (R4): o tempo contínuo dentro do gatilho de UMA saída. */
+export interface Commit {
+  id: string | null;
+  t: number;
+}
+
+/**
+ * Avança o compromisso por `dt` segundos. `inside` é o id da saída cujo gatilho a Acendedora está
+ * pisando (ou null). Sair do raio cancela na hora; trocar de saída recomeça. Devolve true no
+ * quadro em que completa (e zera, para não repetir).
+ */
+export function stepCommit(c: Commit, inside: string | null, dt: number, sec: number = ROTA.commitSec): boolean {
+  if (inside === null) {
+    c.id = null;
+    c.t = 0;
+    return false;
+  }
+  if (c.id !== inside) {
+    c.id = inside;
+    c.t = 0;
+  }
+  c.t += dt;
+  if (c.t >= sec) {
+    c.id = null;
+    c.t = 0;
+    return true;
+  }
+  return false;
+}

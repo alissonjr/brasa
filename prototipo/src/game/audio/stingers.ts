@@ -10,8 +10,10 @@
  *  - fagulha:   um braseiro pega (dois tons brilhantes ascendentes, curto).
  *  - limpa:     a câmara foi limpa (alívio curto, quinta ascendente morna).
  *  - derrota:   a fagulha apagou (queda menor fria, esmaecendo).
+ *  - saidaAlcapao / saidaEstante / saidaBancada: assinatura sonora de cada saida do andar, tocada
+ *    quando elas abrem (o ouvido aprende qual icone e qual: brasa grave, folhear + sino, vidro).
  */
-export type Stinger = "despertar" | "guardiao" | "reavivar" | "fagulha" | "limpa" | "derrota";
+export type Stinger = "despertar" | "guardiao" | "reavivar" | "fagulha" | "limpa" | "derrota" | "saidaAlcapao" | "saidaEstante" | "saidaBancada";
 
 let ctx: AudioContext | null = null;
 let getVolume: () => number = () => 0;
@@ -96,6 +98,21 @@ export function playStinger(name: Stinger): void {
       tone(a, t, 330, 330, 0.5, 0.11 * vol, "sine");
       tone(a, t + 0.1, 494, 494, 0.6, 0.09 * vol, "sine"); // quinta acima
       sweep(a, t, 0.4, 0.04 * vol, 600, 1400);
+      break;
+    case "saidaAlcapao": // brasa grave e estalo seco (o alcapao, o caminho de sempre)
+      tone(a, t, 82, 61, 0.55, 0.16 * vol, "triangle");
+      sweep(a, t + 0.02, 0.12, 0.09 * vol, 2600, 900);
+      break;
+    case "saidaEstante": // folhear de paginas (ruido curto em leque) e um sino curto
+      sweep(a, t, 0.18, 0.07 * vol, 3200, 5200);
+      sweep(a, t + 0.11, 0.16, 0.06 * vol, 2800, 4600);
+      tone(a, t + 0.26, 880, 880, 0.55, 0.08 * vol, "sine");
+      tone(a, t + 0.26, 1318.5, 1318.5, 0.4, 0.04 * vol, "sine");
+      break;
+    case "saidaBancada": // tilintar de vidro: tres agudos rapidos e desiguais
+      tone(a, t, 2093, 2093, 0.22, 0.05 * vol, "sine");
+      tone(a, t + 0.08, 2637, 2637, 0.2, 0.045 * vol, "sine");
+      tone(a, t + 0.17, 3136, 3136, 0.26, 0.04 * vol, "sine");
       break;
     case "derrota": // a fagulha apaga: terça menor descendo, fria, esmaecendo
       tone(a, t, 196, 130, 1.4, 0.18 * vol, "sine");

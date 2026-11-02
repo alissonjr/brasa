@@ -4,19 +4,28 @@
 // Cobre: planRoute (regras R2, determinismo), formato do nó, retomada/derrota, RouteState,
 // leitura defensiva e migracao do save (readGameSave), registro de ganchos (ExploracaoRegistry).
 import assert from "node:assert/strict";
-import { buildSync } from "esbuild";
+import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const entry = `
 export * from "./src/game/run/rota.ts";
+export { pickLayout } from "./src/game/scenes/crypt/cryptLayouts.ts";
 export { ExploracaoRegistry } from "./src/game/run/exploracao.ts";
 export { readGameSave, exploracaoDefaults } from "./src/game/content/saveData.ts";
 `;
-const out = buildSync({
+// cryptLayouts usa so Vector3 do Babylon: um stub minimo evita empacotar o motor inteiro.
+const babylonStub = {
+  name: "babylon-stub",
+  setup(b) {
+    b.onResolve({ filter: /^@babylonjs\/core$/ }, () => ({ path: "stub", namespace: "babylon-stub" }));
+    b.onLoad({ filter: /.*/, namespace: "babylon-stub" }, () => ({ contents: "export class Vector3 { constructor(x = 0, y = 0, z = 0) { this.x = x; this.y = y; this.z = z; } }", loader: "js" }));
+  },
+};
+const out = await build({
   stdin: { contents: entry, resolveDir: root, loader: "ts" },
-  bundle: true, platform: "node", format: "esm", write: false, logLevel: "silent",
+  bundle: true, platform: "node", format: "esm", write: false, logLevel: "silent", plugins: [babylonStub],
 });
 const code = out.outputFiles[0].text;
 const M = await import("data:text/javascript;base64," + Buffer.from(code).toString("base64"));
@@ -69,6 +78,50 @@ test("formatNo/parseNo: ida e volta; lixo vira null", () => {
   assert.equal(M.formatNo("estante", 2), "estante@2");
   assert.deepEqual(M.parseNo("bancada@4"), { node: "bancada", from: 4 });
   for (const bad of ["", "foo@9", "estante", "estante@", "estante@-1", "estante@123", "@2", "Estante@2"]) assert.equal(M.parseNo(bad), null, bad);
+});
+
+// --- compromisso das saídas (R4) ---
+test("stepCommit: completa em 0,6 s dentro; sair cancela; trocar de saída recomeça", () => {
+  const c = { id: null, t: 0 };
+  assert.equal(M.stepCommit(c, "alcapao", 0.3), false);
+  assert.equal(M.stepCommit(c, "alcapao", 0.29), false);
+  assert.equal(M.stepCommit(c, "alcapao", 0.02), true, "completa ao somar 0,6 s");
+  assert.deepEqual(c, { id: null, t: 0 }, "zera ao completar (nao repete)");
+  M.stepCommit(c, "estante", 0.5);
+  assert.equal(M.stepCommit(c, null, 0.1), false);
+  assert.deepEqual(c, { id: null, t: 0 }, "sair do raio cancela na hora");
+  M.stepCommit(c, "estante", 0.5);
+  assert.equal(M.stepCommit(c, "alcapao", 0.2), false, "trocar de saida recomeca do zero");
+  assert.equal(c.t, 0.2);
+});
+
+// --- plantas: porta lateral e antecâmara (R4: 9 m entre as saídas) ---
+test("pickLayout: toda planta com porta lateral tem o alçapão a 9 m ou mais e a porta na parede leste", () => {
+  for (let index = 0; index < 6; index++) {
+    const L = M.pickLayout({ index, kind: "salao", enemies: 1, sideDoor: "estante" });
+    assert.equal(L.doors.length, 1, `andar ${index + 1}`);
+    const d = L.doors[0];
+    assert.ok(Math.hypot(d.x - L.exit.x, d.z - L.exit.z) >= M.ROTA.minExitSeparation, `andar ${index + 1}: ${Math.hypot(d.x - L.exit.x, d.z - L.exit.z).toFixed(1)} m`);
+    assert.ok(d.x > L.halfX - 1 && d.x < L.halfX, "gatilho colado a parede leste");
+    assert.ok(Math.abs(d.z) < L.halfZ - 1, "dentro da parede");
+    assert.ok(!L.walls.some((w) => w.x === L.halfX && w.z === d.z), "o segmento de parede do portao foi retirado");
+    // o relicário/tratado (3,5 ou -2,5 na parede leste) nao pode ficar dentro do gatilho da porta
+    const readZ = -2.5; // com porta lateral o tratado vai para z = -2,5
+    assert.ok(Math.hypot(L.halfX - 1.8 - d.x, readZ - d.z) > M.ROTA.doorRadius + 1, `andar ${index + 1}: tratado perto da porta`);
+  }
+});
+test("pickLayout: sem sideDoor nao ha porta (andares como eram)", () => {
+  for (let index = 0; index < 7; index++) assert.equal(M.pickLayout({ index, kind: "salao", enemies: 1 }).doors.length, 0);
+  assert.equal(M.planRoute(1).side[6], undefined, "o plano nao pede porta no andar 7 (Guardiao)");
+});
+test("pickLayout: antecâmara 12x12, escada longe do spawn, sem porta", () => {
+  for (const node of ["estante", "bancada"]) {
+    const L = M.pickLayout({ index: 3, fromIndex: 3, kind: "guarda", enemies: 0, node });
+    assert.equal(L.halfX, 6); assert.equal(L.halfZ, 6);
+    assert.equal(L.doors.length, 0);
+    assert.ok(Math.hypot(L.spawn.x - L.exit.x, L.spawn.z - L.exit.z) > L.exit.radius + 2, "nao dispara da chegada");
+    assert.ok(Math.abs(L.exit.x) + L.exit.radius < L.halfX && Math.abs(L.exit.z) + L.exit.radius < L.halfZ + 1, "dentro da sala");
+  }
 });
 
 // --- retomada e derrota (R7, R8) ---

@@ -37,6 +37,9 @@ export const ICON_PATHS: Record<string, string> = {
   mute: P("M4 9.5h3.5L12 6v12l-4.5-3.5H4z") + P("M16 9.5l5 5M21 9.5l-5 5"),
   keyboard: '<rect x="2.5" y="6.5" width="19" height="11" rx="2"/>' + P("M6.5 10h.01M9.5 10h.01M12.5 10h.01M15.5 10h.01M18 10h.01M7 14h10"),
   mouse: '<rect x="7" y="3" width="10" height="18" rx="5"/>' + P("M12 3v6"),
+  // Alçapão visto de cima (a saída da Brasa): tampa com argola e duas dobradiças. Silhueta própria
+  // (quadrado) ao lado de `book` (arco aberto) e `potion` (frasco) para não depender de cor.
+  hatch: '<rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="12" cy="12" r="2.4"/>' + P("M4 8.5h2.4M4 15.5h2.4"),
   exit: P("M14 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 8l-4 4 4 4M6 12h9"),
 };
 

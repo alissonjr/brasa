@@ -11,7 +11,7 @@ export type { SkeletonKind } from "./actors/enemies/skeleton";
 export { HeroModel } from "./actors/heroModel";
 export { buildCryptGraybox } from "./scenes/crypt/cryptGraybox";
 export { buildCryptRoom, setupCryptScene, ensureCryptPieces } from "./scenes/crypt/cryptRoom";
-export type { CryptCtx, Room, RoomDef, RoomKind } from "./scenes/crypt/cryptRoom";
+export type { CryptCtx, Room, RoomDef, RoomKind, RoomDoor } from "./scenes/crypt/cryptRoom";
 export { terrainHeightAt } from "./scenes/world";
 export { WORLD_GRAVITY } from "./content/world";
 export {
@@ -32,6 +32,8 @@ export {
 export { configureUiSound } from "./ui/uiSound";
 export { mountMuteButton } from "./ui/muteButton";
 export { openBoonShop } from "./ui/boonShop";
+export { ExitMarkers } from "./ui/exitMarkers";
+export type { ExitMarkerDef } from "./ui/exitMarkers";
 export { installDesktopNotice } from "./ui/desktopNotice";
 export { configureTitleAmbience, startTitleAmbience, stopTitleAmbience } from "./ui/titleAmbience";
 export { configureMusic, startMusic, stopMusic, setMusicState } from "./audio/musicManager";
@@ -56,8 +58,8 @@ export { readGameSave, exploracaoDefaults } from "./content/saveData";
 export type { GameSaveData, RunSave } from "./content/saveData";
 export { ExploracaoRegistry } from "./run/exploracao";
 export type { ExploracaoHooks } from "./run/exploracao";
-export { RouteState, ROTA, exitsFor, planRoute, formatNo, parseNo, TRANSITIONS } from "./run/rota";
-export type { NodeKind, ExitKind, Place, RoutePlan } from "./run/rota";
+export { RouteState, ROTA, exitsFor, planRoute, formatNo, parseNo, stepCommit, TRANSITIONS } from "./run/rota";
+export type { NodeKind, ExitKind, Place, RoutePlan, Commit } from "./run/rota";
 export { readLeaderboard, submitTime, formatTime } from "./content/leaderboard";
 export {
   CODEX_FLOORS,
