@@ -11,7 +11,7 @@ export type { SkeletonKind } from "./actors/enemies/skeleton";
 export { HeroModel } from "./actors/heroModel";
 export { buildCryptGraybox } from "./scenes/crypt/cryptGraybox";
 export { buildCryptRoom, setupCryptScene, ensureCryptPieces } from "./scenes/crypt/cryptRoom";
-export type { CryptCtx, Room, RoomDef, RoomKind, RoomDoor } from "./scenes/crypt/cryptRoom";
+export type { CryptCtx, Room, RoomDef, RoomKind } from "./scenes/crypt/cryptRoom";
 export { terrainHeightAt } from "./scenes/world";
 export { WORLD_GRAVITY } from "./content/world";
 export {
@@ -61,12 +61,21 @@ export {
 export type { Chapter, Objective } from "./content/campaign";
 export { ACHIEVEMENTS, achievementForObjective, achievementById } from "./content/achievements";
 export type { Achievement } from "./content/achievements";
-export { readGameSave, exploracaoDefaults } from "./content/saveData";
-export type { GameSaveData, RunSave } from "./content/saveData";
+export { readGameSave, exploracaoDefaults, nichosVazios } from "./content/saveData";
+export type { GameSaveData, RunSave, FrascoTipo, CintoSave, NichoSave } from "./content/saveData";
+export { ANTESSALAS, CAMARAS, NICHOS_POR_ANTESSALA, EVT, markMural, markAcendeu, MARK_SENTINELA_CAIU } from "./content/descida";
+export type {
+  AntessalaDef, AntessalaId, CamaraDef, CamaraId, OficioId, PecaId, Ponto, PerigoId, SituacaoId, MortoCount, Gatilho, Grupo, Anexo, AnexoTipo,
+  Marco, MuralDef, FrascoInicial, EvtAntessalaEnter, EvtBraseiroLit, EvtMuralRead, EvtArmarioChange, EvtWaveStart,
+} from "./content/descida";
 export { ExploracaoRegistry } from "./run/exploracao";
 export type { ExploracaoHooks } from "./run/exploracao";
-export { RouteState, ROTA, exitsFor, planRoute, formatNo, parseNo, stepCommit, TRANSITIONS } from "./run/rota";
-export type { NodeKind, ExitKind, Place, RoutePlan, Commit } from "./run/rota";
+export { RouteState, ROTA, ANDARES, CHAMAS, formatNo, parseNo, stepCommit, resumePlace, retryPlace, floorOf, samePlace, braseirosPadrao } from "./run/rota";
+export type { Place, Chama, BraseiroAndar, RouteSave, Commit } from "./run/rota";
+export { Pocoes, POCOES, POCAO_DEF } from "./run/pocoes";
+export type { Pocao, PocoesSave, PocoesRunSave, LegadoSave } from "./run/pocoes";
+export { openArmario } from "./ui/armarioUi";
+export type { ArmarioHooks, ArmarioHandle } from "./ui/armarioUi";
 export { readLeaderboard, submitTime, formatTime } from "./content/leaderboard";
 export {
   CODEX_FLOORS,
@@ -86,4 +95,5 @@ export { CombatDirector } from "./combat/combatDirector";
 export { configureCombatSound, healChime, denyBlip } from "./combat/combatSound";
 export { DIFFICULTY_DAMAGE_TAKEN, POTIONS, ABSORB } from "./combat/tuning";
 export { CombatHud } from "./ui/combatHud";
+export { Onboarding } from "./ui/onboarding";
 export { DamageNumbers } from "./ui/damageNumbers";

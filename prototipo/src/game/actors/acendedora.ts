@@ -46,6 +46,7 @@ export class Acendedora {
   // Lunge (avanço do golpe): input sintético ao longo do que ela encara, parando diante do alvo.
   private readonly lungeInput = { forward: 0, strafe: 0, running: true, consumeJump: () => false };
   private lungeLeft = 0; // metros que ainda pode avançar neste golpe
+  private landLock = 0; // s de perda de controle da locomoção após uma queda longa (só andar; combate segue livre)
   private readonly lungeFacing = new Vector3();
   private readonly lungeLocal = new Vector3();
   private readonly lungeQuat = new Quaternion();
@@ -54,6 +55,7 @@ export class Acendedora {
     this.scene = scene;
     this.model = new HeroModel(scene, { modelUrl: ACENDEDORA_MODEL, name: "acendedora" });
     this.controller = new CharacterController(scene, spawn, gravity, this.model);
+    this.model.onLand((e) => { if (e.stun > 0) this.landLock = e.stun; });
     this.combat_ = new HeroCombat(scene, this.model.root);
     // Luz-fagulha: bolha de visibilidade quente que acompanha a Acendedora (sem sombra).
     // É a única luz quente na sala fria, antes de o braseiro ser aceso.
@@ -81,6 +83,7 @@ export class Acendedora {
   /** Reposiciona a heroína (ao descer para o próximo andar). */
   teleport(pos: Vector3): void {
     this.controller.teleport(pos);
+    this.model.resetAir();
   }
 
   /** Aplica o manto escolhido na criação (variante de textura), delegado ao modelo visual. */
@@ -211,7 +214,10 @@ export class Acendedora {
     }
     // Esquiva = dash (override de movimento); golpe = locomoção travada (comprometimento);
     // senão, input normal.
-    const moveInput: InputSource = this.combat_.moveOverride ?? (this.combat_.busy ? this.lungeOrFrozen(deltaSeconds, camera) : input);
+    // Queda longa: o corpo ainda absorve o impacto (0,10 a 0,15 s sem andar). Só a locomoção: o combate
+    // (golpe, esquiva, bloqueio) usa o input real acima e a esquiva (moveOverride) passa na frente.
+    this.landLock = Math.max(0, this.landLock - deltaSeconds);
+    const moveInput: InputSource = this.combat_.moveOverride ?? (this.combat_.busy ? this.lungeOrFrozen(deltaSeconds, camera) : this.landLock > 0 ? FROZEN_INPUT : input);
     this.controller.update(deltaSeconds, moveInput, camera);
   }
 }

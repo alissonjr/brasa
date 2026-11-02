@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<base href="/">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brasa - Armas capturadas (comparação de modelos)</title>
+<!-- MOCK DE DECISÃO, não é código do jogo. Compara os modelos candidatos das armas capturadas sob a
+     luz e a câmera alta do jogo: no chão (com halo), nas mãos da heroína (osso hand_r) e nas mãos
+     dos mortos que as largam. Rodar com `npm run dev` e abrir /mocks/armas/index.html.
+     Parâmetros: ?vista=catalogo|chao|mao|maos|mortos|perto  &arma=<id>  &quadro=0..1 (fração do golpe)
+     &cam=alta|perto  &pagina=1|2. O painel de baixo (HTML) lista fonte, licença, peso e chamadas de desenho. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #06080c; color: #bdb299; font-family: Georgia, serif; overflow: hidden; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+  .bar { position: fixed; left: 0; right: 0; top: 0; z-index: 5; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 10px; background: linear-gradient(180deg, rgba(6,8,12,.92), rgba(6,8,12,0)); font: 600 11px Georgia, serif; letter-spacing: .12em; text-transform: uppercase; }
+  .bar a { color: #f2c46d; text-decoration: none; border: 1px solid #5c4115; border-radius: 4px; padding: 5px 9px; background: rgba(20,25,36,.8); }
+  .bar a.on { color: #06080c; background: #d9a441; border-color: #f2c46d; }
+  .lab { position: fixed; z-index: 4; transform: translate(-50%, 0); text-align: center; pointer-events: none; font: 600 12px Georgia, serif; color: #f3e8d0; letter-spacing: .06em; text-shadow: 0 1px 3px #000, 0 0 8px #000; white-space: nowrap; }
+  .lab small { display: block; font-weight: 400; font-size: 10px; color: #bdb299; letter-spacing: .03em; }
+  .lab b { color: #ffb259; }
+  #stats { position: fixed; z-index: 5; left: 10px; bottom: 8px; font: 11px/1.4 ui-monospace, monospace; color: #7f776a; background: rgba(6,8,12,.7); padding: 4px 8px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="bar" id="bar"></div>
+<div id="labels"></div>
+<div id="stats"></div>
+<script type="module" src="/mocks/armas/armas.ts"></script>
+</body>
+</html>

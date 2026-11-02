@@ -1,5 +1,4 @@
 import type { RunSave } from "../content/saveData";
-import type { NodeKind } from "./rota";
 
 /**
  * CAMADA JOGO. Ponto de encontro dos sistemas de exploração (portas, livros, poções, cenário)
@@ -9,7 +8,7 @@ import type { NodeKind } from "./rota";
  */
 export interface ExploracaoHooks {
   onEnterFloor?(i: number): void;
-  onEnterNode?(kind: NodeKind, fromIndex: number): void;
+  onEnterAntessala?(i: number): void; // chegou à antessala do andar i (fresh ou retomada)
   onFragmentTaken?(): void; // as saídas abrem
   onHeroDied?(): void;
   update?(dt: number): void; // dt de combate (hit-stop não conta)
@@ -19,9 +18,10 @@ export interface ExploracaoHooks {
 
 /**
  * Campos do `RunSave` que os sistemas registrados possuem (os que `snapshot` pode devolver).
- * `rota`, `no` e `gasto` NÃO entram: pertencem ao `RouteState` que o `main.ts` guarda.
+ * `no`, `gasto` e `braseiros` NÃO entram: pertencem ao `RouteState` que o `main.ts` guarda. `nichos` (armário)
+ * só atravessa o registro até a fase R3 registrar o sistema que o possui; `cinto` o `main.ts` grava dos contadores.
  */
-const OWNED: (keyof RunSave)[] = ["secretos", "sabedoria", "livros", "raiz", "cera", "unguento", "ferida"];
+const OWNED: (keyof RunSave)[] = ["nichos", "secretos", "sabedoria", "livros", "raiz", "cera", "unguento", "ferida"];
 
 /**
  * Registro de sistemas. Também CARREGA os campos de exploração do save lido: o que nenhum
@@ -40,8 +40,8 @@ export class ExploracaoRegistry {
   onEnterFloor(i: number): void {
     for (const s of this.systems) s.onEnterFloor?.(i);
   }
-  onEnterNode(kind: NodeKind, fromIndex: number): void {
-    for (const s of this.systems) s.onEnterNode?.(kind, fromIndex);
+  onEnterAntessala(i: number): void {
+    for (const s of this.systems) s.onEnterAntessala?.(i);
   }
   onFragmentTaken(): void {
     for (const s of this.systems) s.onFragmentTaken?.();

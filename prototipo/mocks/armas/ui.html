@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<base href="/">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brasa - Armas capturadas (mock da interface)</title>
+<!-- MOCK DE DECISÃO, não é código do jogo. Cartão de pegar, comparação com a arma atual, HUD da arma
+     equipada (cheia, metade, fio curto, quebra) e o relato da Crônica. Usa só tokens e componentes do
+     design system (src/game/ui/ds); os componentes novos (.ds-weapon, .ds-meter, .ds-fio) estão aqui
+     no <style> escritos com tokens, prontos para migrar para components.css. Abrir em /mocks/armas/ui.html.
+     ?movimento=reduzido desliga pulsos e animações (teste de acessibilidade). -->
+<link rel="stylesheet" href="/src/game/ui/ds/tokens.css">
+<link rel="stylesheet" href="/src/game/ui/ds/components.css">
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: radial-gradient(ellipse at 50% -10%, #1a2030 0%, var(--ink-950) 55%); color: var(--text-mid); font-family: var(--font-text); font-size: var(--fs-md); }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: var(--sp-6) var(--sp-4) 96px; }
+  h1, h2, h3 { font-family: var(--font-display); color: var(--gold-200); letter-spacing: var(--ls-title); margin: 0; }
+  h1 { font-size: var(--fs-2xl); } h2 { font-size: var(--fs-lg); margin-top: var(--sp-7); } h3 { font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: .14em; }
+  p.lead { max-width: 76ch; margin: var(--sp-2) 0 var(--sp-4); }
+  .row { display: flex; flex-wrap: wrap; gap: var(--sp-5); align-items: flex-start; }
+  .cap { font-family: var(--font-display); font-size: var(--fs-2xs); letter-spacing: var(--ls-caps); text-transform: uppercase; color: var(--text-lo); margin-bottom: var(--sp-2); }
+  .stage { position: relative; padding: var(--sp-5); border: 1px solid var(--ink-600); border-radius: var(--radius-lg); background:
+    radial-gradient(ellipse at 30% 80%, rgba(255,166,61,.16), transparent 55%), linear-gradient(180deg, #121a2a, #0a0f18); overflow: hidden; }
+
+  /* ---------- novos tokens de arma (proposta para tokens.css) ---------- */
+  :root {
+    --arma-lamina: var(--gold-300);   /* corte e peso (Linha Lâmina) */
+    --arma-fogo: var(--ember-400);    /* fogo e distância (Linha Fogo) */
+    --arma-contra: var(--frost-300);  /* ritmo e guarda (Linha Contragolpe) */
+    --arma-relic: var(--gold-100);
+    --fio-aviso: var(--blood-400);
+  }
+  .lam { --c: var(--arma-lamina); } .fog { --c: var(--arma-fogo); } .con { --c: var(--arma-contra); } .rel { --c: var(--arma-relic); }
+
+  /* ---------- .ds-meter: medidor de 5 losangos ---------- */
+  .ds-meter { display: grid; grid-template-columns: 64px auto 1fr; align-items: center; gap: var(--sp-2); }
+  .ds-meter__k { font-family: var(--font-display); font-weight: 600; font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-lo); }
+  .ds-meter .ds-pips { gap: 7px; }
+  .ds-meter .ds-pip { width: 11px; height: 11px; }
+  .ds-pip--c.lit { border-color: var(--c); background: linear-gradient(0deg, color-mix(in srgb, var(--c) 70%, #000), var(--c)); box-shadow: 0 0 8px color-mix(in srgb, var(--c) 55%, transparent); }
+  /* a arma atual aparece como marca oca no mesmo medidor (comparação sem texto) */
+  .ds-pip.cur { box-shadow: 0 0 0 2px var(--text-lo), inset 0 0 6px rgba(0,0,0,.6); }
+  .ds-delta { display: inline-flex; align-items: center; gap: 2px; font-family: var(--font-display); font-weight: 700; font-size: 11px; letter-spacing: .06em; }
+  .ds-delta svg { width: 12px; height: 12px; }
+  .ds-delta.up { color: var(--life-400); } .ds-delta.down { color: #ffb8b0; } .ds-delta.eq { color: var(--text-lo); }
+
+  /* ---------- .ds-fio: barra de durabilidade ---------- */
+  .ds-fio { display: flex; align-items: center; gap: var(--sp-2); }
+  .ds-fio .ds-bar { flex: 1; height: 12px; padding: 1px; }
+  .ds-fio .ds-bar__fill { background: linear-gradient(180deg, var(--ember-300), var(--ember-600)); box-shadow: 0 0 10px rgba(255,138,44,.45); }
+  .ds-fio__n { font-family: var(--font-display); font-weight: 700; font-size: var(--fs-sm); color: var(--text-hi); min-width: 2ch; text-align: right; }
+  .ds-fio__u { font-family: var(--font-display); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--text-lo); }
+  .ds-fio.low .ds-bar { border-color: var(--blood-600); }
+  .ds-fio.low .ds-bar__fill { background: linear-gradient(180deg, var(--blood-400), var(--blood-600)); box-shadow: 0 0 10px rgba(217,71,58,.5); }
+  .ds-fio.low .ds-fio__n { color: #ffb8b0; }
+  .ds-fio.low .ds-bar { animation: fio-pulse 1.1s ease-in-out infinite; }
+  @keyframes fio-pulse { 50% { box-shadow: 0 0 14px rgba(217,71,58,.7), inset 0 2px 4px rgba(0,0,0,.7); } }
+
+  /* ---------- .ds-weapon: cartão de pegar ---------- */
+  .ds-weapon { width: 292px; padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-3); background: var(--surface-card); border: var(--line) solid var(--ink-500); border-radius: var(--radius-md); box-shadow: var(--shadow-2), 0 0 0 1px rgba(0,0,0,.6), 0 0 28px -8px color-mix(in srgb, var(--c) 55%, transparent); position: relative; }
+  .ds-weapon::before { content: ""; position: absolute; left: 16%; right: 16%; top: 0; height: 1px; background: linear-gradient(90deg, transparent, var(--c), transparent); }
+  .ds-weapon__head { display: grid; grid-template-columns: 52px 1fr; gap: var(--sp-3); align-items: center; }
+  .ds-weapon__ico { width: 52px; height: 52px; display: grid; place-items: center; color: var(--c); border: 1.5px solid var(--c); border-radius: 50%; background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--c) 22%, transparent), rgba(10,13,19,.9)); box-shadow: 0 0 16px -4px var(--c); }
+  .ds-weapon__ico .ds-icon { width: 30px; height: 30px; }
+  .ds-weapon__name { font-family: var(--font-display); font-weight: 700; font-size: var(--fs-md); letter-spacing: .1em; text-transform: uppercase; color: var(--text-hi); line-height: 1.15; }
+  .ds-weapon__from { font-size: var(--fs-sm); color: var(--text-lo); font-style: italic; }
+  .ds-weapon__chips { display: flex; gap: var(--sp-1); margin-top: 4px; flex-wrap: wrap; }
+  .ds-weapon__chips .ds-chip { height: 20px; padding: 0 8px; font-size: 9px; color: var(--c); border-color: color-mix(in srgb, var(--c) 50%, transparent); background: color-mix(in srgb, var(--c) 12%, transparent); }
+  .ds-weapon__meters { display: grid; gap: 6px; }
+  .ds-weapon__fx { margin: 0; font-style: italic; color: var(--text-hi); font-size: var(--fs-md); line-height: 1.3; }
+  .ds-weapon__foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding-top: var(--sp-2); border-top: var(--line) solid var(--ink-600); }
+  .ds-weapon__foot small { font-size: var(--fs-xs); color: var(--text-lo); line-height: 1.2; text-align: right; }
+  .ds-weapon__foot .ds-kbd { flex: none; }
+  .ds-weapon--mini { width: auto; padding: 6px 12px 6px 8px; flex-direction: row; align-items: center; gap: var(--sp-2); border-radius: 999px; }
+  .ds-weapon--mini .ds-weapon__ico { width: 34px; height: 34px; } .ds-weapon--mini .ds-weapon__ico .ds-icon { width: 20px; height: 20px; }
+  .ds-weapon--mini .ds-weapon__name { font-size: var(--fs-xs); letter-spacing: .12em; }
+  .ds-weapon--atual { --c: var(--text-mid); opacity: .92; }
+
+  /* ---------- HUD da arma equipada ---------- */
+  .hudw { display: inline-grid; grid-template-columns: 38px minmax(150px, auto); gap: 2px var(--sp-3); align-items: center; padding: 6px 14px 6px 8px; background: rgba(10,13,19,.88); border: var(--line) solid var(--gold-700); border-radius: 999px; box-shadow: var(--shadow-1); }
+  .hudw .ico { grid-row: span 2; width: 38px; height: 38px; display: grid; place-items: center; color: var(--c); border: 1.5px solid var(--c); border-radius: 50%; background: radial-gradient(circle at 50% 35%, color-mix(in srgb, var(--c) 22%, transparent), rgba(10,13,19,.9)); }
+  .hudw .ico .ds-icon { width: 22px; height: 22px; }
+  .hudw .nm { font-family: var(--font-display); font-weight: 600; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--gold-200); }
+  .hudw.low { border-color: var(--blood-600); }
+  .hudw.low .ico { animation: ico-shake .5s ease-in-out infinite; color: #ffb8b0; border-color: var(--blood-400); }
+  @keyframes ico-shake { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-6deg); } 75% { transform: rotate(6deg); } }
+  .hudw.break { animation: brk .7s ease-out forwards; }
+  @keyframes brk { 0% { transform: scale(1); filter: brightness(2); } 40% { transform: scale(1.06); } 100% { transform: scale(.9); opacity: .15; filter: grayscale(1); } }
+  body.rm *, body.rm *::before, body.rm *::after { animation: none !important; transition: none !important; }
+  .toast-arma { display: inline-flex; align-items: center; gap: var(--sp-3); padding: 8px 16px; background: rgba(10,13,19,.9); border: 1px solid var(--gold-700); border-radius: 999px; color: var(--text-hi); box-shadow: var(--shadow-2); }
+  .toast-arma .ds-icon { color: var(--gold-300); }
+
+  /* ---------- Crônica ---------- */
+  .nicho { width: 420px; padding: var(--sp-5); background: var(--surface-panel); border: 1px solid var(--gold-700); border-radius: var(--radius-sm); box-shadow: var(--shadow-3); }
+  .nicho .art { height: 150px; margin-bottom: var(--sp-3); display: grid; place-items: center; background: radial-gradient(ellipse at 50% 60%, rgba(242,196,109,.14), rgba(6,8,12,.9)); border: 1px solid var(--ink-600); color: var(--c); }
+  .nicho .art .ds-icon { width: 84px; height: 84px; filter: drop-shadow(0 0 12px color-mix(in srgb, var(--c) 60%, transparent)); }
+  .nicho h4 { font-family: var(--font-display); color: var(--text-hi); margin: 0; font-size: var(--fs-lg); letter-spacing: .1em; text-transform: uppercase; }
+  .nicho .lead2 { font-style: italic; color: var(--text-mid); margin: 2px 0 var(--sp-3); }
+  .nicho p { margin: 0 0 var(--sp-2); line-height: 1.45; }
+  .tablet { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+  .tablet th, .tablet td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--ink-600); vertical-align: top; }
+  .tablet th { font-family: var(--font-display); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--gold-500); }
+  .sw { display: inline-block; width: 14px; height: 14px; border-radius: 50%; vertical-align: -2px; margin-right: 6px; background: var(--c); box-shadow: 0 0 10px var(--c); }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script type="module" src="/mocks/armas/ui.ts"></script>
+</body>
+</html>

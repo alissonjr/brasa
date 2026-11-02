@@ -648,11 +648,10 @@ numérica. A avaliação de gosto é do jogador no Chrome dele (ver "O que ainda
 ### B. Ligações no jogo
 
 - `main.ts` (mudança mínima, só ligação): `bindGameAudio`, passos pela velocidade do herói
-  (`updateFootsteps`), `playPotion` ao beber, `playPickup` ao pegar arma (G), `playDoor` junto dos
-  stingers de saída, `playBrazierLit` e `playStairs` na descida, `playGuardianVoice("rugido")` ao avistar o Guardião.
-- PENDENTE para o agente `salto`: chamar `playJump()` no início do pulo e `playLand(intensity)` no toque
-  no chão (intensity 0 = degrau, 1 = queda longa; ver cabeçalho de `audio/sfx.ts`), e REMOVER o som de
-  queda antigo para não duplicar. Superfície dos passos: `surfaceForFloor(andar, molhado)` (laje, água, cinza).
+  (`updateFootsteps`), `playPotion` ao beber, `playPickup` ao pegar arma (G), `playDoor("alcapao")` ao ceder a estilha, `playBrazierLit` e `playStairs` na descida, `playGuardianVoice("rugido")` ao avistar o Guardião.
+- Aterrissagem: o agente `salto` já chama `landThud(intensity)` (combatSound.ts, em `heroModel.ts`); agora
+  ele só delega a `playLand(intensity)` (audio/sfx.ts), então há um único som de queda. PENDENTE: chamar
+  `playJump()` no início do pulo (hoje ninguém chama). Superfície dos passos: `surfaceForFloor(andar, molhado)`.
 - Funções ainda sem chamador (prontas): `playGuardianPulse`, `playDodge`, `playSwing`/`playHit` com
   material (`hitThunk(heavy, "osso"|"carne"|"armadura")` já aceita o segundo parâmetro).
 

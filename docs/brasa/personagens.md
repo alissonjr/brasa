@@ -73,17 +73,10 @@ Snapshot: 2026-06-14.
   ponto alto quente que combina com "porta-luz"; o Rogue Hooded fica como alternativa caso
   o moveset (spec-combate) feche melhor com lâmina curta. Decidir antes de religar o herói
   (canon roadmap 2).
-- `[CÓDIGO]` Atualização (2026-06-15): as **vitrines 3D dos menus** (tela-título, criação,
-  Crônica) usam um **modelo próprio da Acendedora** (`/models/acendedora.glb`, gerado no
-  Tripo e limpo no Blender via `tools/isolate_acendedora.py`) - encapuzada, manto teal, cajado
-  com ember na ponta, na intenção de leitura desta ficha. É **estático (sem rig)**, então
-  serve só para as vitrines (a câmera orbita).
-- `[CÓDIGO]` O **herói EM JOGO** passou a usar o KayKit **Rogue_Hooded** (encapuzado, lê como
-  a Acendedora, melhor que o Mage genérico) por ter rig/pesos/animações limpos. Tentamos
-  riggar o modelo próprio via auto-rig do Tripo (`tools/tripo_rig.py` + `finalize_acendedora.py`):
-  saiu com deformação tipo gelatina (pesos ruins) e defeito de malha (mão dupla); descartado
-  para gameplay. Um rig de qualidade do modelo próprio (Mixamo/manual ou auto-rig melhor)
-  segue `[A DEFINIR]` com custo. Ver `spec-ui-hud-ux.md` 5.1/5.6.
+- `[CÓDIGO]` Atualização (2026-11): há UMA Acendedora no produto, `personagens/heroina.glb`
+  (Quaternius, rig e animações da biblioteca `anim.glb`), nas vitrines do título e da criação
+  e em jogo. O modelo Tripo (`acendedora.glb`, estático, deformava ao riggar) e o KayKit
+  Rogue_Hooded foram removidos. Ver `spec-ui-hud-ux.md` 5.1/5.6.
 
 ## 1.3 Características físicas `[DESIGN]` (dentro do que o asset KayKit permite)
 - `[DESIGN]` Importante: KayKit é low-poly estilizado de proporção levemente heroica

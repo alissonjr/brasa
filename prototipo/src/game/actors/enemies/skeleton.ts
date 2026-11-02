@@ -120,19 +120,19 @@ const STATS: Record<SkeletonKind, SkelStats> = {
   demonio: {
     model: "/models/quaternius_monsters/demon.glb", monsterSat: -88, monsterTint: "#8d8894", height: 1.95, hp: 70, moveSpeed: 3.0, attackRange: 2.1, approachUntil: 1.9, cooldownSec: 0.45,
     overhead: { startup: 0.4, active: 0.1, recovery: 0.5, damage: 16, knockback: 2, hitStopFrames: 6 }, damage: 16, guards: false, reward: 6,
-    behavior: "melee", faceOffset: Math.PI, poise: 25,
+    behavior: "melee", faceOffset: 0, poise: 25,
   },
   // Brutamonte: tanque lento e ENORME, golpe pesado lento de ler, bloqueia leve frontal.
   brutamonte: {
     model: "/models/quaternius_monsters/yeti.glb", monsterExposure: 0.5, monsterSat: -85, monsterTint: "#9aa6b2", height: 2.5, hp: 150, moveSpeed: 1.6, attackRange: 2.8, approachUntil: 2.4, cooldownSec: 0.8,
     overhead: { startup: 0.9, active: 0.15, recovery: 0.8, damage: 30, knockback: 4, hitStopFrames: 11 }, damage: 30, guards: true, reward: 12,
-    behavior: "melee", faceOffset: Math.PI, tellProfile: "heavy", poise: 75, canUnblockable: true,
+    behavior: "melee", faceOffset: 0, tellProfile: "heavy", poise: 75, canUnblockable: true,
   },
   // Espreitador: veloz, golpeia e RECUA (hit-and-run). Pune quem persegue cegamente.
   espreitador: {
     model: "/models/quaternius_monsters/ninja.glb", height: 1.8, hp: 40, moveSpeed: 4.2, attackRange: 2.0, approachUntil: 1.7, cooldownSec: 0.55,
     overhead: { startup: 0.28, active: 0.08, recovery: 0.35, damage: 12, knockback: 1, hitStopFrames: 5 }, damage: 12, guards: false, reward: 6,
-    behavior: "skirmisher", faceOffset: Math.PI, tellProfile: "swift", poise: 14,
+    behavior: "skirmisher", faceOffset: 0, tellProfile: "swift", poise: 14,
   },
   // Conjurador: mantem distancia e DISPARA um projetil de fogo telegrafado. Forca fechar espaco.
   // Projetil JUSTO (design de bullet legivel): antecipacao longa (cast 0.95s), tiro LENTO
@@ -149,7 +149,7 @@ const STATS: Record<SkeletonKind, SkelStats> = {
   arqueiro: {
     model: MORTOS + "morto_ladino.glb", humanoid: { attack: "OverhandThrow", tint: "#a9bfc4" }, height: 1.78, hp: 38, moveSpeed: 3.0, attackRange: 10, approachUntil: 8, cooldownSec: 1.5,
     overhead: { startup: 0.9, active: 0.1, recovery: 0.6, damage: 12, knockback: 1, hitStopFrames: 5 }, damage: 12, guards: false, reward: 8,
-    behavior: "ranged", projectileSpeed: 8.5, faceOffset: Math.PI, tellProfile: "cast", poise: 14,
+    behavior: "ranged", projectileSpeed: 8.5, faceOffset: 0, tellProfile: "cast", poise: 14,
   },
 };
 

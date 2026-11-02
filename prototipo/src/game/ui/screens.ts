@@ -9,6 +9,7 @@ import { DEFAULT_BINDINGS, INPUT_ACTIONS, el, type InputAction, type KeyBindings
 import type { Quality } from "@platform";
 import { T, getLanguage, itemText, onLanguageChange, setLanguage, tr } from "./strings";
 import { uiHover, uiClick } from "./uiSound";
+import { muralRegistro } from "./muralPlate";
 import { ModelStage } from "./modelStage";
 import { TitleScene } from "./titleScene";
 import { formatTime, readLeaderboard, submitTime } from "../content/leaderboard";
@@ -20,12 +21,15 @@ import {
   CODEX_ENTRIES,
   CODEX_TOTAL,
   codexProgress,
+  decalState,
   isCodexUnlocked,
+  markCleared,
   romanNumeral,
   type CodexCategory,
   type CodexDecal,
   type CodexEntry,
   type CodexFloor,
+  type CodexLog,
 } from "../content/codex";
 import {
   DIFFICULTIES,
@@ -183,8 +187,7 @@ export class AlertDialog implements Screen {
 // --- Menu principal ---
 
 // UMA heroína em todas as vitrines (título, criação) e no jogo: Cinza, corpo Quaternius vestido de
-// Acendedora (heroina.glb; idle da biblioteca anim.glb). Antes o título usava acendedora.glb
-// (Tripo, azul, com cajado) e a criação o Rogue_Hooded do KayKit: três heroínas no produto.
+// Acendedora (heroina.glb; idle da biblioteca anim.glb).
 const ACENDEDORA_PREVIEW_MODEL = "/models/personagens/heroina.glb";
 // Criação de personagem: o MESMO modelo e atlas do jogo, para o manto escolhido valer na prévia.
 const ACENDEDORA_GAME_MODEL = "/models/personagens/heroina.glb";
@@ -928,18 +931,24 @@ interface CodexPage {
   caption: string;
   /** Texto gravado na pedra (só nos decalques). */
   stone?: string;
+  /** Linha de registro (o que se enfrentou), só depois de limpar a câmara. */
+  record?: string;
 }
 
-function decalPage(f: CodexFloor, d: CodexDecal): CodexPage {
-  return {
-    art: d.art,
+/** O decalque em dois estados: só a gravura (leu o mural) ou completo (leu a inscrição na câmara). */
+function decalPage(f: CodexFloor, d: CodexDecal, log: CodexLog): CodexPage {
+  const full = isCodexUnlocked(d, log);
+  const page: CodexPage = {
+    art: full ? d.art : (d.muralArt ?? d.art),
     title: d.title,
-    verse: d.echo,
-    body: d.body,
+    verse: full ? d.echo : "",
+    body: full ? d.body : [T.cronicaSoGravura],
     seal: [`${T.andar} ${romanNumeral(f.n)}`, f.layer],
     caption: `${T.andar} ${romanNumeral(f.n)} · ${f.name}`,
-    stone: d.inscription,
   };
+  if (full) page.stone = d.inscription;
+  if (log.has(markCleared(f.n))) page.record = muralRegistro(f.n);
+  return page;
 }
 
 function entryPage(e: CodexEntry): CodexPage {
@@ -989,13 +998,16 @@ export class CodexScreen implements Screen {
     CODEX_DESCENT.forEach((f, i) => {
       const num = romanNumeral(f.n);
       const d = f.decal;
-      const readNow = !!d && isCodexUnlocked(d, log);
+      const state = d ? decalState(d, log) : "none";
+      const readNow = state !== "none";
       const next = CODEX_DESCENT[i + 1]?.decal;
-      const lit = readNow && !!next && isCodexUnlocked(next, log);
+      const lit = readNow && !!next && decalState(next, log) !== "none";
       const style = `--k:${i};--rot:${SLAB_TILT[i] ?? 0}deg`;
       if (d && readNow) {
-        const paper = el("span", { class: "codex-paper" });
-        const q = el("q", { text: d.inscription });
+        const paper = el("span", { class: "codex-paper" + (state === "gravura" ? " codex-paper--gravura" : "") });
+        // Só a gravura: a miniatura do mural no lugar da inscrição (o texto se lê na câmara).
+        const q = state === "gravura" ? el("span", { class: "codex-paper__art" }) : el("q", { text: d.inscription });
+        if (state === "gravura") q.innerHTML = illustration(d.muralArt ?? d.art);
         paper.append(q, el("small", { text: d.title }));
         const slab = el(
           "button",
@@ -1011,7 +1023,7 @@ export class CodexScreen implements Screen {
         slab.addEventListener("pointerenter", uiHover);
         slab.addEventListener("click", () => {
           uiClick();
-          open(slab, decalPage(f, d));
+          open(slab, decalPage(f, d, log));
         });
         if (fresh.has(d.id)) settle(slab, q);
         steps.append(slab);
@@ -1119,9 +1131,10 @@ class CodexEntryScreen implements Screen {
       "div",
       { class: "codex-folheto__txt" },
       el("h2", { text: page.title }),
-      el("p", { class: "codex-folheto__ver", text: page.verse }),
+      ...(page.verse ? [el("p", { class: "codex-folheto__ver", text: page.verse })] : []),
       ...page.body.map((p) => el("p", { class: "codex-folheto__par", text: p }))
     );
+    if (page.record) text.append(el("p", { class: "codex-folheto__reg", text: page.record }));
     if (page.stone) {
       text.append(el("div", { class: "codex-folheto__pedra" }, el("small", { text: T.cronicaGravada }), page.stone));
     }

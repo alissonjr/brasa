@@ -44,3 +44,36 @@
 .gv-s-f1 { stop-color: var(--frost-300); stop-opacity: 0.5; }
 .gv-s-f2 { stop-color: var(--frost-500); stop-opacity: 0; }
 .gv-glow { pointer-events: none; }
+
+/* ---------- Alfabeto do mural (bustos, perigos, contagem) ----------
+   Os glifos são desenhados numa grade de 24 unidades centrada em (0,0) e escalados por
+   `<g transform="scale(k)">`, então as larguras abaixo estão em unidades do GLIFO (não em px):
+   com k = 4 o traço principal fica em ~4,4 px, o médio em ~3,2 px e o fino em ~2 px.
+   Forma antes de cor: o busto distingue o tipo em ouro e cinza; laranja só no que é fogo
+   (orbe do Conjurador, fissura, grade, vela); gelo só no que ameaça (túmulo, olho, água, anéis). */
+.gv-gl { fill: none; stroke: var(--gold-300); stroke-width: 1.1; stroke-linecap: round; stroke-linejoin: round; }
+.gv-gm { fill: none; stroke: var(--gold-400); stroke-width: 0.8; stroke-linecap: round; stroke-linejoin: round; }
+.gv-gt { fill: none; stroke: var(--gold-500); stroke-width: 0.5; stroke-linecap: round; stroke-linejoin: round; }
+.gv-gx { fill: none; stroke: var(--ember-300); stroke-width: 0.9; stroke-linecap: round; stroke-linejoin: round; }
+.gv-gf { fill: none; stroke: var(--frost-300); stroke-width: 0.9; stroke-linecap: round; stroke-linejoin: round; }
+.gv-gft { fill: none; stroke: var(--frost-500); stroke-width: 0.5; stroke-linecap: round; stroke-linejoin: round; }
+.gv-gxe { fill: var(--ember-400); stroke: none; }
+.gv-gxe2 { fill: var(--ember-200); stroke: none; }
+.gv-gfe { fill: var(--frost-300); stroke: none; }
+.gv-gb { fill: var(--text-hi); stroke: none; }
+.gv-ph { stroke: var(--gold-600); stroke-width: 0.32; }
+.gv-pfh { stroke: var(--frost-500); stroke-width: 0.32; }
+.gv-gx-glow { fill: var(--ember-500); opacity: 0.32; stroke: none; }
+.gv-gf-glow { fill: var(--frost-500); opacity: 0.22; stroke: none; }
+
+/* Marcas de contagem (em unidades da vista, fora do glifo) */
+.gv-tally { fill: none; stroke: var(--gold-300); stroke-width: 3.2; stroke-linecap: round; }
+.gv-tally-s { fill: none; stroke: var(--gold-400); stroke-width: 2; stroke-linecap: round; }
+
+/* Moldura de pedra do painel "o que vem" */
+.gv-rule { fill: none; stroke: var(--gold-700); stroke-width: 1.4; stroke-linecap: round; }
+.gv-ring2 { fill: none; stroke: var(--gold-600); stroke-width: 1.4; stroke-dasharray: 4 6; stroke-linecap: round; }
+
+/* Glifo avulso (alfabeto): sem fundo próprio */
+.gv-solo { display: block; width: 100%; height: 100%; }
+.gv-gg { fill: var(--gold-400); stroke: var(--gold-300); stroke-width: 0.5; stroke-linejoin: round; }

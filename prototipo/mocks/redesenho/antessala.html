@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brasa - Redesenho da descida (antessala, mural, armário, gole)</title>
+<!-- MOCK DE DECISÃO, não é código do jogo. Só tokens e componentes do DS (ds-frame, ds-chip, ds-btn,
+     ds-kbd); gravuras na convenção de illustrations.ts (traço ouro sobre tinta). -->
+<link rel="stylesheet" href="/src/game/ui/ds/tokens.css">
+<link rel="stylesheet" href="/src/game/ui/ds/components.css">
+<link rel="stylesheet" href="base.css">
+<style>
+  .armario-frame { display: grid; grid-template-columns: 1fr 1.2fr 1fr; gap: var(--sp-6); }
+  .armario-frame .ds-h3 { margin: 0 0 var(--sp-3); }
+  .nicho-cap { font-family: var(--font-text); font-style: italic; font-size: var(--fs-2xs); color: var(--gold-300); position: absolute; left: 6px; right: 6px; bottom: 4px; text-align: left; }
+  .slot .ds-kbd { position: absolute; left: 6px; top: 5px; }
+  .slot .ds-chip { position: absolute; right: 6px; bottom: 5px; padding: 1px 7px; font-size: var(--fs-2xs); }
+  .story .frame { background: radial-gradient(ellipse at 50% 30%, #161c28, var(--ink-950) 70%); border-color: var(--gold-800); }
+  .sb { display: flex; align-items: center; gap: var(--sp-3); margin-top: var(--sp-3); font-size: var(--fs-sm); color: var(--text-lo); }
+  .mural .pane { padding: 0; }
+  .mural .pane .cap { z-index: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="cap">Redesenho da descida: mock de leitura 3 de 3</div>
+  <h1>Antessala, parede-mural, armário de poções e o gole</h1>
+  <nav class="nav"><a href="index.html">Laço</a><a href="camaras.html">As 7 câmaras</a><a href="antessala.html" aria-current="page">Antessala, mural, armário, gole</a></nav>
+
+  <section class="panel plan" id="antessala">
+    <div id="ant-svg"></div>
+    <div>
+      <div class="head"><span class="num">A</span><div><h3>A antessala-tipo (12 x 12 m)</h3><div class="sub">o patamar da escada, casa de guarda da ordem em cada andar</div></div></div>
+      <dl>
+        <dt>E chegada</dt><dd>Boca da escada no canto sudoeste: a Acendedora chega de cima, no escuro. Só a fagulha do peito ilumina. Autosave de chegada.</dd>
+        <dt>B braseiro</dt><dd>No eixo da sala, um pouco ao sul. Peça do kit (brazier), frio. Segurar [R] 1,2 s acende: luz de baixo para cima, cura 40%, Ferida fecha, checkpoint. O painel de dádivas abre no fim do gesto (reaproveita <code>boonShop.ts</code>).</dd>
+        <dt>A armário</dt><dd>Parede oeste. Quatro nichos. Interagir abre o painel de três colunas (cinto, nichos, reserva da ordem). Sem Fagulha nos nichos; a reserva custa como a banca de hoje.</dd>
+        <dt>O ofício</dt><dd>Parede leste: Estante (A2, A4) ou Bancada (A3, A5); A6 tem as duas. A chama única do braseiro acende a vela da Estante ou os pavios da Bancada; sem chama, o ofício fica frio (o Descanso da Bancada continua grátis).</dd>
+        <dt>M mural</dt><dd>Parede norte, um painel de cada lado da porta de pedra: à esquerda o que foi (a história do andar, a gravura da Crônica); à direita o que vem (os mortos e o perigo da câmara seguinte). Frio: só a esquerda se lê. Aceso: a direita acende. A 3 m, [R] abre a placa legível (DOM).</dd>
+        <dt>porta</dt><dd>Porta de pedra no centro da parede norte (peça wall_gate_door). Abre ao aproximar depois de acender o braseiro, ou sem acender (quem quer correr pode). Sela atrás: a câmara começa.</dd>
+        <dt>orçamento</dt><dd>Meta &lt;= 60 draw calls: planta 12 x 12 (hoje 41 a 43) + mural (1 malha, 1 textura), armário (1 malha + frascos em thin instances), braseiro (1 partícula), ofício (2 a 4 malhas), porta (1).</dd>
+      </dl>
+      <div class="tags"><span class="tag ember">seguro</span><span class="tag gold">narrativo</span><span class="tag life">preparação</span></div>
+    </div>
+  </section>
+
+  <h2>A parede-mural: dois painéis, uma inscrição</h2>
+  <p class="lead">Gravura em ouro sobre pedra (mesma linguagem de <code>illustrations.ts</code>): à esquerda a cena da história do andar, igual ao decalque que a Crônica guardará; à direita os mortos da câmara seguinte com marcas de contagem e o perigo de cenário, sem texto. A inscrição do andar fecha a placa. Fria, só a metade esquerda se lê; o braseiro aceso revela a direita: a luz lê a pedra.</p>
+  <div class="grid g2">
+    <div>
+      <div class="cap" style="margin-bottom: 8px">A3 A Botica, antes da Cisterna que Cede (braseiro aceso)</div>
+      <div class="mural" id="mural-a3">
+        <div class="pane"><span class="cap">o que foi</span><svg viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg" aria-label="Três inscrições que se contradizem"></svg></div>
+        <div class="pane"><span class="cap">o que vem</span><svg viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg" aria-label="Quatro mortos e o chão que cede"></svg></div>
+        <div class="insc">Quem acendeu a primeira Brasa? A pedra não responde.</div>
+      </div>
+    </div>
+    <div>
+      <div class="cap" style="margin-bottom: 8px">A7 O Limiar, antes da Câmara da Brasa (frio: braseiro ainda apagado)</div>
+      <div class="mural cold" id="mural-a7">
+        <div class="pane"><span class="cap">o que foi</span><svg viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg" aria-label="A Primeira diante da Brasa"></svg></div>
+        <div class="pane"><span class="cap">o que vem</span><svg viewBox="0 0 220 150" xmlns="http://www.w3.org/2000/svg" aria-label="A Guardiã e a arena que encolhe"></svg></div>
+        <div class="insc">Ela ainda guarda o fogo. Liberta-a, ou toma seu lugar.</div>
+      </div>
+    </div>
+  </div>
+
+  <section class="panel" style="margin-top: var(--sp-5)">
+    <h3>Alfabeto do mural (bustos e perigos, sem texto)</h3>
+    <p class="hint">Um busto por tipo de morto (o atributo diz o tipo: espada, capuz e adaga, arco, cajado, chifres, crista, ombros, escudo) e um glifo por perigo; a contagem vai em marcas verticais sob o busto. Forma primeiro, cor depois: o laranja só no que é fogo; o gelo só no que ameaça.</p>
+    <div id="alfabeto" class="alf"></div>
+  </section>
+
+  <h2>O armário de poções</h2>
+  <p class="lead">Três colunas. O cinto é o que ela bebe nas câmaras (teclas 1, 2 e 3, com os tetos de hoje: 3 Recuperações, 2 Fúrias, 2 Unguentos). Os nichos são os quatro espaços do armário deste andar: o que está ali é de graça (deixado por Marta na primeira descida, ou por quem desceu antes: a Acendedora da descida anterior do jogador). A reserva da ordem é a banca de hoje, com o mesmo preço. Deixar um frasco no nicho é um gesto para a próxima descida.</p>
+  <section class="ds-frame" id="armario">
+    <h2 class="ds-h2" style="margin: 0 0 var(--sp-5)">Armário da ordem</h2>
+    <div class="armario-frame">
+      <div class="col">
+        <h3 class="ds-h3">Cinto (o que bebe)</h3>
+        <div class="slots cinto">
+          <div class="slot" data-k="vida"><span class="ds-kbd">1</span><span class="n">2/3</span></div>
+          <div class="slot" data-k="furia"><span class="ds-kbd">2</span><span class="n">1/2</span></div>
+          <div class="slot empty" data-k="unguento"><span class="ds-kbd">3</span><span class="n">0/2</span></div>
+        </div>
+        <p class="hint">Rótulo sem texto: forma do frasco (redondo, alto, pote), cor e selo de cera (coração, chama, ponto cruzado).</p>
+      </div>
+      <div class="col">
+        <h3 class="ds-h3">Nichos deste andar (4)</h3>
+        <div class="slots">
+          <div class="slot sel" data-k="unguento"><span class="nicho-cap">de Marta</span></div>
+          <div class="slot" data-k="vida"><span class="nicho-cap">de quem desceu antes</span></div>
+          <div class="slot empty"></div>
+          <div class="slot empty"></div>
+        </div>
+        <div class="acts"><button class="ds-btn ds-btn--primary ds-btn--sm" type="button"><span class="ds-btn__label">Retirar para o cinto</span></button><button class="ds-btn ds-btn--sm" type="button"><span class="ds-btn__label">Guardar do cinto</span></button><button class="ds-btn ds-btn--ghost ds-btn--sm" type="button"><span class="ds-btn__label">Deixar para quem descer</span></button></div>
+      </div>
+      <div class="col">
+        <h3 class="ds-h3">Reserva da ordem</h3>
+        <div class="slots" style="grid-template-columns: repeat(3, 1fr)">
+          <div class="slot" data-k="vida"><span class="ds-chip ds-chip--ember">4</span></div>
+          <div class="slot" data-k="furia"><span class="ds-chip ds-chip--ember">6</span></div>
+          <div class="slot empty"><span class="nicho-cap" style="color: var(--text-lo); text-align: center">Unguento: só na Bancada</span></div>
+        </div>
+        <p class="hint">Estoque limitado por andar (2 Recuperações, 1 Fúria). Comprar com Fagulha, como na banca de hoje. O que sobra de Fagulha vira frasco deixado para a próxima descida: um sorvedouro que conta história.</p>
+      </div>
+    </div>
+    <table style="margin-top: var(--sp-5)">
+      <thead><tr><th>Regra</th><th>Valor</th><th>Por quê</th></tr></thead>
+      <tbody>
+        <tr><td>Nichos por antessala</td><td>4</td><td>Cabe uma reserva real, não um inventário infinito.</td></tr>
+        <tr><td>O que persiste entre descidas</td><td>O que o jogador deixou nos nichos (por andar), até 4; a reserva da ordem volta ao estoque fixo</td><td>Legado: "enquanto alguém descer, a luz não acaba".</td></tr>
+        <tr><td>Conteúdo inicial fixo</td><td>A1: 1 Recuperação (a poção de Marta, hoje inv.vida = 1); A3: 1 Unguento; A5: 1 Fúria; outros vazios</td><td>Ensina o armário antes de precisar dele; o Unguento aparece antes da Instabilidade.</td></tr>
+        <tr><td>Retirar com o cinto cheio</td><td>Bloqueado ("cinto cheio"); guardar primeiro</td><td>Nunca se perde frasco por acaso.</td></tr>
+        <tr><td>Na derrota</td><td>Cinto intacto (como hoje); nichos intactos</td><td>A antessala é o lugar de tentar de novo com o que se tem.</td></tr>
+        <tr><td>No Limiar (A7)</td><td>Armário presente; a Câmara da Brasa não tem Descanso</td><td>A última preparação é real e consciente.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <h2>O gole: 0,6 segundos vulneráveis</h2>
+  <p class="lead">Beber é um gesto com janela. A mão leva o frasco à boca, a cabeça inclina, o frasco cai e se desfaz em fagulhas da cor da poção. Pode andar devagar; não pode atacar nem bloquear; a esquiva cancela (antes do gole, sem gastar a carga; depois do gole, a carga já foi e o efeito vale). Som sintetizado: rolha, três goles em ruído filtrado, e o sino de cura que já existe.</p>
+  <section class="panel">
+    <div class="story" id="story"></div>
+    <div class="timeline" aria-label="linha do tempo do gole">
+      <span class="mark" style="left:0">0 s</span><span class="mark" style="left:25%">0,15</span><span class="mark" style="left:50%">0,30</span><span class="mark" style="left:66%">0,40</span><span class="mark" style="left:100%">0,60</span>
+      <div class="seg vuln" style="left:0; width:100%">janela vulnerável: sem ataque, sem bloqueio; esquiva cancela</div>
+      <div class="seg gole" style="left:50%; width:16%">gole</div>
+    </div>
+    <table style="margin-top: var(--sp-5)">
+      <thead><tr><th>Poção</th><th>Gesto</th><th>Brilho e partículas</th><th>Som (sintetizado)</th><th>HUD</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Recuperação</strong> (1)</td><td>frasco redondo à boca; cabeça inclina 15 graus</td><td>espiral verde-ouro subindo pelo peito (12 partículas), flash de cura já existente</td><td>rolha (clique curto), 3 goles (ruído rosa filtrado a 300 Hz, 90 ms cada), sino de cura (healChime)</td><td>o frasco do slot inclina e esvazia; o número rola</td></tr>
+        <tr><td><strong>Fúria</strong> (2)</td><td>frasco alto; gole seco de um tempo só</td><td>espiral de brasa; o emissivo da arma sobe durante os 8 s</td><td>rolha, 1 gole, sibilo + "whoomp" grave (osc. 60 Hz com decay 0,4 s)</td><td>slot pulsa em brasa enquanto o efeito dura</td></tr>
+        <tr><td><strong>Unguento</strong> (3)</td><td>pote com tampa; a mão vai ao peito, não à boca (aplicar), 0,6 s</td><td>estalo dourado no segmento hachurado da Ferida, que encolhe</td><td>destampar (pop grave), esfregar (ruído branco 200 ms), crepitar leve</td><td>a hachura da Ferida se fecha da direita para a esquerda</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">Clipes na biblioteca do jogo (anim.glb, 22 clipes): não há Drink nem Interact. Conferir na UAL bruta (UAL1_Standard.glb, UAL2_Standard.glb) os nomes candidatos Interact, PickUp e Use_Item; se nenhum servir, compor por procedimento sobre o rig (mão ao rosto, cabeça inclina) por cima da locomoção, como a especificação descreve.</p>
+  </section>
+</div>
+<script src="planos.js"></script>
+<script>
+(function () {
+  const P = window.PLANOS;
+  document.getElementById("ant-svg").innerHTML = P.antessalaSolo({ nome: "antessala-tipo (A3 A Botica)", oficio: "bancada" });
+
+  // --- frascos (forma + cor + selo) ---
+  const FLASK = {
+    vida: '<g fill="none" stroke="var(--life-400)" stroke-width="2.2" stroke-linejoin="round"><path d="M14 4h12v6c6 2 10 8 10 14a16 16 0 0 1-32 0c0-6 4-12 10-14z" fill="rgba(127,207,143,.12)"/><path d="M12 6h16"/><path d="M20 20l-3-3a2.2 2.2 0 0 1 3-3 2.2 2.2 0 0 1 3 3z" fill="var(--life-400)" stroke="none"/></g>',
+    furia: '<g fill="none" stroke="var(--ember-400)" stroke-width="2.2" stroke-linejoin="round"><path d="M16 3h8v8l4 4v20a4 4 0 0 1-4 4h-8a4 4 0 0 1-4-4V15l4-4z" fill="rgba(255,138,44,.12)"/><path d="M14 5h12"/><path d="M20 20c2 2 3 4 3 6a3 3 0 0 1-6 0c0-1 .5-2 1-3 0 1 .6 2 1.2 2 .6-1.2 0-3 .8-5z" fill="var(--ember-400)" stroke="none"/></g>',
+    unguento: '<g fill="none" stroke="var(--gold-300)" stroke-width="2.2" stroke-linejoin="round"><path d="M8 14h24v18a4 4 0 0 1-4 4H12a4 4 0 0 1-4-4z" fill="rgba(242,196,109,.1)"/><path d="M10 10h20v4H10z"/><path d="M16 23l8 6M24 23l-8 6"/></g>',
+  };
+  for (const el of document.querySelectorAll(".slot[data-k]")) el.insertAdjacentHTML("afterbegin", `<svg viewBox="0 0 40 40" aria-label="${el.dataset.k}">${FLASK[el.dataset.k]}</svg>`);
+
+  // --- alfabeto ---
+  const nomes = { manso: "Manso", guerreiro: "Guerreiro", ladino: "Ladino", arqueiro: "Arqueiro", conjurador: "Conjurador", espreitador: "Espreitador", demonio: "Demônio", antigo: "Antigo", brutamonte: "Brutamonte", sentinela: "Sentinela", guardia: "Guardiã", chao: "chão que cede", colunas: "colunas móveis", agua: "água parada", fissura: "fissura quente", aneis: "arena que encolhe", vigilia: "vigília (acorda depois)", tumulo: "túmulo arrombado", onda: "duas ondas", emboscada: "emboscada avisada" };
+  const alf = document.getElementById("alfabeto");
+  for (const k of Object.keys(nomes)) alf.insertAdjacentHTML("beforeend", `<div><svg viewBox="-16 -16 32 32">${P.glyph(k, 0, 0, 26)}</svg><div class="cap">${nomes[k]}</div></div>`);
+
+  // --- murais ---
+  const slab = (id) => `<defs><pattern id="${id}" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><line x1="0" y1="0" x2="0" y2="7" stroke="var(--gold-700)" stroke-width="0.6" stroke-opacity="0.35"/></pattern><filter id="${id}-g" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3"/></filter></defs>` +
+    `<rect width="220" height="150" fill="var(--ink-900)"/><rect width="220" height="150" fill="url(#${id})"/><rect x="6" y="6" width="208" height="138" fill="none" stroke="var(--gold-700)" stroke-width="1"/><rect x="9" y="9" width="202" height="132" fill="none" stroke="var(--gold-800)" stroke-width="0.6"/>`;
+  const tally = (x, y, n) => { let s = ""; for (let i = 0; i < n; i++) { const xx = x - (n - 1) * 2.6 + i * 5.2; s += `<line x1="${xx}" y1="${y}" x2="${xx}" y2="${y + 9}" stroke="var(--gold-300)" stroke-width="1.6" stroke-linecap="round"/>`; } return s; };
+  const rays = (cx, cy, n, r0, r1, seed) => { let s = ""; for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + seed; const len = r0 + (r1 - r0) * (0.5 + 0.5 * Math.abs(Math.sin(i * 12.9898 + seed))); s += `<line x1="${(cx + Math.cos(a) * r0).toFixed(1)}" y1="${(cy + Math.sin(a) * r0).toFixed(1)}" x2="${(cx + Math.cos(a) * len).toFixed(1)}" y2="${(cy + Math.sin(a) * len).toFixed(1)}" stroke="var(--gold-600)" stroke-width="0.8" stroke-opacity="0.8"/>`; } return s; };
+  const title = (t, cls) => `<text x="110" y="26" text-anchor="middle" font-family="var(--font-display)" font-size="9" fill="${cls || "var(--gold-300)"}" letter-spacing="2.2">${t}</text>`;
+  const column = (x) => `<rect x="${x - 9}" y="48" width="18" height="76" fill="var(--ink-800)" stroke="var(--gold-300)" stroke-width="1.6"/><rect x="${x - 12}" y="44" width="24" height="5" fill="var(--ink-700)" stroke="var(--gold-300)" stroke-width="1.4"/><rect x="${x - 12}" y="123" width="24" height="5" fill="var(--ink-700)" stroke="var(--gold-300)" stroke-width="1.4"/><path d="M${x - 5} 60h10M${x - 5} 66h10M${x - 5} 72h7M${x - 5} 84h10M${x - 5} 90h6" stroke="var(--gold-500)" stroke-width="1" stroke-linecap="round"/>`;
+  const water = (y) => `<path d="M14 ${y} Q24 ${y - 5} 34 ${y} T54 ${y} T74 ${y} T94 ${y} T114 ${y} T134 ${y} T154 ${y} T174 ${y} T194 ${y} T206 ${y}" fill="none" stroke="var(--frost-300)" stroke-width="1.5" stroke-opacity="0.9"/>`;
+  const a3 = document.querySelectorAll("#mural-a3 svg");
+  a3[0].innerHTML = slab("m3a") + column(50) + column(110) + column(170) + water(132) + water(139) + title("A QUE JÁ ESTAVA AQUI");
+  a3[1].innerHTML = slab("m3b") +
+    P.glyph("guerreiro", 38, 62, 38) + tally(38, 88, 1) + P.glyph("manso", 86, 62, 38) + tally(86, 88, 1) + P.glyph("arqueiro", 132, 62, 38) + tally(132, 88, 1) + P.glyph("espreitador", 182, 62, 38) + tally(182, 88, 1) +
+    `<line x1="24" y1="106" x2="196" y2="106" stroke="var(--gold-700)" stroke-width="1"/>` + P.glyph("chao", 80, 126, 32) + P.glyph("agua", 140, 126, 30) + title("O QUE A PORTA GUARDA");
+  const a7 = document.querySelectorAll("#mural-a7 svg");
+  a7[0].innerHTML = slab("m7a") + rays(132, 104, 40, 16, 70, 0.3) + `<circle cx="132" cy="104" r="34" fill="var(--ember-500)" fill-opacity="0.2" filter="url(#m7a-g)"/>` +
+    `<path d="M104 124 H160 M110 124 L116 108 H148 L154 124" fill="var(--ink-800)" stroke="var(--gold-300)" stroke-width="1.6"/>` + P.flame(132, 108, 40, 11, "") .replace('class=""', 'fill="var(--ember-400)"') + P.flame(132, 108, 24, 6, "").replace('class=""', 'fill="var(--ember-200)"') +
+    P.glyph("guardia", 62, 92, 70) + title("A PRIMEIRA FICOU");
+  a7[1].innerHTML = slab("m7b") + P.glyph("guardia", 70, 76, 86) + tally(70, 124, 1) + P.glyph("aneis", 158, 78, 64) + title("A QUE GUARDA O FOGO", "var(--frost-300)");
+
+  // --- storyboard do gole ---
+  function fig(o) {
+    const id = "f" + Math.round(Math.random() * 1e6);
+    const tilt = o.tilt || 0;
+    const hood = `<g transform="rotate(${tilt} 58 60)"><path d="M46 60 C36 46 42 22 58 20 C74 20 82 34 78 50 C76 56 70 60 62 60Z" fill="var(--ink-800)" stroke="var(--gold-300)" stroke-width="1.8" stroke-linejoin="round"/><path d="M62 30 C70 30 76 38 74 50 C72 56 66 58 62 56 C60 48 60 38 62 30Z" fill="var(--ink-950)"/><path d="M50 56 C46 42 50 28 60 24" fill="none" stroke="var(--gold-600)" stroke-width="0.8"/></g>`;
+    const mantle = `<path d="M48 58 C40 80 34 110 36 140 L84 140 C86 110 82 84 70 58Z" fill="var(--ink-800)" stroke="var(--gold-300)" stroke-width="1.8" stroke-linejoin="round"/><path d="M48 58 C40 80 34 110 36 140 L58 140 C56 110 56 80 58 58Z" fill="url(#${id}-h)"/><path d="M52 70 C48 92 44 116 44 140 M64 70 C66 92 70 116 72 140" fill="none" stroke="var(--gold-700)" stroke-width="0.8"/>`;
+    const spark = `<circle cx="60" cy="78" r="7" fill="var(--ember-500)" fill-opacity="0.35" filter="url(#${id}-g)"/><path d="M60 72 L61.5 76.5 L66 78 L61.5 79.5 L60 84 L58.5 79.5 L54 78 L58.5 76.5Z" fill="var(--ember-200)"/>`;
+    const flask = o.fly ? "" : `<g transform="translate(0 22) rotate(${o.flaskRot || 0})"><path d="M-3 -9 H3 V-4 C6.5 -3 8 0 8 3.5 A8 8 0 0 1 -8 3.5 C-8 0 -6.5 -3 -3 -4Z" fill="var(--ink-950)" stroke="var(--life-400)" stroke-width="1.6"/><path d="M-6 4 A6 6 0 0 0 6 4Z" fill="var(--life-400)" fill-opacity="0.5"/></g>`;
+    const arm = `<g transform="translate(58 64) rotate(${o.sh})"><path d="M-4 0 C-5 8 -4.5 16 -3.5 26 L3.5 26 C4.5 16 4.5 8 4 0Z" fill="var(--ink-700)" stroke="var(--gold-300)" stroke-width="1.6" stroke-linejoin="round"/><g transform="translate(0 26) rotate(${o.el})"><path d="M-3.5 0 C-4 8 -3.5 14 -2.8 22 L2.8 22 C3.5 14 3.8 8 3.5 0Z" fill="var(--ink-700)" stroke="var(--gold-300)" stroke-width="1.6" stroke-linejoin="round"/><circle cx="0" cy="23" r="3.2" fill="var(--ink-950)" stroke="var(--gold-300)" stroke-width="1.4"/>${flask}</g></g>`;
+    const flying = o.fly ? `<g transform="translate(106 44) rotate(60)" opacity="0.7"><path d="M-3 -9 H3 V-4 C6.5 -3 8 0 8 3.5 A8 8 0 0 1 -8 3.5 C-8 0 -6.5 -3 -3 -4Z" fill="none" stroke="var(--life-400)" stroke-width="1.4" stroke-dasharray="3 2"/></g>` : "";
+    let parts = "";
+    if (o.particles) { const pts = [[52, 66, 2], [46, 56, 1.4], [56, 48, 1.1], [44, 74, 1.6], [62, 40, 1], [50, 86, 1.3]]; for (const [x, y, r] of pts) parts += `<circle cx="${x}" cy="${y}" r="${r * 2.4}" fill="var(--life-400)" fill-opacity="0.25" filter="url(#${id}-g)"/><circle cx="${x}" cy="${y}" r="${r}" fill="var(--life-400)"/>`; }
+    if (o.fly) { const pts = [[112, 36, 1.2], [118, 30, 0.9], [110, 26, 0.8], [120, 42, 1]]; for (const [x, y, r] of pts) parts += `<circle cx="${x}" cy="${y}" r="${r}" fill="var(--life-400)" fill-opacity="0.8"/>`; }
+    const glow = o.glow ? `<ellipse cx="60" cy="92" rx="26" ry="34" fill="var(--life-400)" fill-opacity="0.16" filter="url(#${id}-g)"/>` : "";
+    return `<svg viewBox="0 0 130 150" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="${id}-h" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(40)"><line x1="0" y1="0" x2="0" y2="5" stroke="var(--gold-700)" stroke-width="0.9"/></pattern><filter id="${id}-g" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="3"/></filter></defs>` +
+      `<ellipse cx="60" cy="141" rx="30" ry="4" fill="var(--ink-950)"/>${glow}${mantle}${spark}${hood}${arm}${flying}${parts}</svg>`;
+  }
+  const frames = [
+    ["0,00 s", { sh: -12, el: 8, flaskRot: 10 }, "Toque em [1]. canDrink verdadeiro (fora de golpe). A mão vai ao cinto; o frasco aparece na mão (malha mínima do kit, 1 instância)."],
+    ["0,15 s", { sh: -60, el: -115, flaskRot: -30 }, "Mão ao rosto. Começa a janela vulnerável: sem leve, pesado, bloqueio ou fogo. Anda a 60% da velocidade. Esquivar cancela e devolve o frasco (carga não gasta)."],
+    ["0,30 s", { sh: -78, el: -124, tilt: -14, flaskRot: -80, particles: true }, "O gole. A carga é consumida AQUI; o efeito aplica (cura / fúria / fecha a Ferida). Som dos goles; partículas sobem do peito na cor da poção."],
+    ["0,60 s", { sh: -100, el: 0, fly: true, glow: true }, "O frasco cai e se desfaz em fagulhas; a pose volta ao idle por mistura. O HUD termina de rolar o número. A janela fecha."],
+  ];
+  document.getElementById("story").innerHTML = frames.map(([t, o, d]) => `<div class="frame">${fig(o)}<div class="t">${t}</div><p>${d}</p></div>`).join("");
+})();
+</script>
+</body>
+</html>

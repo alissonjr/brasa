@@ -4,7 +4,7 @@ import { WORLD_GRAVITY, Acendedora, Skeleton, buildCryptRoom, setupCryptScene, e
 
 /**
  * CAMADA DEV (Brasa). Fatia mínima jogável: monta uma sala-cripta graybox e põe a
- * Acendedora (KayKit Mage CC0, já em disco) controlável com câmera em 3a pessoa e
+ * Acendedora (heroina.glb, Quaternius CC0) controlável com câmera em 3a pessoa e
  * física, no MESMO motor que o jogo usa. Valida o herói novo + o regime de sala
  * fechada antes de baixar o KayKit Dungeon/Skeletons. Não faz parte do jogo final;
  * é a página de validação da cripta. Controles: WASD + mouse (pointer lock).

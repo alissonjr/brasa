@@ -70,6 +70,8 @@ export class CombatDirector {
     private readonly tweens: Tweens // ESTILO (Bloco 2): juice de spawn/coleta
   ) {
     this.fx = new ImpactFx(scene);
+    // Poeira da aterrissagem pesada: a mesma rajada de partículas dos golpes (nenhum sistema novo, nenhum draw call novo).
+    hero.model.onLand((e) => { if (e.dust > 0) this.fx.burst(new Vector3(e.x, e.y + 0.08, e.z), e.dust); });
   }
 
   /** ESTILO (Bloco 2, §4.2b): pop-in de escala (0 -> 1) num mesh recém-criado. */
@@ -351,16 +353,33 @@ export class CombatDirector {
   }
 
   private equipWeapon(kind: WeaponKind): void {
-    this.heroWeapon?.mesh.dispose();
-    // Arma em maos: a mesma peca do drop, inclinada para frente ao lado do heroi.
+    // Trocar de arma: a que estava em maos cai aos pes (com cargas novas), podendo ser pega de novo.
+    if (this.heroWeapon) {
+      const old = this.heroWeapon.kind;
+      const hp = this.hero.position;
+      this.heroWeapon.mesh.dispose();
+      this.heroWeapon = null;
+      this.spawnDrop(old, new Vector3(hp.x + 1.1, 0, hp.z + 0.6));
+    }
+    // Arma em maos: a mesma peca do drop, encaixada no osso da mao direita no lugar da espada de bronze,
+    // que fica guardada (some) ate a arma capturada acabar.
     const mesh = new Mesh(`arma_${kind}`, this.scene);
     mesh.isPickable = false;
     const weapon = buildCapturedWeapon(this.scene, kind);
     weapon.parent = mesh;
-    weapon.rotation.x = 0.5;
-    weapon.position.y = -0.35;
-    mesh.parent = this.hero.model.root;
-    mesh.position.set(0.45, 1.0, 0.5);
+    if (kind === "espada") weapon.scaling.scaleInPlace(0.8);
+    const hand = this.hero.model.weaponHand;
+    if (hand) {
+      mesh.parent = hand;
+      mesh.position.set(-0.035, 0.01, 0);
+      mesh.rotation.set(Math.PI / 2, 0, 0);
+      this.hero.model.setBaseSwordVisible(false);
+    } else {
+      weapon.rotation.x = 0.5;
+      weapon.position.y = -0.35;
+      mesh.parent = this.hero.model.root;
+      mesh.position.set(0.45, 1.0, 0.5);
+    }
     // clava: forte mas breve. espada: golpe forte e durador (cargas por acerto). cajado: 3 bolas.
     const stats =
       kind === "clava" ? { timer: 10, charges: 5 } : kind === "espada" ? { timer: 999, charges: 12 } : { timer: 999, charges: 3 };
@@ -370,6 +389,7 @@ export class CombatDirector {
   private removeWeapon(): void {
     this.heroWeapon?.mesh.dispose();
     this.heroWeapon = null;
+    this.hero.model.setBaseSwordVisible(true); // saca a espada de bronze de volta
   }
 
   private updateWeapon(dt: number): void {

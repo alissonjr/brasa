@@ -10,7 +10,7 @@
  * (política de autoplay).
  */
 import { audioContext, groupOut, groupVolume, jit, setGroupVolume } from "../audio/audioBus";
-import { playBlock, playHeroHurt, playHit, playSwing, type HitMaterial } from "../audio/sfx";
+import { playBlock, playHeroHurt, playHit, playLand, playSwing, type HitMaterial } from "../audio/sfx";
 import { noise, tone } from "../audio/synth";
 
 /** Liga o volume vivo (lido das opções a cada som). Chamado no boot do app. */
@@ -82,6 +82,14 @@ export function tellSound(profile: TellProfile): void {
       tone(a, out, t, { f: 700, f1: 1100, dur: 0.12, gain: 0.06 });
       noise(a, out, t, { dur: 0.06, gain: 0.06, filters: [{ type: "bandpass", f: 3200, q: 0.7 }] });
   }
+}
+
+/**
+ * Aterrissagem da heroína: baque surdo na bota + um sopro de areia. `intensity` 0..1 vem da altura
+ * da queda (queda curta = passo leve e quase mudo; queda longa = baque grave e mais longo).
+ */
+export function landThud(intensity: number): void {
+  playLand(intensity); // som oficial de aterrissagem (audio/sfx.ts): o agente `salto` já chama landThud, então só delega
 }
 
 /** Clank metálico de escudo (golpe do herói amortecido pela guarda do inimigo). */
