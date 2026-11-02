@@ -1,0 +1,46 @@
+/* CAMADA JOGO (Brasa). DESIGN SYSTEM, parte 4b: cores das GRAVURAS (illustrations.ts).
+   Xilogravura em ouro sobre preto. Só tokens (tokens.css): nenhum valor de cor solto.
+   Prefixo .gv-. Convenção do traço: l = principal, lm = médio, lt = fino, lh = hachura, ld = tênue. */
+
+.gv { display: block; width: 100%; height: 100%; }
+
+/* Fundos e massas de pedra */
+.gv-bg { fill: var(--ink-900); }
+.gv-void { fill: var(--ink-950); }
+.gv-mid { fill: var(--ink-800); }
+.gv-hi { fill: var(--ink-700); }
+
+/* Traço dourado (a linha da gravura) */
+.gv-l { fill: none; stroke: var(--gold-300); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.gv-lm { fill: none; stroke: var(--gold-400); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gv-lt { fill: none; stroke: var(--gold-500); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
+.gv-lh { fill: none; stroke: var(--gold-600); stroke-width: 1.1; stroke-linecap: round; }
+.gv-ld { fill: none; stroke: var(--gold-700); stroke-width: 1; stroke-linecap: round; }
+
+/* Fogo: SÓ a Brasa e a fagulha usam laranja */
+.gv-e0 { fill: var(--ember-600); }
+.gv-e { fill: var(--ember-500); }
+.gv-e2 { fill: var(--ember-300); }
+.gv-e3 { fill: var(--ember-200); }
+.gv-el { fill: none; stroke: var(--ember-300); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.gv-elt { fill: none; stroke: var(--ember-500); stroke-width: 1.2; stroke-linecap: round; }
+
+/* Gelo: o que ameaça (nunca positivo) */
+.gv-fl { fill: none; stroke: var(--frost-300); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.gv-ft { fill: none; stroke: var(--frost-500); stroke-width: 1.1; stroke-linecap: round; }
+
+/* Osso */
+.gv-b { fill: var(--text-hi); }
+.gv-bm { fill: var(--text-lo); }
+.gv-blm { fill: none; stroke: var(--text-lo); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Hachuras (dentro de <pattern>) e brilhos (dentro de <radialGradient>) */
+.gv-pg { stroke: var(--gold-600); stroke-width: 1.2; }
+.gv-pf { stroke: var(--frost-500); stroke-width: 1.2; }
+.gv-pe { stroke: var(--ember-600); stroke-width: 1.3; }
+.gv-s-e1 { stop-color: var(--ember-300); stop-opacity: 0.95; }
+.gv-s-e2 { stop-color: var(--ember-500); stop-opacity: 0.55; }
+.gv-s-e3 { stop-color: var(--ember-600); stop-opacity: 0; }
+.gv-s-f1 { stop-color: var(--frost-300); stop-opacity: 0.5; }
+.gv-s-f2 { stop-color: var(--frost-500); stop-opacity: 0; }
+.gv-glow { pointer-events: none; }
