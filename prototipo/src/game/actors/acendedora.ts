@@ -26,6 +26,11 @@ const FROZEN_INPUT: InputSource = {
   consumeJump: () => false,
 };
 
+/** Velocidade de corrida do controlador (engine: RUN_SPEED); o lunge manda um input de fração disto. */
+const RUN_SPEED = 8;
+/** Distância (m) centro-a-centro em que o lunge para diante do alvo (cápsula 0,5 + corpo do alvo). */
+const LUNGE_STOP_DIST = 1.1;
+
 export class Acendedora {
   readonly model: HeroModel;
   private readonly controller: CharacterController;
@@ -37,6 +42,12 @@ export class Acendedora {
   private sparkOnHand = false;
   private lastHp = -1;
   private hitT = 0; // tempo restante da reação de dano (clipe Hit_Chest ~0,33 s)
+  // Lunge (avanço do golpe): input sintético ao longo do que ela encara, parando diante do alvo.
+  private readonly lungeInput = { forward: 0, strafe: 0, running: true, consumeJump: () => false };
+  private lungeLeft = 0; // metros que ainda pode avançar neste golpe
+  private readonly lungeFacing = new Vector3();
+  private readonly lungeLocal = new Vector3();
+  private readonly lungeQuat = new Quaternion();
 
   constructor(scene: Scene, spawn: Vector3, gravity: Vector3) {
     this.model = new HeroModel(scene, { modelUrl: ACENDEDORA_MODEL, name: "acendedora" });
@@ -98,6 +109,37 @@ export class Acendedora {
     return out;
   }
 
+  /**
+   * Durante o golpe a locomoção trava (comprometimento), exceto o LUNGE: um avanço curto para a
+   * frente (para onde ela encara: alvo travado/soft-target ou a mira), que para a ~1,1 m do alvo.
+   * Vai pelo controlador (colide com parede) e acompanha o passo do clipe (meio da antecipação
+   * até o fim da janela ativa), então não desliza.
+   */
+  private lungeOrFrozen(dt: number, camera: ThirdPersonCamera): InputSource {
+    const hc = this.combat_;
+    if (hc.aiming && hc.lungeSpeed === 0) {
+      // Antes de o avanço começar: orçamento = distância do golpe, limitada pela distância ao alvo.
+      let budget = hc.lungeDistance;
+      if (this.hasAim) {
+        const p = this.position;
+        const d = Math.hypot(this.aimTarget.x - p.x, this.aimTarget.z - p.z);
+        budget = Math.min(budget, Math.max(0, d - LUNGE_STOP_DIST));
+      }
+      this.lungeLeft = budget;
+    }
+    const v = hc.lungeSpeed;
+    if (v <= 0 || this.lungeLeft <= 0 || dt <= 0) return FROZEN_INPUT;
+    const f = this.getFacing(this.lungeFacing);
+    camera.getYawOrientation(this.lungeQuat);
+    this.lungeQuat.invertInPlace();
+    f.rotateByQuaternionToRef(this.lungeQuat, this.lungeLocal);
+    const mag = Math.min(1, v / RUN_SPEED);
+    this.lungeInput.strafe = this.lungeLocal.x * mag;
+    this.lungeInput.forward = this.lungeLocal.z * mag;
+    this.lungeLeft -= v * dt;
+    return this.lungeInput;
+  }
+
   /** Chamar de scene.onAfterPhysicsObservable. */
   update(deltaSeconds: number, input: CombatInputSource, camera: ThirdPersonCamera): void {
     if (!this.sparkOnHand && this.model.emberNode) {
@@ -131,7 +173,8 @@ export class Acendedora {
             : this.hitT > 0
               ? "hit"
               : "idle";
-    this.model.setAction(action);
+    const withSync = action === "light" || action === "heavy" || action === "ember" || action === "dodge";
+    this.model.setAction(action, withSync ? this.combat_.clipSync : null, deltaSeconds <= 0);
     // Durante a ANTECIPAÇÃO do golpe, encara para onde a câmera olha (a mira). Parado, o
     // controller só gira o modelo na direção do movimento, então a hitbox (à frente do
     // modelo) apontaria para a última direção andada e o golpe de frente erraria. Re-mira a
@@ -161,7 +204,7 @@ export class Acendedora {
     }
     // Esquiva = dash (override de movimento); golpe = locomoção travada (comprometimento);
     // senão, input normal.
-    const moveInput: InputSource = this.combat_.moveOverride ?? (this.combat_.busy ? FROZEN_INPUT : input);
+    const moveInput: InputSource = this.combat_.moveOverride ?? (this.combat_.busy ? this.lungeOrFrozen(deltaSeconds, camera) : input);
     this.controller.update(deltaSeconds, moveInput, camera);
   }
 }
