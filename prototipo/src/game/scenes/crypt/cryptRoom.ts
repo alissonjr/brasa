@@ -29,6 +29,10 @@ import { pickLayout } from "./cryptLayouts";
 import { buildFloorScape } from "./cryptDecor";
 import { buildCave } from "./cryptCave";
 import { applyGrade, createAtmosphere, themeFor } from "./cryptTheme";
+import { antessalaTheme } from "./antessala/clima";
+import { buildAntessala } from "./antessala";
+import { ANTESSALAS } from "../../content/descida";
+import type { AntessalaHandle, AntessalaKit, PropOpts } from "./antessala/types";
 import type { EnemyBounds } from "../../actors/enemies/skeleton";
 
 /**
@@ -118,6 +122,8 @@ export interface Room {
    * as zonas de frio da fase 3. Ver spec-chefe-guardiao §3, §4, §5.6.
    */
   arena?: ArenaControls;
+  /** Peças da antessala (só quando `def.antessala`): interativos, mural, porta, ofício (scenes/crypt/antessala). */
+  antessala?: AntessalaHandle;
   dispose(): void;
 }
 
@@ -443,9 +449,9 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     return merged;
   }
 
-  function kitInstances(base: Mesh, placements: { x: number; z: number; rotY?: number }[], y = 0, pitch = 0): void {
+  function kitInstances(base: Mesh, placements: { x: number; z: number; rotY?: number; sx?: number }[], y = 0, pitch = 0): void {
     base.thinInstanceAdd(
-      placements.map((p) => Matrix.Compose(Vector3.One(), Quaternion.RotationYawPitchRoll(p.rotY ?? 0, pitch, 0), new Vector3(p.x, y, p.z)))
+      placements.map((p) => Matrix.Compose(p.sx ? new Vector3(p.sx, 1, 1) : Vector3.One(), Quaternion.RotationYawPitchRoll(p.rotY ?? 0, pitch, 0), new Vector3(p.x, y, p.z)))
     );
   }
 
@@ -465,7 +471,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
 
   function placeProp(
     container: AssetContainer,
-    oIn: { x: number; z: number; y?: number; rotY?: number; scale?: number; targetH?: number; collider?: boolean; cast?: boolean; tall?: boolean; dyn?: boolean; bank?: number }
+    oIn: { x: number; z: number; y?: number; rotY?: number; scale?: number; sv?: [number, number, number]; targetH?: number; collider?: boolean; cast?: boolean; tall?: boolean; dyn?: boolean; bank?: number }
   ): TransformNode | null {
     const o = dressVar(oIn); // espelho/jitter por andar (no-op fora do dressing)
     if (!o) return null; // peca alta no lado da camera: descartada
@@ -480,6 +486,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     root.position.setAll(0);
     root.rotation = new Vector3(0, o.rotY ?? 0, 0);
     root.scaling.setAll(o.scale ?? 1);
+    if (o.sv) root.scaling.set(root.scaling.x * o.sv[0], root.scaling.y * o.sv[1], root.scaling.z * o.sv[2]);
     root.computeWorldMatrix(true);
     // targetH: normaliza a ALTURA do modelo (assets do Tripo vem em escala arbitraria, ex.: bichos).
     if (o.targetH) {
@@ -697,7 +704,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
 
   // --- CAVERNA em volta do santuario (camera alta): rampa de rocha por fora dos muros baixos ---
   // IDENTIDADE POR ANDAR (cryptTheme): rocha, luz, neblina, etalonagem e particulas pelo INDICE.
-  const THEME = themeFor(def.index);
+  const THEME = def.antessala ? antessalaTheme(def.index) : themeFor(def.index);
   applyGrade(ctx.pipe, THEME);
   ctx.key.diffuse = Color3.FromHexString(THEME.key.diffuse);
   const cave = ALTA ? buildCave(scene, { halfX: HALFX, halfZ: HALFZ, seed: def.index + 1, theme: THEME, doorX: 2, altarZ: AZ, layout: L }) : null;
@@ -843,67 +850,73 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   const brazier = new Vector3(0, 0.9, AZ);
   // A BRASA do altar nasce APAGADA: só acende (frio->quente) quando a sala é limpa e a
   // Acendedora a reacende (setBrazierLit). As duas chamas laterais (offering) acompanham.
-  const brazierFlame = makeFlame(new Vector3(0, 2.2, AZ), def.boss ? 2.1 : 1.6, def.boss ? 3.0 : 2.4, true);
+  // Antessala: a chama fica na bacia baixa do braseiro (antessala/braseiro.ts), no eixo da sala.
+  const brazierFlame = def.antessala
+    ? makeFlame(new Vector3(L.altar.x, 1.3, AZ), 1.05, 2.0, true)
+    : makeFlame(new Vector3(0, 2.2, AZ), def.boss ? 2.1 : 1.6, def.boss ? 3.0 : 2.4, true);
   // Anel de caveiras do altar (sempre presente; instanciado via clusterGrime no flush).
   for (let i = 0; i < (def.antessala ? 0 : 8); i++) {
     const a = (i / 8) * Math.PI * 2;
     batch("skull", { x: Math.cos(a) * 1.7, z: AZ + Math.sin(a) * 1.1, y: 0.9, rotY: a + 1.2, scale: 0.32 });
   }
-  const offerL = makeFlame(new Vector3(-2.7, 1.05, AZ), 0.4, 0, false);
-  const offerR = makeFlame(new Vector3(2.7, 1.05, AZ), 0.4, 0, false);
+  const offerL = def.antessala ? null : makeFlame(new Vector3(-2.7, 1.05, AZ), 0.4, 0, false);
+  const offerR = def.antessala ? null : makeFlame(new Vector3(2.7, 1.05, AZ), 0.4, 0, false);
   // Braseiro e oferendas começam apagados (a sala nasce fria).
   brazierFlame.ignite = 0;
-  offerL.ignite = 0;
-  offerR.ignite = 0;
+  if (offerL) offerL.ignite = 0;
+  if (offerR) offerR.ignite = 0;
 
   // --- A PASSAGEM em frente ao altar: pisar nela (sala limpa) desce de andar. Agora LEGIVEL
   //     como alcapao: poco escuro recuado + escada descendo + portao de pedra emoldurando +
   //     alcapao por cima (selado enquanto ha inimigos). O feixe e so o realce ao limpar.
   const EX = L.exit.x, EZ = L.exit.z;
   const HOLE = 2.6; // lado do alcapao
-  // Poco escuro afundado (le como "buraco que desce"): topo logo abaixo do piso.
-  const shaftMat = new StandardMaterial("pocoMat", scene);
-  shaftMat.diffuseColor = Color3.Black();
-  shaftMat.specularColor = Color3.Black();
-  shaftMat.emissiveColor = Color3.FromHexString("#0a0805");
-  roomFlatMats.add(shaftMat);
-  const shaft = MeshBuilder.CreateBox("poco_descida", { width: HOLE, height: 4.0, depth: HOLE }, scene);
-  shaft.material = shaftMat;
-  shaft.position.set(EX, -2.05, EZ); // topo do poco ~ -0.05 (logo abaixo do piso)
-  shaft.isPickable = false;
-  shaft.parent = roomRoot;
-  track(shaft);
-  // BORDA de pedra erguida em volta do buraco (4 vigas): emoldura e deixa claro que e um vao.
-  const rimMat = new StandardMaterial("bordaPocoMat", scene);
-  rimMat.diffuseColor = Color3.FromHexString("#3a4048");
-  rimMat.specularColor = Color3.FromHexString("#6a5a3a");
-  roomFlatMats.add(rimMat);
-  const rimH = 0.35, rimT = 0.45, half = HOLE / 2 + rimT / 2;
-  const rimSpots: [number, number, number, number][] = [
-    [EX, EZ + half, HOLE + rimT * 2, rimT], [EX, EZ - half, HOLE + rimT * 2, rimT],
-    [EX + half, EZ, rimT, HOLE + rimT * 2], [EX - half, EZ, rimT, HOLE + rimT * 2],
-  ];
-  const rimBars: Mesh[] = [];
-  for (let i = 0; i < rimSpots.length; i++) {
-    const [rx, rz, rw, rd] = rimSpots[i]!;
-    const bar = MeshBuilder.CreateBox(`borda_poco_${i}`, { width: rw, height: rimH, depth: rd }, scene);
-    bar.position.set(rx, rimH / 2, rz);
-    bar.bakeCurrentTransformIntoVertices();
-    rimBars.push(bar);
+  let hatchBank = -1;
+  if (!def.antessala) { // (antessala: a saida e a porta de pedra, em antessala/porta.ts; nao ha alcapao)
+    // Poco escuro afundado (le como "buraco que desce"): topo logo abaixo do piso.
+    const shaftMat = new StandardMaterial("pocoMat", scene);
+    shaftMat.diffuseColor = Color3.Black();
+    shaftMat.specularColor = Color3.Black();
+    shaftMat.emissiveColor = Color3.FromHexString("#0a0805");
+    roomFlatMats.add(shaftMat);
+    const shaft = MeshBuilder.CreateBox("poco_descida", { width: HOLE, height: 4.0, depth: HOLE }, scene);
+    shaft.material = shaftMat;
+    shaft.position.set(EX, -2.05, EZ); // topo do poco ~ -0.05 (logo abaixo do piso)
+    shaft.isPickable = false;
+    shaft.parent = roomRoot;
+    track(shaft);
+    // BORDA de pedra erguida em volta do buraco (4 vigas): emoldura e deixa claro que e um vao.
+    const rimMat = new StandardMaterial("bordaPocoMat", scene);
+    rimMat.diffuseColor = Color3.FromHexString("#3a4048");
+    rimMat.specularColor = Color3.FromHexString("#6a5a3a");
+    roomFlatMats.add(rimMat);
+    const rimH = 0.35, rimT = 0.45, half = HOLE / 2 + rimT / 2;
+    const rimSpots: [number, number, number, number][] = [
+      [EX, EZ + half, HOLE + rimT * 2, rimT], [EX, EZ - half, HOLE + rimT * 2, rimT],
+      [EX + half, EZ, rimT, HOLE + rimT * 2], [EX - half, EZ, rimT, HOLE + rimT * 2],
+    ];
+    const rimBars: Mesh[] = [];
+    for (let i = 0; i < rimSpots.length; i++) {
+      const [rx, rz, rw, rd] = rimSpots[i]!;
+      const bar = MeshBuilder.CreateBox(`borda_poco_${i}`, { width: rw, height: rimH, depth: rd }, scene);
+      bar.position.set(rx, rimH / 2, rz);
+      bar.bakeCurrentTransformIntoVertices();
+      rimBars.push(bar);
+    }
+    const rim = Mesh.MergeMeshes(rimBars, true, true); // as 4 vigas viram 1 malha (cada malha custa varias passadas de desenho)
+    if (rim) {
+      rim.name = "borda_poco";
+      rim.material = rimMat;
+      rim.isPickable = false;
+      rim.receiveShadows = true;
+      rim.parent = roomRoot;
+      track(rim);
+    }
+    // Alcapao (tampa) por cima do buraco: visivel enquanto ha inimigos; ABRE (some) ao limpar.
+    // O alcapao tambem vai para o banco fundido (mostra/esconde zerando e restaurando os vertices dele).
+    hatchBank = bankSeq++;
+    placeProp(P.trapdoor!, { x: EX, z: EZ, y: 0.05, scale: HOLE / 2.2, cast: false, dyn: true, bank: hatchBank });
   }
-  const rim = Mesh.MergeMeshes(rimBars, true, true); // as 4 vigas viram 1 malha (cada malha custa varias passadas de desenho)
-  if (rim) {
-    rim.name = "borda_poco";
-    rim.material = rimMat;
-    rim.isPickable = false;
-    rim.receiveShadows = true;
-    rim.parent = roomRoot;
-    track(rim);
-  }
-  // Alcapao (tampa) por cima do buraco: visivel enquanto ha inimigos; ABRE (some) ao limpar.
-  // O alcapao tambem vai para o banco fundido (mostra/esconde zerando e restaurando os vertices dele).
-  const hatchBank = bankSeq++;
-  placeProp(P.trapdoor!, { x: EX, z: EZ, y: 0.05, scale: HOLE / 2.2, cast: false, dyn: true, bank: hatchBank });
   const beamMat = new StandardMaterial("feixe", scene);
   beamMat.emissiveColor = Color3.FromHexString("#ffd089");
   beamMat.diffuseColor = Color3.Black();
@@ -925,7 +938,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   // POCAS DE LUZ por tipo de sala (paleta propria). Fundidas por cor/alpha: 1 draw call por grupo
   // (antes: 1 por tocha). O alpha de cada grupo acompanha a gangorra frio->quente (applyPools).
   const poolCol = THEME.pool; // por andar (antes: por RoomKind, que repete salao e cisterna)
-  type PoolSpec = LightPoolSpec & { base: number; mode: "torch" | "warm" | "cold" | "brazier" };
+  type PoolSpec = LightPoolSpec & { base: number; mode: "torch" | "warm" | "cold" | "brazier" | "porta"; gain?: number };
   const poolSpecs: PoolSpec[] = [];
   const addPools = (spots: { x: number; z: number; r: number }[], color: string, alpha: number, mode: PoolSpec["mode"]): void => {
     for (const p of spots) poolSpecs.push({ x: p.x, z: p.z, r: p.r, color, alpha, base: alpha, mode });
@@ -961,10 +974,54 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     makeFlame(new Vector3(t.x + ix, 6.35, t.z + iz), 0.6, 0, false);
   }
 
+  // --- ANTESSALA: as pecas (escada, braseiro, armario, oficio, mural, porta) entram aqui, antes da malha
+  //     unica de pocas de luz e da fusao estatica, com as ferramentas internas desta sala. ---
+  let antessala: AntessalaHandle | undefined;
+  let poolBatchRef: ReturnType<typeof createLightPoolBatch> = null;
+  if (def.antessala) {
+    const kit: AntessalaKit = {
+      scene, ctx, theme: THEME, layout: L, def: ANTESSALAS[def.index]!, pieces: P, root: roomRoot, halfX: HALFX, halfZ: HALFZ,
+      track: ((m: AbstractMesh) => track(m)) as AntessalaKit["track"],
+      placeProp: (name: string, o: PropOpts) => (P[name] ? placeProp(P[name]!, o) : null),
+      batch: (name, o, cast = false) => { if (P[name]) batch(name, o, cast); },
+      flatMaterial: (name: string, hex: string) => {
+        const m = new StandardMaterial(name, scene);
+        m.diffuseColor = Color3.FromHexString(hex);
+        m.specularColor = Color3.Black();
+        roomFlatMats.add(m);
+        return m;
+      },
+      collider: (cx, cz, w, d, h) => {
+        const box = MeshBuilder.CreateBox("colisor", { width: w, height: h, depth: d }, scene);
+        box.position.set(cx, h / 2, cz);
+        box.isVisible = false;
+        box.isPickable = false;
+        box.checkCollisions = true;
+        track(box);
+        aggregates.push(new PhysicsAggregate(box, PhysicsShapeType.BOX, { mass: 0 }, scene));
+      },
+      flame: (pos, scale, lightIntensity, withLight) => makeFlame(pos, scale, lightIntensity, withLight),
+      bankReserve: () => bankSeq++,
+      bankSet: (id, visible) => bankToggle(id, visible),
+      pool: (x, z, r, color, alpha, mode) => {
+        poolSpecs.push({ x, z, r, color, alpha, base: alpha, mode });
+        return poolSpecs.length - 1;
+      },
+      poolGain: (index, gain) => {
+        const g = poolSpecs[index];
+        if (!g || !poolBatchRef) return;
+        g.gain = gain;
+        poolBatchRef.setAlpha(index, g.base * gain);
+        poolBatchRef.flush();
+      },
+    };
+    antessala = buildAntessala(kit);
+  }
+
   addPools(torchPoolsLit, poolCol.torch, 0.42, "torch");
   addPools(torchPoolsDim, poolCol.torch, 0.24, "torch");
   // Pool do BRASEIRO: nasce apagada e cresce/acende com o aquecimento (gangorra frio -> quente).
-  if (!def.antessala) addPools([{ x: 0, z: AZ - 3.2, r: 7.5 }], "#ffb870", 0.5, "brazier");
+  addPools([{ x: L.altar.x, z: def.antessala ? AZ - 0.4 : AZ - 3.2, r: def.antessala ? 6.2 : 7.5 }], "#ffb870", def.antessala ? 0.6 : 0.5, "brazier");
   // ACENTOS por tipo de sala (assinatura de luz), apoiados nas pecas pintadas no piso.
   {
     const zc = Math.min(0, AZ - 6);
@@ -982,6 +1039,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   }
   // TODAS as pocas da sala numa malha so (1 draw call; antes 1 por grupo). Cor no vertice, alfa por poca.
   const poolBatch = createLightPoolBatch(scene, poolSpecs, 0.19);
+  poolBatchRef = poolBatch;
   if (poolBatch) { poolBatch.mesh.parent = roomRoot; track(poolBatch.mesh); }
   // --- CANDELABROS de ferro pendentes do teto: cubo central + braços radiais + aro +
   //     6 grupos de velas acesas + luz quente. Fixtura de verdade, não um ponto de luz. ---
@@ -1414,6 +1472,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       if (flameBase.isEnabled() !== anyOn) flameBase.setEnabled(anyOn);
     }
     floorArt.update(t);
+    antessala?.update(t);
     if (beam.isEnabled()) {
       beam.rotation.y = t * 0.5;
       const s = 1 + 0.07 * Math.sin(t * 3);
@@ -1444,6 +1503,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
       if (g.mode === "torch") a *= 0.55 + 0.45 * wallK;
       else if (g.mode === "warm") a *= 0.4 + 0.6 * wallK;
       else if (g.mode === "cold") a *= 1 - 0.5 * floorK;
+      else if (g.mode === "porta") a *= g.gain ?? 0; // a porta de pedra (antessala): abre e fecha, independente da gangorra
       else a *= floorK;
       poolBatch.setAlpha(i, a);
       if (g.mode === "brazier") poolBatch.setScale(i, 0.65 + 0.35 * floorK);
@@ -1457,8 +1517,8 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     const vaultK = clamp01((t - 0.6) / 0.4); // 3o: abobada (luz ambiente)
     brazierFlame.ignite = floorK;
     applyPools(floorK, wallK);
-    offerL.ignite = wallK;
-    offerR.ignite = wallK;
+    if (offerL) offerL.ignite = wallK;
+    if (offerR) offerR.ignite = wallK;
     if (decalMat) {
       // o decalque do chao "pega" a luz primeiro (brilha ao acender).
       const g = 0.45 + 0.55 * floorK;
@@ -1470,6 +1530,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
     ctx.key.intensity = THEME.key.intensity - THEME.key.warmDrop * k;
     cave?.setLit(k);
     atmosphere?.setLit(k);
+    antessala?.setLit(k);
   };
   setBrazierLit(0); // a sala nasce FRIA (braseiro apagado)
   scene.fogDensity = THEME.fog.density; // por andar (não tocado pela virada)
@@ -1694,10 +1755,12 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
         beam.setEnabled(false);
       }
       // ALCAPAO: aberto = some a tampa (revela a escada/poço); selado = tampa visível.
-      bankToggle(hatchBank, !open);
+      if (hatchBank >= 0) bankToggle(hatchBank, !open);
     },
     arena,
+    antessala,
     dispose(): void {
+      antessala?.dispose();
       scene.onBeforeRenderObservable.remove(flicker);
       atmosphere?.dispose();
       arenaDispose?.();
@@ -1716,6 +1779,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   };
   // DEV: gancho para medicoes/testes (window.__brasaRoom = a sala atual); fora do build de producao.
   if (import.meta.env.DEV) (globalThis as unknown as { __brasaRoom?: Room }).__brasaRoom = room;
+  if (import.meta.env.DEV) (globalThis as unknown as { __brasaLayout?: unknown }).__brasaLayout = L;
   return room;
 }
 

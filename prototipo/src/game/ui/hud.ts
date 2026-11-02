@@ -14,6 +14,8 @@ export interface HudState {
   floor: number;
   total: number;
   objective: string;
+  /** Está numa antessala (o selo diz "Antessala N"); falso = "Câmara N". */
+  antessala?: boolean;
 }
 
 /** Que tipo de texto a legenda mostra (muda rótulo e tipografia). */
@@ -44,7 +46,7 @@ export class GameHud {
   private captionTimer = 0;
   private sceneTimer = 0;
   private links: HTMLElement[] = [];
-  private last = { floor: -1, total: -1, objective: "" };
+  private last = { floor: -1, total: -1, objective: "", antessala: false };
 
   constructor() {
     this.chain = el("ol", { class: "hud-depth__chain", "aria-hidden": "true" });
@@ -73,7 +75,7 @@ export class GameHud {
     this.root = el("div", { class: "hud-game" }, this.depth, captions, this.toastLayer, this.sceneEl);
 
     onLanguageChange(() => {
-      this.tagEl.textContent = T.camara;
+      this.tagEl.textContent = this.last.antessala ? T.antessala : T.camara;
       this.inscriptionTag.textContent = T.legendaInscricao;
       this.captionTag.textContent = CAPTION_LABEL[this.captionKind]();
       this.last.floor = -1; // refaz o rótulo acessível
@@ -168,6 +170,12 @@ export class GameHud {
       this.last.total = s.total;
       this.last.floor = -1;
     }
+    const ant = s.antessala === true;
+    if (ant !== this.last.antessala) {
+      this.tagEl.textContent = ant ? T.antessala : T.camara;
+      this.last.antessala = ant;
+      this.last.floor = -1; // refaz o rótulo acessível
+    }
     if (s.floor !== this.last.floor) {
       this.links.forEach((li, i) => {
         li.classList.toggle("is-done", i < s.floor);
@@ -177,7 +185,7 @@ export class GameHud {
       this.depth.style.setProperty("--cold", `${Math.round((s.floor / Math.max(1, s.total - 1)) * 70)}%`);
       this.numEl.innerHTML = "";
       this.numEl.append(el("b", { text: String(s.floor + 1) }), el("i", { text: `/${s.total}` }));
-      this.depth.setAttribute("aria-label", F("camaraAria", { n: s.floor + 1, t: s.total }));
+      this.depth.setAttribute("aria-label", F(ant ? "antessalaAria" : "camaraAria", { n: s.floor + 1, t: s.total }));
       this.last.floor = s.floor;
     }
     if (s.objective !== this.last.objective) {

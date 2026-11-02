@@ -35,6 +35,11 @@ import {
   itemText,
   onLanguageChange,
   openBoonShop,
+  openArmario,
+  MuralPlate,
+  markMural,
+  markAcendeu,
+  markCleared,
   createAutosaveIndicator,
   createPauseButton,
   configureUiSound,
@@ -80,9 +85,13 @@ import {
   ROTA,
   stepCommit,
   exploracaoDefaults,
-  nichosVazios,
+  type Interativo,
   retryPlace,
   type EvtAntessalaEnter,
+  type EvtBraseiroLit,
+  type EvtMuralRead,
+  type EvtArmarioChange,
+  type ExitMarkerDef,
   ExitMarkers,
   type Commit,
 } from "@game";
@@ -241,6 +250,12 @@ async function main(): Promise<void> {
       room: () => (currentRoom ? { brazier: { x: currentRoom.brazier.x, z: currentRoom.brazier.z }, exit: currentRoom.exit } : null),
       enterAntessala: (i: number) => enterAntessala(i, true), // DEV: vai direto à antessala do andar i
       crossDoor: () => crossDoor(), // DEV: cruza a porta da antessala (a câmara começa)
+      lightBrazier: () => lightBrazier(), // DEV: acende o braseiro da antessala (cura, checkpoint, painel da chama)
+      openArmario: () => openArmarioPanel(), // DEV: abre o armário da antessala
+      readMural: () => readMural(), // DEV: abre a placa do mural
+      setLight: (k: number) => { lightT = lightGoal = k; currentRoom?.setBrazierLit(k); }, // DEV: luz do braseiro sem gesto (capturas frio/aceso)
+      pocoes: () => pocoes.toSave(),
+      interativos: () => currentRoom?.antessala?.interativos ?? [],
       route: () => ({ ...route.save(), place: route.current, floor: floorIndex, passageOpen, fragments }),
       takeFragment: () => { if (currentRoom && !fragmentTaken) { const b = currentRoom.brazier; hero.teleport(new Vector3(b.x + 3, 1.5, b.z - 0.6)); } }, // DEV: encosta no relicário (colhe a estilha) fora do gatilho do alçapão
       clear: () => combat.clearEnemies(), // DEV: limpa a sala (libera o relicário)
@@ -296,8 +311,6 @@ async function main(): Promise<void> {
   // cenário), cada um com uma linha de registro; `route` é o lugar (antessala ou câmara), o gasto e o braseiro.
   const explor = new ExploracaoRegistry();
   const route = new RouteState();
-  // Legado do armário (meta-progressão): fora da run, sobrevive à descida nova. A fase R3 o usa; aqui só atravessa o save.
-  let legado = gameSave?.legado ?? nichosVazios();
   let timedRun = false; // a descida foi jogada do começo nesta sessão (vale para o leaderboard)
   let runStartedAt = 0; // performance.now() do início da descida cronometrada
   const purchasedBoons: string[] = []; // nomes das dádivas compradas (reaplicadas ao carregar)
@@ -310,7 +323,11 @@ async function main(): Promise<void> {
   // derrotar -> recuperar a estilha -> descer). `ctx.objective()` devolve isto.
   const descentObjective = (): string => {
     if (descentDone) return T.objVitoria;
-    if (route.inAntessala) return `${T[ANTESSALAS[route.floor]!.nome]}. ${F("objAntessala", { n: route.floor + 1 })}`;
+    if (route.inAntessala) {
+      const a = ANTESSALAS[route.floor]!;
+      const aceso = route.braseiros[route.floor]!.aceso;
+      return `${T[a.nome]}. ${aceso || !a.prologo ? T.objPorta : T.objAcenda}`;
+    }
     const n = combat.enemiesAlive;
     const last = floorIndex >= DESCENT.length - 1;
     if (n > 0) return F("objDerrote", { n });
@@ -320,8 +337,9 @@ async function main(): Promise<void> {
   // Inventário de poções (cargas; comprado na banca do braseiro, usado com Digit1/Digit2).
   // Persiste na run. Começa com 1 Poção de Recuperação (ensina o recurso).
   // O cinto vive no modelo puro (game/run/pocoes.ts); `inv` é o MESMO objeto (alias): nunca reatribuir.
-  // R1: trocar por `new Pocoes(legadoDoPerfil)` (cinto vazio; a Recuperação de Marta mora no nicho de A1).
-  const pocoes = new Pocoes(undefined, { cinto: { vida: 1 }, marta: false });
+  // Nasce com o legado do perfil (frascos que a Acendedora anterior deixou) e cinto vazio: a Recuperação de
+  // Marta mora no nicho do armário de A1. O legado é do PERFIL (sobrevive à descida nova).
+  const pocoes = new Pocoes(gameSave?.legado);
   const inv = pocoes.cinto;
 
   // Contador de Fagulhas (moeda) no HUD.
@@ -400,6 +418,16 @@ async function main(): Promise<void> {
   // Marcadores projetados (ícone + anel de compromisso) e o compromisso em curso (porta de pedra). A fase R1 os usa nas peças da antessala.
   const exitMarkers = new ExitMarkers(document.body);
   const commit: Commit = { id: null, t: 0 };
+  // ANTESSALA (estado de interação): luz do braseiro (0..1, anima até a meta), porta de pedra, canalização do acender ([R] 1,2 s)
+  // e travas que impedem um gesto de repetir sozinho ao voltar de um painel com a tecla ainda apertada.
+  let lightT = 0;
+  let lightGoal = 0;
+  let portaOpen = false;
+  let channelT = 0;
+  let interactLock = false;
+  let interactPrev = false;
+  let modalOpen = false; // painel (braseiro, armário, mural) aberto: a simulação está pausada
+  let portaAviso = 0; // segundos até poder avisar de novo que a porta de A1 ainda está selada
 
   // Barra de progresso da canalização do acender (aparece só enquanto canaliza).
   const channelBar = document.createElement("div");
@@ -572,29 +600,39 @@ async function main(): Promise<void> {
   };
 
   // ANTESSALA: o patamar entre duas câmaras (docs/brasa/redesenho-da-descida.md, seção 2). Sem inimigos, sem eco,
-  // sem `crypt:floor` e sem estilha: nasce "limpa" e a única saída é a escada (a porta de pedra) para a câmara `i`.
-  // Por ora é a sala vazia de 12x12 (ponte); a fase R1 a mobília (braseiro, armário, ofício, mural).
-  // `fresh`: chegada nova (gasto zerado); retomar (Continuar) e recomeçar (derrota) mantêm o gasto (R7, R8).
+  // sem `crypt:floor` e sem estilha: casa de guarda da ordem, com braseiro, armário, ofício, mural e a porta de pedra
+  // (scenes/crypt/antessala). Nasce "limpa". A única saída é a porta de pedra para a câmara `i`.
+  // `fresh`: chegada nova (gasto zerado); retomar (Continuar) e recomeçar (derrota) mantêm o gasto, o braseiro e a chama (R7, R8).
   const enterAntessala = (i: number, fresh: boolean): void => {
     const announce = gameActive || announceNext;
     announceNext = false;
-    mountRoom({ index: i, kind: "guarda", enemies: 0, antessala: true }, 10 + i, "antessala"); // perf: índices 10+ ficam fora do 1..7 das câmaras
+    const def = ANTESSALAS[i]!;
+    const room = mountRoom({ index: i, kind: "guarda", enemies: 0, antessala: true }, 10 + i, "antessala"); // perf: índices 10+ ficam fora do 1..7 das câmaras
     route.enterAntessala(i, fresh);
     floorIndex = i; // o andar (save, HUD, retry): A(i) e C(i) compartilham o índice
     runActive = true;
     roomCleared = true;
     fragmentTaken = true;
-    passageOpen = true;
+    passageOpen = false; // o alçapão é da câmara; aqui a saída é a porta de pedra (`portaOpen`)
     fragments = i; // uma estilha por câmara já deixada para trás
     readShown.clear();
-    currentRoom!.setCleared(true); // a escada para a câmara já está aberta
-    promptEl.textContent = T.promptEscada;
+    promptEl.textContent = "";
     floorDepth = i / Math.max(1, DESCENT.length - 1);
     startAmbience();
     setAmbience({ depth: floorDepth, danger: 0, urgency: 0 });
-    platform.events.emit<EvtAntessalaEnter>(EVT.antessalaEnter, { index: i, id: ANTESSALAS[i]!.id, fresh });
-    if (announce) gameHud.toast(T[ANTESSALAS[i]!.nome]);
-    console.log(`[descida] antessala ${ANTESSALAS[i]!.id} (antes da câmara ${i + 1}/${DESCENT.length})`);
+    // Estado do braseiro e da chama: aceso (derrota, Continuar) nasce já quente; frio nasce frio.
+    const st = route.braseiros[i]!;
+    lightT = lightGoal = st.aceso ? 1 : 0;
+    room.setBrazierLit(lightT);
+    room.antessala?.setChama(st.chama);
+    room.antessala?.setFrascos(pocoes.nichos[i]!.map((n) => n?.tipo ?? ""));
+    portaOpen = false;
+    channelT = 0;
+    room.antessala?.setPorta(false);
+    exitMarkers.set(markerDefs(room.antessala?.interativos ?? []));
+    platform.events.emit<EvtAntessalaEnter>(EVT.antessalaEnter, { index: i, id: def.id, fresh });
+    if (announce) gameHud.toast(T[def.nome]);
+    console.log(`[descida] antessala ${def.id} (antes da câmara ${i + 1}/${DESCENT.length})`);
     explor.onEnterAntessala(i);
   };
 
@@ -629,64 +667,260 @@ async function main(): Promise<void> {
     return pool[Math.floor(rand() * pool.length)]!;
   };
 
-  const chooseBoon = (): Promise<void> => {
-    // Oferta CURADA e fixa nesta visita: 1 de cada ramo + a Lasca grátis. A escolha de QUAL
-    // dádiva de cada ramo é determinística pela semente da run (mesma run -> mesma oferta).
-    const rand = mulberry32(runSeed + (floorIndex + 1) * 7919 + 13);
-    const offer = [pickFromRamo("agressao", rand), pickFromRamo("defesa", rand), pickFromRamo("utilidade", rand), FREE_BOON];
-    const potions = [
-      { id: "vida", name: () => T.bancaPocaoVida, def: POTIONS.vida, inc: () => (inv.vida += 1), have: () => inv.vida },
-      { id: "furia", name: () => T.bancaElixirFuria, def: POTIONS.furia, inc: () => (inv.furia += 1), have: () => inv.furia },
-    ];
+  // --- ANTESSALA: gestos e painéis ---------------------------------------------------------------------------
+
+  const sleep = (ms: number): Promise<void> => new Promise((r) => window.setTimeout(r, ms));
+  /** Abre um painel pausando a simulação (sem o mouse preso); ao fechar, retoma e trava o gesto até soltar a tecla. */
+  const withModal = async (open: () => Promise<void>): Promise<void> => {
+    modalOpen = true;
+    gameActive = false;
+    document.exitPointerLock();
+    try {
+      await open();
+    } finally {
+      modalOpen = false;
+      gameActive = true;
+      input.clearPressed();
+      interactLock = true;
+      channelT = 0;
+      void doAutosave();
+    }
+  };
+
+  /** Oferta de dádivas do andar: 1 de cada ramo, determinística pela semente da run (mesma run, mesma oferta). */
+  const offerFor = (i: number): Boon[] => {
+    const rand = mulberry32(runSeed + (i + 1) * 7919 + 13);
+    return [pickFromRamo("agressao", rand), pickFromRamo("defesa", rand), pickFromRamo("utilidade", rand)];
+  };
+  /** Ofícios que ainda não têm sistema (Estante: livros e Sabedoria; Bancada: preparos). Os sistemas se registram aqui. */
+  const oficioUsar: Partial<Record<"estante" | "bancada", (i: number) => void>> = {};
+
+  /** O painel do braseiro: entrega a UMA chama do andar (dádiva, vela da Estante ou pavios da Bancada). */
+  const openBraseiroPanel = (): Promise<void> => {
+    const i = route.floor;
+    const def = ANTESSALAS[i]!;
+    const offer = offerFor(i);
+    const showBoon = (b: Boon) => ({ id: b.id, cost: b.cost, name: boonName(b), desc: boonDesc(b) });
     return openBoonShop({
       fagulhas: () => fagulhas,
-      have: (id) => potions.find((p) => p.id === id)!.have(),
-      labels: () => ({
-        boons: offer.map((b) => ({ id: b.id, cost: b.cost, name: boonName(b), desc: boonDesc(b) })),
-        potions: potions.map((p) => ({ id: p.id, name: p.name(), cost: p.def.cost, cap: p.def.cap })),
-      }),
-      buyPotion: (id) => {
-        const p = potions.find((x) => x.id === id)!;
-        if (fagulhas < p.def.cost || p.have() >= p.def.cap) return;
-        fagulhas -= p.def.cost;
-        p.inc();
-        updateFagulhaHud();
-        updatePotionHud();
-      },
+      estado: () => ({ chama: route.braseiros[i]!.chama, estante: def.oficios.includes("estante"), bancada: def.oficios.includes("bancada"), lascaGasta: route.isSpent("lasca") }),
+      labels: () => ({ boons: offer.map(showBoon), lasca: showBoon(FREE_BOON) }),
       buyBoon: (id) => {
-        const bn = offer.find((b) => b.id === id)!;
-        if (fagulhas < bn.cost) return false;
+        const bn = offer.find((b) => b.id === id);
+        if (!bn || fagulhas < bn.cost || !route.chamaDisponivel(i)) return false;
+        route.gastarChama(i, "dadiva");
         fagulhas -= bn.cost;
         bn.apply();
         purchasedBoons.push(bn.id); // persiste a dádiva (reaplicada ao retomar a run)
         updateFagulhaHud();
+        currentRoom?.antessala?.setChama("dadiva");
+        return true;
+      },
+      takeLasca: () => {
+        if (route.isSpent("lasca")) return;
+        route.markSpent("lasca");
+        FREE_BOON.apply();
+        purchasedBoons.push(FREE_BOON.id);
+      },
+      gastarChama: (em) => {
+        if (!route.gastarChama(i, em)) return false;
+        currentRoom?.antessala?.setChama(em);
         return true;
       },
     });
   };
 
+  /** Acender o braseiro: cura, fecha a Ferida, grava o checkpoint, aquece o mural e abre o painel da chama. */
+  const lightBrazier = async (): Promise<void> => {
+    const i = route.floor;
+    if (!route.inAntessala || route.braseiros[i]!.aceso) return;
+    route.acender(i);
+    hero.combat.healByMax(hero.combat.brazierHealFrac); // 40% (Braseiro Quente sobe)
+    combatHud.flashHeal();
+    healChime();
+    playStinger("fagulha");
+    explor.onBrazierLit(i); // a Ferida fecha por inteiro (sistema de poções)
+    lightGoal = 1; // a luz sobe de baixo para cima (coreografia de setBrazierLit)
+    platform.events.emit<EvtBraseiroLit>(EVT.braseiroLit, { index: i });
+    markCodex(markAcendeu(i + 1));
+    updatePotionHud();
+    await doAutosave(); // checkpoint: o braseiro aceso
+    await sleep(1000); // o jogador vê a luz subir antes do painel
+    if (route.inAntessala && route.floor === i && !descending && !defeated && !modalOpen && gameActive) await withModal(openBraseiroPanel);
+  };
+
+  /** O armário da ordem (R3): pausa a simulação e espera o painel fechar. Salva a cada mudança. */
+  const openArmarioPanel = (): Promise<void> => {
+    const i = route.floor;
+    return withModal(async () => {
+      const h = openArmario({
+        pocoes,
+        andar: i,
+        fagulhas: () => fagulhas,
+        gastarFagulhas: (n) => {
+          fagulhas -= n;
+          updateFagulhaHud();
+        },
+        onChange: () => {
+          updatePotionHud();
+          updateFagulhaHud();
+          currentRoom?.antessala?.setFrascos(pocoes.nichos[i]!.map((n) => n?.tipo ?? ""));
+          platform.events.emit<EvtArmarioChange>(EVT.armarioChange, { index: i });
+          void doAutosave();
+        },
+        deny: denyBlip,
+      });
+      await h.closed;
+    });
+  };
+
+  /** O mural (R5): abre a placa DOM com os dois painéis; pausa a simulação enquanto está aberta. */
+  let muralPlate: MuralPlate | null = null;
+  const readMural = (): void => {
+    muralPlate ??= new MuralPlate(ui.hudLayer, {
+      isToggleKey: (e) => input.getBindings().interact.includes(e.code),
+      onOpen: (andar) => {
+        markCodex(markMural(andar));
+        platform.events.emit<EvtMuralRead>(EVT.muralRead, { index: andar - 1 });
+        playWhisper(0);
+      },
+      onClose: () => {
+        modalOpen = false;
+        gameActive = true;
+        input.clearPressed();
+        interactLock = true;
+      },
+    });
+    modalOpen = true;
+    gameActive = false;
+    document.exitPointerLock();
+    muralPlate.open(route.floor + 1, route.braseiros[route.floor]!.aceso);
+  };
+
+  /** Texto da tecla de uma ação (a primeira ligação), para o marcador. */
+  const keyText = (action: "interact" | "ember"): string => {
+    const code = input.getBindings()[action][0] ?? "";
+    return code.startsWith("Key") ? code.slice(3) : code.startsWith("Digit") ? code.slice(5) : code;
+  };
+  const MARK_COLOR: Record<string, string> = { braseiro: "var(--ember-300)", mural: "var(--gold-300)", armario: "var(--life-400)", estante: "var(--gold-300)", bancada: "var(--life-400)" };
+  const markerDefs = (list: Interativo[]): ExitMarkerDef[] =>
+    list.map((it) => ({
+      id: it.id,
+      icon: it.icon,
+      color: MARK_COLOR[it.id] ?? "var(--gold-300)",
+      name: () => T[it.name],
+      promise: () => "",
+      key: () => keyText(it.action),
+      showWithin: it.radius + 4.5,
+      x: it.x,
+      y: it.y,
+      z: it.z,
+    }));
+
+  /**
+   * Quadro a quadro na antessala (antes de o herói ler o input): luz do braseiro, porta de pedra, canalização do
+   * acender ([R] 1,2 s) e os gestos de cada objeto. [E] também é o golpe de fogo: perto do armário e do ofício
+   * o toque de [E] é consumido aqui e abre o objeto (o armário também abre com [R]).
+   */
+  const updateAntessala = (dt: number): void => {
+    const room = currentRoom;
+    const ant = room?.antessala;
+    if (!room || !ant || !route.inAntessala || modalOpen || descending || defeated) return;
+    const i = route.floor;
+    const def = ANTESSALAS[i]!;
+    const st = route.braseiros[i]!;
+    const hx = hero.position.x;
+    const hz = hero.position.z;
+
+    if (lightT !== lightGoal) {
+      lightT = lightT < lightGoal ? Math.min(lightGoal, lightT + dt / 1.8) : Math.max(lightGoal, lightT - dt / 1.8);
+      room.setBrazierLit(lightT);
+    }
+
+    // Porta de pedra: abre ao aproximar (em A1, só depois do primeiro acender); 0,4 s diante dela cruza.
+    const ex = room.exit;
+    const dPorta = Math.hypot(hx - ex.x, hz - ex.z);
+    const liberada = !def.prologo || st.aceso;
+    const quer = liberada && dPorta <= 5.2;
+    if (quer !== portaOpen) {
+      portaOpen = quer;
+      ant.setPorta(quer);
+    }
+    portaAviso -= dt;
+    if (!liberada && dPorta <= ex.radius + 0.8 && portaAviso <= 0) {
+      gameHud.toast(T.antPortaFechada, 2600);
+      portaAviso = 5;
+    }
+    if (portaOpen && stepCommit(commit, dPorta <= ex.radius ? "porta" : null, dt, ROTA.portaSec)) {
+      playStinger("fagulha");
+      void crossDoor();
+      return;
+    }
+
+    // Gestos: o objeto mais perto dentro do alcance.
+    const heldRaw = input.isHeld("interact");
+    if (interactLock && !heldRaw) interactLock = false;
+    const held = heldRaw && !interactLock;
+    const pressed = held && !interactPrev;
+    interactPrev = held;
+    let near: Interativo | null = null;
+    let best = Infinity;
+    for (const it of ant.interativos) {
+      const d = Math.hypot(hx - it.x, hz - it.z);
+      if (d <= it.radius && d < best) {
+        near = it;
+        best = d;
+      }
+    }
+    if (near?.id === "braseiro" && !st.aceso) {
+      if (held) {
+        channelT += dt / ROTA.acenderSec;
+        if (channelT >= 1) {
+          channelT = 0;
+          interactLock = true;
+          void lightBrazier();
+        }
+      } else channelT = 0; // soltou: cancela
+    } else channelT = 0;
+    if (!near) return;
+    switch (near.id) {
+      case "braseiro":
+        if (st.aceso && pressed) void withModal(openBraseiroPanel); // aceso: [R] reabre o painel (com a chama, ou só mostrando o que cada opção faria)
+        break;
+      case "mural":
+        if (pressed) readMural();
+        break;
+      case "armario":
+        if ((input.consumePressed("ember") || pressed) && !modalOpen) void openArmarioPanel();
+        break;
+      case "estante":
+      case "bancada":
+        if ((input.consumePressed("ember") || pressed) && !modalOpen) {
+          const usar = oficioUsar[near.id];
+          if (usar) usar(i);
+          else gameHud.toast(T.antOficioPendente, 2600);
+        }
+        break;
+    }
+  };
+
+  /** Desce do alçapão para a antessala do andar seguinte (escada em caracol: o mesmo fade da `transition`), ou fecha a descida no último andar. */
   const advance = async (): Promise<void> => {
-    descending = true;
-    gameActive = false; // pausa a simulação durante a transição/escolha
-    promptEl.style.opacity = "0";
-    document.exitPointerLock(); // libera o mouse para clicar na escolha de dádiva
-    await fadeTo(1);
     if (floorIndex + 1 >= DESCENT.length) {
+      descending = true;
+      gameActive = false;
+      promptEl.style.opacity = "0";
+      document.exitPointerLock();
+      await fadeTo(1);
       descentDone = true; // fim do slice: a Brasa foi reavivada
       runActive = false; // run concluída: não retomar
       void doAutosave();
-    } else {
-      hero.combat.healByMax(hero.combat.brazierHealFrac); // acender o braseiro cura (respiro; Braseiro Quente sobe)
-      combatHud.flashHeal();
-      healChime();
-      await chooseBoon(); // gasta Fagulha numa dádiva (tela preta atrás)
-      announceNext = true;
-      enterAntessala(floorIndex + 1, true); // o alçapão leva à antessala do andar seguinte
-      void doAutosave(); // checkpoint = chegada à antessala: grava a run (andar/Fagulha/dádivas)
+      await fadeTo(0);
+      gameActive = true;
+      descending = false;
+      return;
     }
-    await fadeTo(0);
-    gameActive = true;
-    descending = false;
+    await transition(() => enterAntessala(floorIndex + 1, true)); // checkpoint = chegada à antessala (gravado dentro do fade)
   };
 
   // Troca de lugar com fade, simulação pausada e checkpoint gravado DENTRO do fade (a gravação
@@ -705,8 +939,15 @@ async function main(): Promise<void> {
     gameActive = true;
     descending = false;
   };
-  /** Porta de pedra da antessala: a câmara do andar começa. NÃO grava (a câmara nunca salva no meio; o checkpoint é a chegada). */
-  const crossDoor = (): Promise<void> => transition(() => enterRoom(route.floor), false);
+  /**
+   * Porta de pedra da antessala: a câmara do andar começa e sela atrás. Grava o legado do armário (os frascos marcados
+   * "para quem descer" só valem ao cruzar). A câmara nunca salva no meio de verdade: Continuar sempre volta à antessala.
+   */
+  const crossDoor = (): Promise<void> =>
+    transition(() => {
+      pocoes.cruzarPorta(route.floor);
+      enterRoom(route.floor);
+    });
 
   /** Leitura de inscrições/pergaminhos: perto + [R] mostra a lore (uma vez por texto). */
   const updateReadables = (): void => {
@@ -725,28 +966,22 @@ async function main(): Promise<void> {
   };
 
   /** Chamado no loop: desce quando a sala está limpa e a Acendedora alcança o braseiro. */
-  const tryDescend = (dt: number): void => {
+  const tryDescend = (): void => {
     if (descending || descentDone || defeated || !currentRoom) return;
     if (!passageOpen) return; // só desce depois de acender a Brasa
     const ex = currentRoom.exit;
     const hx = hero.position.x;
     const hz = hero.position.z;
     const onHatch = Math.hypot(hx - ex.x, hz - ex.z) <= ex.radius;
-    if (route.inAntessala) {
-      // Porta de pedra (por ora a escada da ponte): 0,4 s diante dela, para não cruzar sem querer.
-      if (stepCommit(commit, onHatch ? "porta" : null, dt, ROTA.portaSec)) {
-        playStinger("fagulha");
-        void crossDoor();
-      }
-      return;
-    }
-    if (onHatch) void advance(); // câmara: pisar no alçapão basta
+    if (route.inAntessala) return; // a saída da antessala é a porta de pedra (`updateAntessala`)
+    if (onHatch) void advance(); // câmara: pisar no alçapão basta (escada em caracol para a antessala seguinte)
   };
 
   // Acender a Brasa: roda TODO frame (não no throttle do HUD) para canalização/virada suaves.
   // Fase 1: limpa a sala -> canaliza segurando [R] perto do altar (channelT). Fase 2: vira a
   // luz de fria a quente (lightT) e abre o alçapão (passageOpen).
   const updateIgnite = (dtSec: number): void => {
+    if (route.inAntessala) return; // na antessala a barra de canalização é do braseiro (`updateAntessala`)
     // Confronto do Guardião: canalizar a Brasa central (segurar [R] no altar) reacende a
     // chama e EXPÕE o chefe (cambaleio/dano dobrado). Counterplay repetível; a sala do
     // chefe só "limpa" quando ele cai, então isto roda antes do fluxo normal.
@@ -829,10 +1064,14 @@ async function main(): Promise<void> {
   });
 
   // Retoma a descida salva (Fagulha, dádivas, poções, andar) ou começa do topo.
-  const restoreRun = (run: RunSave): void => {
+  const restoreRun = (run: RunSave, legadoPerfil: unknown = pocoes.toSaveLegado()): void => {
     fagulhas = run.fagulhas;
-    inv.vida = run.pocaoVida;
-    inv.furia = run.pocaoFuria;
+    // Cinto, armário e reserva (modelo de poções). Save sem armário (descida antiga): só as cargas legadas.
+    pocoes.carregar(
+      run.nichos.length ? { cinto: [run.cinto.vida, run.cinto.furia, run.cinto.unguento], nichos: run.nichos, reserva: run.reserva } : undefined,
+      legadoPerfil,
+      { pocaoVida: run.pocaoVida, pocaoFuria: run.pocaoFuria, unguento: run.unguento }
+    );
     runSeed = run.seed > 0 ? run.seed : newSeed(); // legado (seed 0): gera uma para esta retomada
     const place = route.load(run); // Continuar: sempre na antessala do andar salvo (nunca no meio de uma luta)
     explor.restore(run);
@@ -854,7 +1093,7 @@ async function main(): Promise<void> {
   // Zera a run (jogo novo): Fagulha, poções, dádivas e o herói voltam ao estado-base.
   const resetRun = (): void => {
     fagulhas = 0;
-    pocoes.reiniciar(undefined, { cinto: { vida: 1 }, marta: false }); // cinto e armário de descida nova (o legado do perfil fica)
+    pocoes.reiniciar(); // cinto, armário e reserva de descida nova (o legado do perfil fica)
     purchasedBoons.length = 0;
     runSeed = newSeed(); // nova run: nova semente
     route.reset(); // de volta à antessala A1, sem histórico
@@ -871,7 +1110,7 @@ async function main(): Promise<void> {
     updatePotionHud();
     updateBrasaHud();
   };
-  if (gameSave?.run.active) restoreRun(gameSave.run);
+  if (gameSave?.run.active) restoreRun(gameSave.run, gameSave.legado);
   else enterAntessala(0, true);
 
   // Beber poção (Digit1 = Recuperação, Digit2 = Fúria). O toque vira um PEDIDO de gole (HeroCombat.requestDrink,
@@ -940,6 +1179,7 @@ async function main(): Promise<void> {
     if (!gameActive) return;
     const dt = (scene.deltaTime ?? 0) / 1000;
     tryPotions();
+    updateAntessala(dt); // antes do herói ler o input: [E] perto do armário abre o armário, não dispara o golpe de fogo
     // O diretor avança hit stop + alvos e devolve o dt de combate (0 no freeze) do herói.
     const combatDt = combat.update(dt * devTimeScale);
     hero.update(combatDt, input, camera);
@@ -999,7 +1239,13 @@ async function main(): Promise<void> {
   ui.hudLayer.appendChild(combatHud.root);
   ui.hudLayer.appendChild(combatHud.hint);
   combatHud.setVisible(false);
-  platform.events.on("hero:hit", () => combatHud.flashDamage());
+  platform.events.on("hero:hit", () => {
+    combatHud.flashDamage();
+    if (channelT > 0) {
+      channelT = 0; // levou um golpe: o acender cancela
+      interactLock = true;
+    }
+  });
   // Feedback POSITIVO (W6): acerto sem bloqueio -> dourado; bloqueio/parry -> bronze; cura -> verde.
   // Dicas curtas de controle nas duas primeiras salas da primeira partida (uma vez por instalação).
   const onboarding = new Onboarding({ hud: combatHud, bindings: () => input.getBindings(), isActive: () => gameActive && !pausedOpen && !ui.hasScreens });
@@ -1046,9 +1292,13 @@ async function main(): Promise<void> {
           ...exploracaoDefaults(),
           ...explor.snapshot(),
           ...route.save(),
-          cinto: { vida: inv.vida, furia: inv.furia, unguento: (explor.snapshot().unguento ?? 0) }, // espelho dos contadores até a fase R3 assumir o cinto
+          // poções: o modelo (cinto, armário, reserva) é o dono; `pocaoVida`, `pocaoFuria` e `unguento` seguem como espelho legado
+          cinto: { vida: inv.vida, furia: inv.furia, unguento: inv.unguento },
+          nichos: pocoes.toSaveRun().nichos,
+          reserva: pocoes.toSaveRun().reserva,
+          unguento: inv.unguento,
         },
-        legado,
+        legado: pocoes.toSaveLegado(),
       },
     };
   };
@@ -1187,7 +1437,7 @@ async function main(): Promise<void> {
           });
           platform.achievements.load(g.achievements);
           codex.load(g.codex);
-          if (g.run.active) restoreRun(g.run);
+          if (g.run.active) restoreRun(g.run, g.legado);
           else {
             resetRun();
             announceNext = true;
@@ -1280,7 +1530,7 @@ async function main(): Promise<void> {
     // braseiro) esconde o texto de história, avisos e contadores do jogo (ver theme.css).
     document.documentElement.classList.toggle("ui-open", ui.hasScreens || document.body.querySelector(":scope > .menu-backdrop") !== null);
     combatHud.setVisible(gameActive);
-    promptEl.style.opacity = gameActive && roomCleared && !descending && !descentDone ? "1" : "0";
+    promptEl.style.opacity = gameActive && roomCleared && !descending && !descentDone && !route.inAntessala ? "1" : "0";
     fagulhaEl.style.display = gameActive && !descending ? "" : "none";
     potionsEl.style.display = gameActive && !descending ? "" : "none";
     execEl.style.opacity = gameActive && !descending && combat.executePromptPos() ? "1" : "0";
@@ -1338,7 +1588,7 @@ async function main(): Promise<void> {
     }
     if (gameActive) {
       // Trilha por estado: combate (inimigos vivos) -> quente (Brasa acesa) -> frio (explorando).
-      setMusicState(combat.enemiesAlive > 0 ? "combate" : passageOpen ? "quente" : "frio");
+      setMusicState(combat.enemiesAlive > 0 ? "combate" : (route.inAntessala ? route.braseiros[floorIndex]!.aceso : passageOpen) ? "quente" : "frio");
     }
     if (gameActive) {
       combatHud.update(hero.combat.healthFraction, hero.combat.staminaFraction, hero.combat.sparkCharges, hero.combat.sparkChargeMax, dt / 1000);
@@ -1349,11 +1599,11 @@ async function main(): Promise<void> {
     damageNumbers.update(dt / 1000, gameActive && !descending ? { hp: hc.healthFraction * hc.maxHealth, max: hc.maxHealth, x: hero.position.x, y: hero.position.y, z: hero.position.z } : null);
     if (gameActive) {
       updateIgnite(dt / 1000); // recuperar estilha / abrir passagem
-      tryDescend(dt / 1000); // saídas: o compromisso de 0,6 s precisa do dt de cada quadro
+      tryDescend(); // o alçapão da câmara (a porta de pedra da antessala é de `updateAntessala`)
     }
     if (exitMarkers.active) {
       const cam = scene.activeCamera;
-      const show = gameActive && !descending && passageOpen && cam;
+      const show = gameActive && !descending && !modalOpen && cam;
       exitMarkers.update(
         (x, y, z) => {
           if (!show || !cam) return null;
@@ -1363,7 +1613,8 @@ async function main(): Promise<void> {
           return v.z > 0 && v.z < 1 ? { x: v.x * k, y: v.y * k } : null;
         },
         hero.position,
-        commit
+        commit,
+        (id) => (id === "braseiro" ? channelT : commit.id === id ? Math.min(1, commit.t / ROTA.portaSec) : 0)
       );
     }
     if (gameActive && !descending && codexNews.length) {
@@ -1381,7 +1632,7 @@ async function main(): Promise<void> {
     }
     if (hudAcc > 90) {
       hudAcc = 0;
-      gameHud.update({ floor: floorIndex, total: DESCENT.length, objective: descentObjective() });
+      gameHud.update({ floor: floorIndex, total: DESCENT.length, objective: descentObjective(), antessala: route.inAntessala });
     }
     if (gameActive && hudAccGame > 90) {
       hudAccGame = 0;
@@ -1389,6 +1640,7 @@ async function main(): Promise<void> {
       // Câmara limpa: libera a CANALIZAÇÃO do acender (a passagem só abre ao acender a Brasa).
       if (currentRoom && !roomCleared && combat.enemiesAlive === 0) {
         roomCleared = true;
+        markCodex(markCleared(floorIndex + 1)); // o que enfrentou (a linha "o que vem" do decalque)
         fagulhas += CLEAR_BONUS; // recompensa por limpar a câmara
         updateFagulhaHud();
         if (!DESCENT[floorIndex]?.boss) playStinger("limpa"); // alívio curto da câmara limpa
