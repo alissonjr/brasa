@@ -130,14 +130,16 @@ export function playJump(): void {
 
 /** Aterrissagem. intensity: 0 (degrau) a 1 (queda longa); acima de 1 é clampado. */
 export function playLand(intensity = 0.5): void {
+  const I = Math.max(0, Math.min(1, intensity));
+  if (I < 0.05) return; // degrau: sem som (o passo cobre)
   const v = begin();
   if (!v) return;
   const { a, out, t } = v;
-  const I = Math.max(0, Math.min(1, intensity));
-  tone(a, out, t, { f: (150 - 25 * I) * jit(0.08), f1: 50, dur: 0.12 + 0.12 * I, gain: (0.03 + 0.06 * I) * jit(0.12) });
-  tone(a, out, t, { f: (300 - 40 * I) * jit(0.08), f1: 150, dur: 0.07, gain: 0.06 + 0.06 * I }); // corpo do impacto
-  noise(a, out, t, { dur: 0.16 + 0.22 * I, gain: (0.06 + 0.1 * I) * jit(0.2), kind: "pink", attack: 0.008, filters: [{ type: "highpass", f: 250 }, { type: "lowpass", f: 1400 + 600 * I }] }); // poeira
-  noise(a, out, t, { dur: 0.04, gain: (0.015 + 0.02 * I), filters: [{ type: "bandpass", f: 2100 * jit(0.2), q: 1.2 }] });
+  const S = 0.3 + 0.7 * I; // queda curta (heroModel manda 0,15) é um baque discreto; a longa soa cheia
+  tone(a, out, t, { f: (150 - 25 * I) * jit(0.08), f1: 50, dur: 0.12 + 0.12 * I, gain: (0.03 + 0.06 * I) * jit(0.12) * S });
+  tone(a, out, t, { f: (300 - 40 * I) * jit(0.08), f1: 150, dur: 0.07, gain: (0.06 + 0.06 * I) * S }); // corpo do impacto
+  noise(a, out, t, { dur: 0.16 + 0.22 * I, gain: (0.06 + 0.1 * I) * jit(0.2) * S, kind: "pink", attack: 0.008, filters: [{ type: "highpass", f: 250 }, { type: "lowpass", f: 1400 + 600 * I }] }); // poeira
+  noise(a, out, t, { dur: 0.04, gain: (0.015 + 0.02 * I) * S, filters: [{ type: "bandpass", f: 2100 * jit(0.2), q: 1.2 }] });
   if (I > 0.55) tone(a, out, t + 0.01, { f: 1380 * jit(0.1), dur: 0.05, gain: 0.012 * I, type: "triangle" }); // fivela/equipamento
   if (I > 0.7) duckPulse(0.25);
 }

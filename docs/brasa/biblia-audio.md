@@ -650,7 +650,7 @@ numérica. A avaliação de gosto é do jogador no Chrome dele (ver "O que ainda
 - `main.ts` (mudança mínima, só ligação): `bindGameAudio`, passos pela velocidade do herói
   (`updateFootsteps`), `playDrink(kind, "cork"|"sip")` no gole (redesenho 4.1: rolha no início, goles + vidro + brilho no commit; Fúria e Unguento têm sons próprios), `playPickup` ao pegar arma (G), `playDoor("alcapao")` ao ceder a estilha, `playBrazierLit` e `playStairs` na descida, `playGuardianVoice("rugido")` ao avistar o Guardião.
 - Aterrissagem: o agente `salto` já chama `landThud(intensity)` (combatSound.ts, em `heroModel.ts`); agora
-  ele só delega a `playLand(intensity)` (audio/sfx.ts), então há um único som de queda. PENDENTE: chamar
+  ele só delega a `playLand(intensity)` (audio/sfx.ts), então há um único som de queda (abaixo de 0,05 não soa; a queda curta do heroModel, 0,15, sai a ~45% do nível cheio). PENDENTE: chamar
   `playJump()` no início do pulo (hoje ninguém chama). Superfície dos passos: `surfaceForFloor(andar, molhado)`.
 - Funções ainda sem chamador (prontas): `playGuardianPulse`, `playDodge`, `playSwing`/`playHit` com
   material (`hitThunk(heavy, "osso"|"carne"|"armadura")` já aceita o segundo parâmetro).
@@ -676,9 +676,9 @@ Alvos (critérios em `tools/audio/criteria.mjs`):
 Desvio declarado em relação ao pedido (-16 a -20 LUFS integrados): os EFEITOS ficam na janela (LUFS-M
 -18 a -21), mas a cama (música -26, ambiência -31) e o mix de jogo (-25) ficam 5 a 10 dB abaixo. Motivos:
 a queixa original foi de som de fundo alto; os efeitos têm crista de 22 a 28 dB e o teto de -3 dBFS
-impede subir o mix inteiro sem esmagar os golpes; e a cama precisa ficar abaixo dos efeitos. Para subir
-tudo +3 dB (mix perto de -22) basta multiplicar `GROUP_TRIM` por 1,4, ao custo de mais ação do limitador
-nos golpes pesados.
+impede subir o mix inteiro sem esmagar os golpes; e a cama precisa ficar abaixo dos efeitos. Botão único: `GROUP_TRIM` (e `trim` dos andares) x1,4 (+3 dB). MEDIDO: mix de jogo -25,1 -> -22,5
+LUFS-I, pior caso -22,7 -> -21,1, pico segue em -3,1 dBFS (o limitador absorve), ao custo de mais ação
+nos golpes pesados (crista de 23 -> 21 dB).
 
 Espectro (% da energia por faixa; 60-150 Hz é onde vive o pedal grave):
 
@@ -711,8 +711,8 @@ sozinho, quinta (110/165) e batimento lento (0,5 Hz) acusam 0 a 1.
 
 Vazamento de nós: render offline de 7 andares trocando de andar e de estado: fontes vivas 12, 13, 15,
 12, 12, 12, 12 (um por andar) e 0 após `stopMusic`/`stopAmbience`. No jogo real (Chromium com GPU, 7
-`enterRoom`): 20 a 29 vivas no começo, 20 no andar 2 e 22 no andar 7, sem crescimento; mudo deixa a saída
-em -120 dB e desmudo volta a -26 dB RMS.
+`enterRoom`, última rodada): 31 vivas no começo, 17 no andar 2 e 16 no andar 7, sem crescimento; mudo deixa a saída
+em -120 dB e desmudo volta a -28 dB RMS.
 
 Espectrogramas (PNG pequenos) em `prototipo/mocks/audio/`: um por caso (efeitos, 7 ambiências, 7 músicas,
 título, descida, mixes).

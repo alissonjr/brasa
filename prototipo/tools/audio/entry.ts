@@ -54,7 +54,7 @@ def({ name: "sfx_passos_agua", seconds: 5, kind: "sfx", run: (h) => rep(h, 0.1, 
 def({ name: "sfx_passos_cinza", seconds: 5, kind: "sfx", run: (h) => rep(h, 0.1, 8, 0.42, (i) => sfx.playFootstep("cinza", 1, i)) });
 def({
   name: "sfx_pulo_aterrissagem",
-  seconds: 5,
+  seconds: 6,
   kind: "sfx",
   run: (h) => {
     h.at(0.1, () => sfx.playJump());
@@ -62,6 +62,8 @@ def({
     h.at(1.8, () => sfx.playJump());
     h.at(2.7, () => sfx.playLand(0.6));
     h.at(3.5, () => sfx.playLand(1));
+    h.at(4.3, () => sfx.playLand(0.15)); // o que o heroModel manda numa queda curta
+    h.at(4.8, () => sfx.playLand(0.02)); // degrau: mudo
   },
 });
 def({ name: "sfx_golpe_ar", seconds: 4, kind: "sfx", run: (h) => rep(h, 0.1, 6, 0.6, (i) => sfx.playSwing(i % 2 === 1)) });
