@@ -823,11 +823,11 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
   beamMat.emissiveColor = Color3.FromHexString("#ffd089");
   beamMat.diffuseColor = Color3.Black();
   beamMat.specularColor = Color3.Black();
-  beamMat.alpha = 0.4;
+  beamMat.alpha = 0.18; // discreto: o feixe indica a passagem, não domina a vitória
   beamMat.disableLighting = true;
-  const beam = MeshBuilder.CreateCylinder("feixe_passagem", { diameterTop: 0.5, diameterBottom: 1.7, height: 6.5, tessellation: 14 }, scene);
+  const beam = MeshBuilder.CreateCylinder("feixe_passagem", { diameterTop: 0.5, diameterBottom: 1.7, height: 3.8, tessellation: 14 }, scene);
   beam.material = beamMat;
-  beam.position.set(L.exit.x, 3.2, L.exit.z);
+  beam.position.set(L.exit.x, 1.9, L.exit.z);
   beam.isPickable = false;
   beam.parent = roomRoot;
   beam.setEnabled(false);
@@ -1544,7 +1544,7 @@ export function buildCryptRoom(scene: Scene, ctx: CryptCtx, def: RoomDef): Room 
         beam.setEnabled(true);
         beam.scaling.y = 0.12;
         Animation.CreateAndStartAnimation("feixe_in", beam, "scaling.y", 60, 22, 0.12, 1, 0);
-        Animation.CreateAndStartAnimation("feixe_alpha", beamMat, "alpha", 60, 22, 0, 0.4, 0);
+        Animation.CreateAndStartAnimation("feixe_alpha", beamMat, "alpha", 60, 22, 0, 0.18, 0);
       } else if (!open) {
         beam.setEnabled(false);
       }
