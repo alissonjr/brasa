@@ -3,7 +3,7 @@ import type { AssetContainer, DynamicTexture, Scene } from "@babylonjs/core";
 import type { Layout } from "./cryptLayouts";
 import type { RoomKind } from "./cryptRoom";
 import {
-  Facet, bakeKitPiece, bone, box, hex, hsl, inCalm, makeGrainTexture, makeWaterTexture, mix, mulberry32, offs, placeKit,
+  Facet, bakeKitPiece, bone, box, hex, hsl, inCalm, makeGrainTexture, makeWaterTexture, skullProc, mix, mulberry32, offs, placeKit,
   prism, rectPoly, ribbon, ribcage, rock, shade, shard, slope, tuft, type RGB, type Rng, type V3,
 } from "./cryptGeo";
 
@@ -54,7 +54,7 @@ const PAL: Record<RoomKind, Pal> = {
   guarda: { slabs: [[218, 9, 34], [32, 7, 33], [222, 9, 28], [205, 7, 37]], joint: "#07090c", moss: [100, 26, 28] },
   salao: { slabs: [[32, 8, 34], [215, 8, 32], [26, 9, 29], [40, 7, 37]], joint: "#08080b", moss: [90, 22, 26] },
   cisterna: { slabs: [[188, 14, 27], [160, 12, 24], [212, 11, 22], [170, 16, 30]], joint: "#050a0c", moss: [112, 34, 30] },
-  santuario: { slabs: [[252, 8, 37], [42, 9, 38], [235, 10, 29], [270, 7, 33]], joint: "#08080d", moss: [110, 20, 26] },
+  santuario: { slabs: [[252, 8, 36], [262, 7, 32], [236, 10, 29], [270, 7, 33]], joint: "#08080d", moss: [110, 20, 26] },
   guardiao: { slabs: [[262, 8, 21], [10, 12, 22], [240, 9, 16], [20, 10, 26]], joint: "#030205", moss: [60, 10, 12] },
 };
 
@@ -418,7 +418,6 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
   let tmark = detF.triCount;
   const mark = (n: string): void => { tally[n] = (tally[n] ?? 0) + detF.triCount - tmark; tmark = detF.triCount; };
   mark("cracks");
-  const skull = bakeKitPiece(pieces.skull, 0.17);
   const rubbleKit = bakeKitPiece(pieces.rubble, 0.16);
   const boneCol = hex("#c9c1a5");
   const rockCol = (): RGB => hsl(205 + (r() - 0.5) * 30, 7 + r() * 5, 21 + r() * 7);
@@ -472,7 +471,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       bone(detF, x + Math.cos(a) * d, y, z + Math.sin(a) * d, r() * 3.14, 0.34 + r() * 0.3, 0.022 + r() * 0.012, shade(boneCol, 0.78 + r() * 0.3));
     }
     const t = r();
-    if (skull && t < 0.7) placeKit(detF, skull, x + (r() - 0.5) * 0.5, y - 0.03, z + (r() - 0.5) * 0.5, 0.3 + r() * 0.08, r() * 6.28, [0.92 + r() * 0.1, 0.9 + r() * 0.1, 0.84 + r() * 0.1], (r() - 0.5) * 0.4, (r() - 0.5) * 0.4);
+    if (t < 0.7) skullProc(detF, x + (r() - 0.5) * 0.5, y, z + (r() - 0.5) * 0.5, r() * 6.28, 1.0 + r() * 0.3, shade(boneCol, 0.85 + r() * 0.2), 0.15 + r() * 0.35, (r() - 0.5) * 0.5);
     if (t > 0.5) ribcage(detF, x + (r() - 0.5) * 0.9, y, z + (r() - 0.5) * 0.9, r() * 6.28, 0.8 + r() * 0.5, shade(boneCol, 0.74 + r() * 0.2));
   };
 
@@ -502,11 +501,11 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
   }
   mark("ossos");
   // cranios soltos
-  for (let i = 0, n = Math.round(rimArea * D.skulls), tr = 0; skull && i < n && tr < n * 20; tr++) {
+  for (let i = 0, n = Math.round(rimArea * D.skulls), tr = 0; i < n && tr < n * 20; tr++) {
     const [x, z] = rimPoint();
     if (!okAt(x, z, 0.5)) continue;
     detF.uvU = r(); detF.uvV = r();
-    placeKit(detF, skull, x, flatY(x, z)! - 0.03, z, 0.3 + r() * 0.1, r() * 6.28, [0.92 + r() * 0.1, 0.9 + r() * 0.1, 0.84 + r() * 0.1], (r() - 0.5) * 0.5, (r() - 0.5) * 0.5);
+    skullProc(detF, x, flatY(x, z)!, z, r() * 6.28, 1.0 + r() * 0.3, shade(boneCol, 0.85 + r() * 0.2), 0.15 + r() * 0.35, (r() - 0.5) * 0.5);
     i++;
   }
   mark("cranios");
@@ -711,36 +710,42 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
       i++;
     }
   } else if (kind === "guardiao") {
-    // fendas radiais com brasa: sulco escuro com borda erguida + nucleo emissivo
-    const n = 9;
-    for (let i = 0; i < n; i++) {
-      const a0 = (i / n) * Math.PI * 2 + r() * 0.35;
-      const pts: [number, number][] = [];
-      let x = cc.x + Math.cos(a0) * 2.2, z = cc.z + Math.sin(a0) * 2.2, a = a0;
-      const segs = 9 + Math.floor(r() * 6);
-      pts.push([x, z]);
+    // fendas radiais com brasa: sulco escuro irregular com borda erguida + nucleo emissivo fino e intermitente
+    const lip = hsl(255, 8, 24);
+    const fissure = (sx: number, sz: number, a0: number, segs: number, w0: number, depth: number): void => {
+      const pts: [number, number][] = [[sx, sz]];
+      let x = sx, z = sz, a = a0;
       for (let s = 0; s < segs; s++) {
-        a += (r() - 0.5) * 0.7;
-        const step = 0.8 + r() * 0.7;
+        a += (r() - 0.5) * 1.25;
+        const step = 0.45 + r() * 0.7;
         x += Math.cos(a) * step; z += Math.sin(a) * step;
         if (Math.abs(x) > HX - 1.1 || Math.abs(z) > HZ - 1.1) break;
         pts.push([x, z]);
-        if (s % 3 === 1) embers.push({ x, z, r: 2.2 });
+        if (depth === 0 && s % 4 === 2) embers.push({ x, z, r: 2.2 });
+        if (depth < 2 && s > 1 && r() < 0.16) fissure(x, z, a + (r() < 0.5 ? -1 : 1) * (0.5 + r() * 0.7), Math.floor(segs * 0.45), w0 * 0.55, depth + 1);
       }
-      if (pts.length < 4) continue;
-      const widths = pts.map((_, k) => 0.34 * (1 - k / pts.length) + 0.07);
+      if (pts.length < 3) return;
+      const widths = pts.map((_, k) => Math.max(0.035, w0 * (1 - k / (pts.length + 1)) * (0.7 + 0.5 * Math.sin(k * 1.7 + a0))));
       const half = widths.map((w) => w / 2);
-      const lw = 0.07;
-      ribbon(detF, pts, widths.map((w) => w + 0.05), 0.016, hex("#030204"));
-      const le = offs(pts, half.map((h) => h + 0.025)), re = offs(pts, half.map((h) => -(h + 0.025)));
-      const lm = offs(pts, half.map((h) => h + 0.025 + lw)), rm = offs(pts, half.map((h) => -(h + 0.025 + lw)));
-      const lo = offs(pts, half.map((h) => h + 0.025 + lw * 2)), ro = offs(pts, half.map((h) => -(h + 0.025 + lw * 2)));
-      const lip = hsl(255, 8, 24);
-      slope(detF, le, 0.016, lm, 0.052, lip, [0, 1, 0]);
-      slope(detF, lm, 0.052, lo, 0.01, shade(lip, 0.65), [0, 1, 0]);
-      slope(detF, re, 0.016, rm, 0.052, lip, [0, 1, 0]);
-      slope(detF, rm, 0.052, ro, 0.01, shade(lip, 0.65), [0, 1, 0]);
-      ribbon(emisF, pts, widths.map((w) => w * 0.5), 0.028, [1, 1, 1]);
+      const lw = 0.05;
+      ribbon(detF, pts, widths.map((w) => w + 0.04), 0.016, hex("#030204"));
+      const le = offs(pts, half.map((h) => h + 0.02)), re = offs(pts, half.map((h) => -(h + 0.02)));
+      const lm = offs(pts, half.map((h) => h + 0.02 + lw)), rm = offs(pts, half.map((h) => -(h + 0.02 + lw)));
+      const lo = offs(pts, half.map((h) => h + 0.02 + lw * 2.2)), ro = offs(pts, half.map((h) => -(h + 0.02 + lw * 2.2)));
+      slope(detF, le, 0.016, lm, 0.046, lip, [0, 1, 0]);
+      slope(detF, lm, 0.046, lo, 0.01, shade(lip, 0.65), [0, 1, 0]);
+      slope(detF, re, 0.016, rm, 0.046, lip, [0, 1, 0]);
+      slope(detF, rm, 0.046, ro, 0.01, shade(lip, 0.65), [0, 1, 0]);
+      // brasa so em trechos (intermitente), mais estreita que a fenda
+      for (let k = 0; k < pts.length - 1; k++) {
+        if ((k + Math.floor(a0 * 3)) % 4 === 3) continue;
+        ribbon(emisF, [pts[k]!, pts[k + 1]!], [widths[k]! * 0.42, widths[k + 1]! * 0.42], 0.026, [1, 1, 1]);
+      }
+    };
+    const n = 8;
+    for (let i = 0; i < n; i++) {
+      const a0 = (i / n) * Math.PI * 2 + r() * 0.5;
+      fissure(cc.x + Math.cos(a0) * 1.8, cc.z + Math.sin(a0) * 1.8, a0, 7 + Math.floor(r() * 7), 0.24 + r() * 0.1, 0);
     }
     // pedras e cinzas soltas junto das fendas
     for (let i = 0, tr = 0; i < 18 && tr < 200; tr++) {
@@ -824,7 +829,7 @@ export function buildFloorScape(scene: Scene, L: Layout, kind: RoomKind, index: 
     meshes.push(emisMesh);
   }
 
-  if (import.meta.env.DEV) console.info("[piso] " + JSON.stringify({ kind, slabs: slabs.length, tris: floorF.triCount + detF.triCount + waterF.triCount + emisF.triCount, floor: floorF.triCount, det: detF.triCount, water: puddles, tally, skullTris: skull ? skull.idx.length / 3 : 0, rubbleTris: rubbleKit ? rubbleKit.idx.length / 3 : 0 }));
+  if (import.meta.env.DEV) console.info("[piso] " + JSON.stringify({ kind, slabs: slabs.length, tris: floorF.triCount + detF.triCount + waterF.triCount + emisF.triCount, floor: floorF.triCount, det: detF.triCount, water: puddles, tally, rubbleTris: rubbleKit ? rubbleKit.idx.length / 3 : 0 }));
   const tris = floorF.triCount + detF.triCount + waterF.triCount + emisF.triCount;
   return {
     meshes,

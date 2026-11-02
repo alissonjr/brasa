@@ -273,6 +273,39 @@ export function knob(f: Facet, c: V3, rad: number, col: RGB, sy = 1): void {
   }
 }
 
+
+/** Cranio low-poly (~70 triangulos): calota achatada, mandibula e orbitas escuras. y0 = chao. */
+export function skullProc(f: Facet, x: number, y0: number, z: number, yaw: number, sc: number, col: RGB, pitch = 0, roll = 0): void {
+  const cy = Math.cos(yaw), sy = Math.sin(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), cr = Math.cos(roll), sr = Math.sin(roll);
+  const tf = (lx: number, ly: number, lz: number): V3 => {
+    const ax = (lx * cr - ly * sr) * sc, ay0 = (lx * sr + ly * cr) * sc, az0 = lz * sc;
+    const ay = ay0 * cp - az0 * sp, az = ay0 * sp + az0 * cp;
+    return [x + ax * cy + az * sy, y0 + ay, z - ax * sy + az * cy];
+  };
+  const pts = ICO_V.map(([a, b, c]) => [a * 0.155, (b >= 0 ? b * 0.14 : b * 0.05) + 0.13, c * 0.18] as V3);
+  for (let i = 0; i < ICO_F.length; i++) {
+    const [a, b, c] = ICO_F[i]!;
+    const A = pts[a]!, B = pts[b]!, C = pts[c]!;
+    const tone = 0.92 + ((i * 7) % 5) * 0.035;
+    f.tri(tf(...A), tf(...B), tf(...C), shade(col, tone), [A[0] + B[0] + C[0], A[1] + B[1] + C[1] - 0.39, A[2] + B[2] + C[2]]);
+  }
+  // mandibula/face: caixa na frente e embaixo
+  const bx = 0.055, by0 = 0.0, by1 = 0.085, bz0 = 0.07, bz1 = 0.165;
+  const Bv: V3[] = [[-bx, by0, bz0], [bx, by0, bz0], [bx, by1, bz0], [-bx, by1, bz0], [-bx, by0, bz1], [bx, by0, bz1], [bx, by1, bz1], [-bx, by1, bz1]];
+  const faces: [number, number, number, number][] = [[0, 1, 2, 3], [4, 5, 6, 7], [0, 4, 7, 3], [1, 5, 6, 2], [3, 2, 6, 7], [0, 1, 5, 4]];
+  for (const [a, b, c, d] of faces) {
+    const mid: V3 = [(Bv[a]![0] + Bv[c]![0]) / 2, (Bv[a]![1] + Bv[c]![1]) / 2 - 0.042, (Bv[a]![2] + Bv[c]![2]) / 2 - 0.118];
+    f.quad(tf(...Bv[a]!), tf(...Bv[b]!), tf(...Bv[c]!), tf(...Bv[d]!), shade(col, 0.84), mid);
+  }
+  // orbitas e nariz (escuros), na face frontal
+  const dark: RGB = [0.05, 0.045, 0.04];
+  for (const sx of [-1, 1]) {
+    const cx = sx * 0.06;
+    f.quad(tf(cx - 0.032, 0.115, 0.168), tf(cx + 0.032, 0.115, 0.168), tf(cx + 0.032, 0.17, 0.158), tf(cx - 0.032, 0.17, 0.158), dark, [0, 0.2, 1]);
+  }
+  f.tri(tf(-0.014, 0.075, 0.168), tf(0.014, 0.075, 0.168), tf(0, 0.115, 0.172), dark, [0, 0.2, 1]);
+}
+
 /** Osso longo deitado: haste hexagonal + duas bolotas em cada ponta. (x,z) = centro. */
 export function bone(f: Facet, x: number, y0: number, z: number, yaw: number, len: number, rad: number, col: RGB): void {
   const dx = Math.cos(yaw) * len / 2, dz = Math.sin(yaw) * len / 2;
