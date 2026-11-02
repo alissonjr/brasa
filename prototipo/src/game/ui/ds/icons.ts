@@ -35,6 +35,8 @@ export const ICON_PATHS: Record<string, string> = {
   check: P("M5 12.5l4.5 4.5L19 7.5"),
   sound: P("M4 9.5h3.5L12 6v12l-4.5-3.5H4z") + P("M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"),
   mute: P("M4 9.5h3.5L12 6v12l-4.5-3.5H4z") + P("M16 9.5l5 5M21 9.5l-5 5"),
+  keyboard: '<rect x="2.5" y="6.5" width="19" height="11" rx="2"/>' + P("M6.5 10h.01M9.5 10h.01M12.5 10h.01M15.5 10h.01M18 10h.01M7 14h10"),
+  mouse: '<rect x="7" y="3" width="10" height="18" rx="5"/>' + P("M12 3v6"),
   exit: P("M14 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4M10 8l-4 4 4 4M6 12h9"),
 };
 

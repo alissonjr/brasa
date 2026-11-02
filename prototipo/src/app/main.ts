@@ -37,6 +37,7 @@ import {
   createPauseButton,
   configureUiSound,
   mountMuteButton,
+  installDesktopNotice,
   configureCombatSound,
   healChime,
   configureTitleAmbience,
@@ -93,6 +94,12 @@ async function main(): Promise<void> {
   const loading = document.getElementById("loading")!;
   const hud = document.getElementById("hud")!;
   const fpsEl = document.getElementById("fps")!;
+  // Celular/tablet sem teclado: só o aviso, sem carregar o motor. Janela estreita: o aviso
+  // cobre o jogo e some quando a janela alarga.
+  if (installDesktopNotice()) {
+    loading.hidden = true;
+    return;
+  }
   const stage = (msg: string) => {
     console.log(`[app] ${msg}`);
     loading.textContent = msg;

@@ -1,0 +1,51 @@
+/* CAMADA JOGO. Aviso de desktop: só tokens do design system. Fica acima de tudo (inclusive do
+   botão de mudo, z 80) e não depende do jogo ter carregado. */
+.dn-root {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-5) var(--sp-4);
+  overflow-y: auto;
+  background: var(--ink-950);
+  color: var(--text-hi);
+  font-family: var(--font-text);
+  text-align: center;
+}
+.dn-root[hidden] { display: none; }
+/* Uma brasa respirando ao fundo (a assinatura do título, sem o 3D). */
+.dn-glow {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  width: min(120vw, 720px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(255, 138, 44, 0.2) 0%, rgba(217, 78, 10, 0.08) 32%, transparent 62%);
+  animation: dn-breathe 4.2s ease-in-out infinite;
+}
+@keyframes dn-breathe { 0%, 100% { opacity: 0.65; transform: translate(-50%, -50%) scale(0.94); } 50% { opacity: 1; transform: translate(-50%, -50%) scale(1.04); } }
+.dn-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: var(--sp-4); max-width: 520px; margin: auto; }
+.dn-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(var(--fs-3xl), 16vw, var(--fs-4xl));
+  letter-spacing: 0.14em;
+  line-height: 1.05;
+  background: linear-gradient(180deg, var(--gold-100) 0%, var(--gold-300) 46%, var(--ember-500) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 26px rgba(255, 138, 44, 0.4)) drop-shadow(0 3px 4px rgba(0, 0, 0, 0.75));
+}
+.dn-div { width: min(280px, 70vw); }
+.dn-devices { display: flex; gap: var(--sp-6); margin: var(--sp-2) 0; }
+.dn-device { display: flex; flex-direction: column; align-items: center; gap: var(--sp-2); font-family: var(--font-display); font-size: var(--fs-2xs); letter-spacing: 0.3em; text-transform: uppercase; color: var(--gold-400); }
+.dn-device .ds-icon { padding: var(--sp-3); box-sizing: content-box; border: var(--line) solid var(--gold-700); border-radius: 50%; color: var(--gold-300); background: var(--ink-850); box-shadow: var(--shadow-2), var(--glow-gold); }
+.dn-heading { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: var(--fs-xl); letter-spacing: var(--ls-title); line-height: 1.2; color: var(--text-hi); }
+.dn-body { margin: 0; font-size: var(--fs-lg); line-height: 1.45; color: var(--text-mid); }
+.dn-foot { margin: 0; font-style: italic; font-size: var(--fs-sm); color: var(--text-lo); }
