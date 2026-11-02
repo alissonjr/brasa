@@ -38,9 +38,9 @@ const rnd = (i: number): number => {
   return x - Math.floor(x);
 };
 
-function defs(): string {
+function defs(extra = ""): string {
   return (
-    "<defs>" +
+    "<defs>" + extra +
     `<pattern id="${ns}hg" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(40)"><line class="gv-pg" x1="0" y1="0" x2="0" y2="6"/></pattern>` +
     `<pattern id="${ns}hf" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(-35)"><line class="gv-pf" x1="0" y1="0" x2="0" y2="5"/></pattern>` +
     `<pattern id="${ns}he" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(55)"><line class="gv-pe" x1="0" y1="0" x2="0" y2="5"/></pattern>` +
@@ -335,8 +335,306 @@ export const ILLUSTRATION_IDS = Object.keys(PLATES) as IllustrationId[];
  * Gravura pronta (SVG 400x500, decorativa: `aria-hidden`, quem usa descreve no texto ao redor).
  * `preserveAspectRatio="xMidYMid slice"` preenche qualquer moldura sem distorcer.
  */
-export function illustration(id: IllustrationId): string {
+export function illustration(id: IllustrationId, format: MuralFormat = "retrato"): string {
   ns = `gv${++uid}-`;
   const body = (PLATES[id] ?? PLATES.braseiro)();
-  return `<svg class="gv" viewBox="0 0 400 500" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">${defs()}<rect class="gv-bg" width="400" height="500"/>${body}</svg>`;
+  // Paisagem (textura 2:1 do painel 3D): a faixa central da gravura, onde mora o assunto.
+  const vb = format === "paisagem" ? "0 150 400 200" : "0 0 400 500";
+  const bg = format === "paisagem" ? '<rect class="gv-bg" y="150" width="400" height="200"/>' : '<rect class="gv-bg" width="400" height="500"/>';
+  return `<svg class="gv" viewBox="${vb}" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">${defs()}${bg}${body}</svg>`;
+}
+
+// ---------------------------------------------------------------------------------------------
+// ALFABETO DO MURAL (fase R5): bustos dos mortos, glifos de perigo e de situação, marcas de
+// contagem, e o painel "o que vem" composto a partir de dados. Mesma linguagem da Crônica
+// (traço de xilogravura, só classes `.gv-*`), sem texto dentro do desenho.
+// ---------------------------------------------------------------------------------------------
+
+/** Formato do painel: retrato (placa DOM; o `vem` é 400x460, a gravura 400x500 cortada ao centro) ou paisagem 800x400 (textura 2:1 do painel 3D). */
+export type MuralFormat = "retrato" | "paisagem";
+
+/** Tipos de morto com busto. Os ids são os `SkeletonKind` do jogo (+ a Guardiã e a Acendedora). */
+export type BustKind =
+  | "minion" | "warrior" | "rogue" | "heavy" | "antigo" | "sentinela"
+  | "conjurador" | "arqueiro" | "demonio" | "brutamonte" | "espreitador"
+  | "guardia" | "acendedora";
+
+/** Glifos de perigo de cenário e de situação (olho = emboscada, ondas, vela = vigília). */
+export type HazardKind =
+  | "tumulo" | "chao" | "colunas" | "agua" | "fissura" | "grade" | "arena"
+  | "vigilia" | "emboscada" | "ondas";
+
+export const BUST_KINDS: BustKind[] = [
+  "minion", "warrior", "rogue", "heavy", "antigo", "sentinela",
+  "conjurador", "arqueiro", "demonio", "brutamonte", "espreitador", "guardia", "acendedora",
+];
+export const HAZARD_KINDS: HazardKind[] = [
+  "tumulo", "chao", "colunas", "agua", "fissura", "grade", "arena", "vigilia", "emboscada", "ondas",
+];
+
+type GlyphKey = BustKind | HazardKind | "sentinela_manto";
+
+/** Corpo de pedra do glifo: massa escura, hachura de xilogravura e contorno. */
+const gBody = (d: string): string =>
+  `<path class="gv-mid" d="${d}"/><path fill="${ref("hk")}" d="${d}" opacity=".75"/><path class="gv-gl" d="${d}"/>`;
+const gSlab = (d: string): string => `<path class="gv-mid" d="${d}"/><path class="gv-gm" d="${d}"/>`;
+
+const D_BUST =
+  "M-9 11 C-9 4 -6 1 -3 0.2 L-3 -1.8 C-5.4 -3 -5.6 -6.4 -4.4 -8.4 C-3.4 -10.4 -1.8 -11 0 -11 C1.8 -11 3.4 -10.4 4.4 -8.4 C5.6 -6.4 5.4 -3 3 -1.8 L3 0.2 C6 1 9 4 9 11Z";
+const D_HOOD = "M-9 11 C-9 4 -7 0 -5 -2 C-6 -7 -3 -12 0 -12 C3 -12 6 -7 5 -2 C7 0 9 4 9 11Z";
+const D_HOOD_FACE = "M-3.2 -2.5 C-3.6 -6.5 -1.8 -9 0 -9 C1.8 -9 3.6 -6.5 3.2 -2.5 C2.4 -0.5 -2.4 -0.5 -3.2 -2.5Z";
+const D_WIDE =
+  "M-12 11 C-12 3 -8 0 -4 -0.6 L-4 -2.2 C-6 -3.2 -6.4 -6.8 -5 -8.6 C-3.8 -10.2 -2 -10.6 0 -10.6 C2 -10.6 3.8 -10.2 5 -8.6 C6.4 -6.8 6 -3.2 4 -2.2 L4 -0.6 C8 0 12 3 12 11Z";
+const D_STAR = "M0 2.2 L0.9 4.3 L3 5.2 L0.9 6.1 L0 8.2 L-0.9 6.1 L-3 5.2 L-0.9 4.3Z";
+const D_CREST = "M-1.4 -11 C-1.8 -14 -0.5 -16.4 0 -17.6 C0.5 -16.4 1.8 -14 1.4 -11Z";
+
+const gSkull = (): string =>
+  '<circle class="gv-gb" cx="-2" cy="-6.6" r="1.05"/><circle class="gv-gb" cx="2" cy="-6.6" r="1.05"/>' +
+  '<path class="gv-gt" d="M-2.4 -3.6 h4.8 M-1.6 -3.6 v1.4 M0 -3.6 v1.6 M1.6 -3.6 v1.4"/>';
+const gHood = (): string => gBody(D_HOOD) + `<path class="gv-void" d="${D_HOOD_FACE}"/>`;
+
+const GLYPHS: Record<GlyphKey, () => string> = {
+  // Manso (o povo): caveira limpa, sem atributo.
+  minion: () => gBody(D_BUST) + gSkull(),
+  // Guerreiro: espada atrás do ombro.
+  warrior: () => '<path class="gv-gm" d="M-10.5 10 L2 -9.5 M-10 6.6 L-6 9.2 M0 -8 L3.2 -10"/>' + gBody(D_BUST) + gSkull(),
+  // Ladino: capuz e adaga.
+  rogue: () => gHood() + '<path class="gv-gl" d="M5 4 L11.5 -4 M9.4 -4.8 L12 -2"/>',
+  // Pesado: elmo fechado com fenda e maça atrás do ombro.
+  heavy: () =>
+    '<path class="gv-gm" d="M10 11 V-8"/><path class="gv-gg" d="M7 -12 H13 V-7 H7Z"/>' + gBody(D_WIDE) +
+    gSlab("M-5.6 -4 C-5.6 -10.6 -3 -12.4 0 -12.4 C3 -12.4 5.6 -10.6 5.6 -4Z") +
+    '<path class="gv-void" d="M-4.4 -7.6 H4.4 V-6 H-4.4Z"/><path class="gv-gt" d="M0 -12.4 V-4"/>',
+  // Antigo: crista na testa.
+  antigo: () => gBody(D_BUST) + gSkull() + `<path class="gv-gg" d="${D_CREST}"/><path class="gv-gt" d="M-4.6 -9.6 h9.2"/>`,
+  // Sentinela: crista e escudo.
+  sentinela: () =>
+    gBody(D_BUST) + gSkull() + `<path class="gv-gg" d="${D_CREST}"/>` +
+    '<circle class="gv-mid" cx="8" cy="4.4" r="4.8"/><circle class="gv-gl" cx="8" cy="4.4" r="4.8"/><path class="gv-gt" d="M8 -0.4 v9.6 M3.2 4.4 h9.6"/>',
+  // Sentinela com o manto da Acendedora (A6): capa caída dos ombros.
+  sentinela_manto: () =>
+    '<path class="gv-mid" d="M-8 -2 C-11 4 -12 9 -13 12.5 L13 12.5 C12 9 11 4 8 -2Z"/><path fill="' + ref("hk") + '" d="M-8 -2 C-11 4 -12 9 -13 12.5 L13 12.5 C12 9 11 4 8 -2Z" opacity=".8"/><path class="gv-gm" d="M-8 -2 C-11 4 -12 9 -13 12.5 M8 -2 C11 4 12 9 13 12.5"/>' +
+    gBody(D_BUST) + gSkull() + `<path class="gv-gg" d="${D_CREST}"/>` +
+    '<circle class="gv-mid" cx="9" cy="5" r="4.2"/><circle class="gv-gl" cx="9" cy="5" r="4.2"/>',
+  // Conjurador: capuz e cajado com orbe (a única brasa do painel).
+  conjurador: () =>
+    gHood() + '<path class="gv-gl" d="M-10 11.5 L-10 -6.5"/><circle class="gv-gx-glow" cx="-10" cy="-8.4" r="4.4"/><circle class="gv-gxe" cx="-10" cy="-8.4" r="2.5"/><circle class="gv-gxe2" cx="-10" cy="-8.4" r="1"/>',
+  // Arqueiro: arco atrás do ombro.
+  arqueiro: () => '<path class="gv-gm" d="M8.4 -11 C15 -5 15 6 8.4 12 M8.4 -11 V12"/>' + gBody(D_BUST) + gSkull(),
+  // Demônio: chifres.
+  demonio: () => gBody(D_BUST) + gSkull() + '<path class="gv-gl" d="M-3.6 -9.8 C-5 -12.4 -7.6 -13.4 -9 -12.6 M3.6 -9.8 C5 -12.4 7.6 -13.4 9 -12.6"/>',
+  // Brutamonte: ombros largos, sem pescoço.
+  brutamonte: () => gBody(D_WIDE) + gSkull(),
+  // Espreitador: capuz inclinado e linhas de pressa.
+  espreitador: () =>
+    '<g transform="rotate(-18)">' + gHood() + '</g><path class="gv-gm" d="M-13 -2 h5.4 M-14 1.6 h7.4 M-13 5.2 h4.4"/>',
+  // Guardiã: capuz e fagulha apagada (gelo).
+  guardia: () => gHood() + `<path class="gv-gfe" d="${D_STAR}"/>`,
+  // Acendedora: capuz e fagulha em brasa.
+  acendedora: () => gHood() + `<path class="gv-gxe2" d="${D_STAR}"/>`,
+
+  // --- perigos e situações ---
+  // Túmulo arrombado: laje com a tampa torta e a rachadura em gelo.
+  tumulo: () =>
+    gSlab("M-9 -4 H9 V10 H-9Z") + '<path class="gv-gt" d="M-9 1 H9"/>' +
+    '<path class="gv-mid" d="M-8 -4 L-10.6 -10 L8 -9.2 L8.6 -4Z"/><path class="gv-gf" d="M-8 -4 L-10.6 -10 L8 -9.2 L8.6 -4"/><path class="gv-gft" d="M-3 10 L-1.6 5 L-4 2"/>',
+  // Chão que cede: laje partida em dois pedaços, rachadura aberta.
+  chao: () =>
+    gSlab("M-11 -7 H11 V7 H-11Z") + '<path class="gv-void" d="M-11 0.6 L-6 -1 L-2.6 2 L1.4 -1.6 L5 2.6 L11 1 V3.4 L5 4.8 L1.4 1 L-2.6 4.4 L-6 1.6 L-11 3Z"/>' +
+    '<path class="gv-gl" d="M-11 0.6 L-6 -1 L-2.6 2 L1.4 -1.6 L5 2.6 L11 1 M-2.6 2 L-4 7 M1.4 -1.6 L2.6 -7"/>' +
+    '<path class="gv-gt" d="M-9 5 l0 0 M7 -4 l0 0"/>',
+  // Colunas móveis: coluna entre duas setas.
+  colunas: () =>
+    gSlab("M-3.5 -9 H3.5 V9 H-3.5Z") + '<path class="gv-gl" d="M-5.6 -9 H5.6 M-5.6 9 H5.6"/><path class="gv-gt" d="M-1 -5 V5 M1.4 -3 V4"/>' +
+    '<path class="gv-gl" d="M-12 0 H-7.4 M-7.4 0 L-9.4 -2.2 M-7.4 0 L-9.4 2.2 M12 0 H7.4 M7.4 0 L9.4 -2.2 M7.4 0 L9.4 2.2"/>',
+  // Água parada: três linhas de onda, em gelo.
+  agua: () =>
+    '<path class="gv-gf" d="M-11 -5.4 Q-7.5 -9.4 -4 -5.4 T3 -5.4 T10 -5.4 M-11 0.6 Q-7.5 -3.4 -4 0.6 T3 0.6 T10 0.6 M-11 6.6 Q-7.5 2.6 -4 6.6 T3 6.6 T10 6.6"/>' +
+    '<path class="gv-gft" d="M-8 9.4 Q-5.5 7.8 -3 9.4 T2 9.4"/>',
+  // Fissura quente: duas bordas de pedra e a brasa pela fenda.
+  fissura: () =>
+    '<path class="gv-gx-glow" d="M-11 10 L-6 3 L-3 5 L1 -3 L3.6 -1 L7 -8 L11 -11 L11 -8 L8 -4 L5 4 L1 0 L-2 8 L-6 6 L-9 11Z"/>' +
+    gSlab("M-11 -10.4 H11 M-11 10.4 H11") + '<path class="gv-gx" d="M-11 9 L-6 3 L-3 5 L1 -3 L3.6 -1 L7 -8 L11 -11"/>',
+  // Grade quente: barras sobre brasa.
+  grade: () =>
+    '<ellipse class="gv-gx-glow" cx="0" cy="3" rx="11" ry="7"/>' + gSlab("M-10 -7 H10 V8 H-10Z") +
+    '<path class="gv-void" d="M-8 -5 H8 V6 H-8Z"/><path class="gv-gxe" d="M-8 2 H8 V6 H-8Z" opacity=".85"/>' +
+    '<path class="gv-gl" d="M-8 -5 V6 M-4 -5 V6 M0 -5 V6 M4 -5 V6 M8 -5 V6 M-10 -1 H10"/>',
+  // Arena que encolhe: anéis de pedra e setas para dentro, em gelo.
+  arena: () =>
+    '<circle class="gv-gm" cx="0" cy="0" r="11"/><circle class="gv-gft" cx="0" cy="0" r="7.2" style="stroke-dasharray:1.6 1.4"/><circle class="gv-gf" cx="0" cy="0" r="3.4"/>' +
+    '<path class="gv-gl" d="M0 -11.6 V-8.6 M-1.4 -10 L0 -8.4 L1.4 -10 M0 11.6 V8.6 M-1.4 10 L0 8.4 L1.4 10 M-11.6 0 H-8.6 M-10 -1.4 L-8.4 0 L-10 1.4 M11.6 0 H8.6 M10 -1.4 L8.4 0 L10 1.4"/>',
+  // Vigília: a vela acesa sobre o castiçal.
+  vigilia: () =>
+    '<ellipse class="gv-gx-glow" cx="0" cy="-8" rx="6.5" ry="7.5"/>' + gSlab("M-2.6 -1 H2.6 V10 H-2.6Z") + '<path class="gv-gl" d="M-6 10 H6 M0 -1 V-3"/>' +
+    '<path class="gv-gxe" d="M0 -3 C-3.6 -6.4 -2.4 -10 0 -13 C2.4 -10 3.6 -6.4 0 -3Z"/><path class="gv-gxe2" d="M0 -3.6 C-1.4 -5.6 -1 -7.6 0 -9 C1 -7.6 1.4 -5.6 0 -3.6Z"/>',
+  // Emboscada: o olho aberto, em gelo (ameaça), com cílios de alerta.
+  emboscada: () =>
+    '<ellipse class="gv-gf-glow" cx="0" cy="0" rx="12" ry="8"/>' +
+    '<path class="gv-void" d="M-11 0 C-6 -7 6 -7 11 0 C6 7 -6 7 -11 0Z"/><path class="gv-gf" d="M-11 0 C-6 -7 6 -7 11 0 C6 7 -6 7 -11 0Z"/>' +
+    '<circle class="gv-gfe" cx="0" cy="0" r="3.2"/><circle class="gv-void" cx="0" cy="0" r="1.3"/><path class="gv-gft" d="M0 -11 V-8 M-6 -9.4 L-4.6 -7 M6 -9.4 L4.6 -7"/>',
+  // Duas ondas: duas cristas.
+  ondas: () =>
+    gSlab("M-11 8 H11 V10 H-11Z") +
+    '<path class="gv-gl" d="M-10.4 5 L-6.6 -7 L-2.8 5 M2.8 5 L6.6 -7 L10.4 5"/><path class="gv-gt" d="M-8.6 1 H-4.6 M4.6 1 H8.6"/>',
+};
+
+/** Padrão de hachura dos glifos (em unidades do glifo, que é escalado pelo `<g>`). */
+function glyphDefs(): string {
+  return (
+    `<pattern id="${ns}hk" width="1.5" height="1.5" patternUnits="userSpaceOnUse" patternTransform="rotate(40)"><line class="gv-ph" x1="0" y1="0" x2="0" y2="1.5"/></pattern>`
+  );
+}
+
+const put = (key: GlyphKey, cx: number, cy: number, k: number): string =>
+  `<g transform="translate(${r(cx)} ${r(cy)}) scale(${k})">${(GLYPHS[key] ?? GLYPHS.minion)()}</g>`;
+
+/**
+ * Marcas de contagem verticais (1 a 5): quatro riscos e o quinto cruzando. Centradas em `cx`,
+ * topo em `y`. Mais de 5 repete o grupo.
+ */
+function tallyMarks(n: number, cx: number, y: number): string {
+  let out = "";
+  const groups = Math.ceil(Math.max(0, n) / 5);
+  const gw = 38; // largura de um grupo de 5
+  for (let g = 0; g < groups; g++) {
+    const inGroup = Math.min(5, n - g * 5);
+    const gx = cx - (groups * gw) / 2 + g * gw + 4;
+    const bars = Math.min(4, inGroup);
+    for (let i = 0; i < bars; i++) out += `<path class="gv-tally" d="M${r(gx + i * 8)} ${y} v18"/>`;
+    if (inGroup === 5) out += `<path class="gv-tally" d="M${r(gx - 5)} ${y + 14} L${r(gx + 30)} ${y + 3}"/>`;
+  }
+  return out;
+}
+
+/** Glifo avulso (alfabeto, legenda): 28x28 unidades, centrado. `aria-hidden`; quem usa descreve. */
+export function glyphSvg(key: BustKind | HazardKind | "sentinela_manto"): string {
+  ns = `gv${++uid}-`;
+  return `<svg class="gv gv-solo" viewBox="-14 -14 28 28" aria-hidden="true" focusable="false"><defs>${glyphDefs()}</defs>${GLYPHS[key]()}</svg>`;
+}
+
+/** Marcas de contagem avulsas (alfabeto). */
+export function tallySvg(n: number): string {
+  ns = `gv${++uid}-`;
+  const w = Math.max(1, Math.ceil(n / 5)) * 38 + 8;
+  return `<svg class="gv gv-solo" viewBox="${-w / 2} -2 ${w} 24" aria-hidden="true" focusable="false">${tallyMarks(n, 0, 2)}</svg>`;
+}
+
+// --- Painel "o que vem" ---
+
+/** Um tipo de morto no painel: quantos, e se espera emboscado / veste o manto. */
+export interface MuralMorto {
+  kind: BustKind;
+  n: number;
+  /** Acorda por emboscada: o olho aparece junto do busto. */
+  emboscada?: boolean;
+  /** Só a Sentinela: veste um manto igual ao da Acendedora (A6). */
+  manto?: boolean;
+}
+
+/** O aviso de uma câmara: grupos (cada grupo é uma onda), perigos de cenário e situação. */
+export interface MuralNext {
+  /** Ondas em ordem. Um grupo = sem ondas; dois = as duas cristas entre eles. */
+  grupos: MuralMorto[][];
+  /** Perigos de cenário (e `vigilia`, que vira a vela no alto). Nunca `emboscada` nem `ondas`: vêm dos dados. */
+  perigos: HazardKind[];
+}
+
+const K_BUST = 4; // unidades do glifo -> unidades da vista (96 px por busto)
+const CELL_W = 120;
+const ROW_H = 128;
+const SIT_H = 76;
+const HAZ_H = 104;
+const GAP = 10;
+
+interface Block {
+  h: number;
+  draw: (top: number, W: number) => string;
+}
+
+function bustRow(items: MuralMorto[], ring: boolean): Block {
+  return {
+    h: ROW_H,
+    draw: (top, W) => {
+      const n = items.length;
+      let out = "";
+      items.forEach((m, i) => {
+        const cx = W / 2 + (i - (n - 1) / 2) * CELL_W;
+        const cy = top + 52;
+        if (ring) out += `<circle class="gv-ring2" cx="${r(cx)}" cy="${r(cy)}" r="58"/>`;
+        const key: GlyphKey = m.kind === "sentinela" && m.manto ? "sentinela_manto" : m.kind;
+        out += put(key, cx, cy, K_BUST);
+        if (m.emboscada) {
+          out += `<circle class="gv-void" cx="${r(cx + 40)}" cy="${r(cy - 38)}" r="21"/><circle class="gv-ft" cx="${r(cx + 40)}" cy="${r(cy - 38)}" r="21"/>` + put("emboscada", cx + 40, cy - 38, 1.5);
+        }
+        out += tallyMarks(m.n, cx, top + 106);
+      });
+      return out;
+    },
+  };
+}
+
+/** Divide `items` em linhas equilibradas de no máximo `perRow` (5 vira 3+2; 4 vira 2+2). */
+function splitRows(items: MuralMorto[], perRow: number): MuralMorto[][] {
+  const rows = Math.ceil(items.length / perRow);
+  const size = Math.ceil(items.length / rows);
+  const out: MuralMorto[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+/**
+ * O painel "o que vem" (SVG, decorativo): bustos dos tipos de morto com marcas de contagem,
+ * o olho junto de quem espera emboscado, a vela da vigília no alto, as duas cristas entre as
+ * ondas e a faixa dos perigos de cenário embaixo. Só tokens; sem texto.
+ */
+export function muralVem(next: MuralNext, format: MuralFormat = "retrato"): string {
+  ns = `gv${++uid}-`;
+  const W = format === "paisagem" ? 800 : 400;
+  const H = format === "paisagem" ? 400 : 460;
+  const perRow = Math.max(1, Math.floor((W - 40) / CELL_W));
+  const vigilia = next.perigos.includes("vigilia");
+  const hazards = next.perigos.filter((h) => h !== "vigilia");
+
+  const blocks: Block[] = [];
+  if (vigilia) {
+    blocks.push({ h: SIT_H + 8, draw: (top, w) => put("vigilia", w / 2, top + 42, 3.2) });
+  }
+  next.grupos.forEach((g, gi) => {
+    if (gi > 0) {
+      blocks.push({
+        h: SIT_H,
+        draw: (top, w) =>
+          `<path class="gv-rule" d="M24 ${top + 38} H${r(w / 2 - 58)} M${r(w / 2 + 58)} ${top + 38} H${w - 24}"/>` + put("ondas", w / 2, top + 38, 3.2),
+      });
+    }
+    for (const row of splitRows(g, perRow)) blocks.push(bustRow(row, gi > 0));
+  });
+  if (hazards.length) {
+    blocks.push({
+      h: HAZ_H,
+      draw: (top, w) => {
+        let out = `<path class="gv-rule" d="M32 ${top + 2} H${w - 32}"/>`;
+        hazards.forEach((hk, i) => {
+          out += put(hk, w / 2 + (i - (hazards.length - 1) / 2) * 118, top + 56, 3.6);
+        });
+        return out;
+      },
+    });
+  }
+
+  const total = blocks.reduce((a, b) => a + b.h, 0) + GAP * Math.max(0, blocks.length - 1);
+  let y = Math.max(20, (H - total) / 2);
+  let body = "";
+  for (const b of blocks) {
+    body += b.draw(y, W);
+    y += b.h + GAP;
+  }
+
+  const frame =
+    `<rect class="gv-bg" width="${W}" height="${H}"/>` +
+    `<rect fill="${ref("hg")}" width="${W}" height="${H}" opacity=".16"/>` +
+    `<rect class="gv-lt" x="10" y="10" width="${W - 20}" height="${H - 20}" rx="3"/>` +
+    `<rect class="gv-ld" x="16" y="16" width="${W - 32}" height="${H - 32}" rx="2"/>`;
+  return `<svg class="gv" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid slice" aria-hidden="true" focusable="false">${defs(glyphDefs())}${frame}${body}</svg>`;
 }
