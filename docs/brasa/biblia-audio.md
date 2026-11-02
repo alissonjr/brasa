@@ -648,7 +648,7 @@ numérica. A avaliação de gosto é do jogador no Chrome dele (ver "O que ainda
 ### B. Ligações no jogo
 
 - `main.ts` (mudança mínima, só ligação): `bindGameAudio`, passos pela velocidade do herói
-  (`updateFootsteps`), `playPotion` ao beber, `playPickup` ao pegar arma (G), `playDoor("alcapao")` ao ceder a estilha, `playBrazierLit` e `playStairs` na descida, `playGuardianVoice("rugido")` ao avistar o Guardião.
+  (`updateFootsteps`), `playDrink(kind, "cork"|"sip")` no gole (redesenho 4.1: rolha no início, goles + vidro + brilho no commit; Fúria e Unguento têm sons próprios), `playPickup` ao pegar arma (G), `playDoor("alcapao")` ao ceder a estilha, `playBrazierLit` e `playStairs` na descida, `playGuardianVoice("rugido")` ao avistar o Guardião.
 - Aterrissagem: o agente `salto` já chama `landThud(intensity)` (combatSound.ts, em `heroModel.ts`); agora
   ele só delega a `playLand(intensity)` (audio/sfx.ts), então há um único som de queda. PENDENTE: chamar
   `playJump()` no início do pulo (hoje ninguém chama). Superfície dos passos: `surfaceForFloor(andar, molhado)`.
