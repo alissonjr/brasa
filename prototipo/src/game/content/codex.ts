@@ -1,212 +1,447 @@
-import type { ProgressionState } from "@platform";
+import type { IllustrationId } from "../ui/ds/illustrations";
 
 /**
- * CAMADA JOGO (Brasa). Codex/Crônica: o registro de lore que o jogador acumula.
- * Personagens, lugares e relatos do mundo de Brasa, revelados conforme a descida
- * avança. É só CONTEÚDO + a regra de desbloqueio; o estado de quem já foi revelado é
- * DERIVADO da progressão (objetivos concluídos), então não precisa de persistência
- * própria. Base nas bíblias: docs/brasa/narrativa-e-historia.md, docs/brasa/personagens.md.
+ * CAMADA JOGO (Brasa). Crônica: o registro de lore que o jogador acumula, no formato "A Parede".
+ * Está organizada POR ANDAR (andar 0 = a boca do poço, andares 1 a 7 = a descida, na ordem do
+ * `DESCENT` de main.ts, onde o andar N é o índice N-1). Cada andar guarda:
+ *  - o DECALQUE da inscrição daquele andar (a frotagem presa na laje), liberado ao LER a
+ *    inscrição (aproximando-se do nicho ou com [R]);
+ *  - os NICHOS (personagens, lugares e relatos) que o jogo passa a dizer naquele andar.
+ * O estado de "o que já foi visto" é um conjunto de MARCAS (ids de string) guardado no save
+ * (`codex` em saveData.ts). Uma entrada está liberada se nasce assim ou se a sua marca já existe.
+ *
+ * Fonte dos textos: o canon fechado em docs/brasa/narrativa-e-historia.md (seção 0), a ficha de
+ * personagens (personagens.md) e o roadmap (00-aprofundamento-e-roadmap.md, 3.3). O eco e a
+ * inscrição de cada andar são os mesmos que a descida mostra no jogo (única fonte: aqui).
+ * Pontos em aberto no canon (nome do reino, se a ordem ainda existe) NÃO são afirmados.
  */
+
+// --- Marcas (ids guardados no save) ---
+
+/** O jogador chegou ao andar N (1 a 7; é o índice do DESCENT mais um). */
+export const markFloor = (n: number): string => `andar:${n}`;
+/** O jogador leu a inscrição do andar N (nicho por proximidade ou [R]). */
+export const markRead = (n: number): string => `leitura:${n}`;
+/** O Guardião caiu e sussurrou a verdade. */
+export const MARK_BOSS_DOWN = "guardiao:caiu";
+
+// --- Tipos ---
+
 export type CodexCategory = "personagens" | "lugares" | "relatos";
 
-/** Como a entrada é desbloqueada: já nasce revelada, ou ao concluir um objetivo. */
-export type CodexUnlock = { type: "always" } | { type: "objective"; objectiveId: string };
+/** Como a página é liberada: já nasce revelada, ou ao existir uma marca no save. */
+export type CodexUnlock = { type: "always" } | { type: "mark"; id: string };
 
-export interface CodexEntry {
+/** Algo com condição de desbloqueio (decalque ou nicho). */
+interface Unlockable {
   id: string;
-  category: CodexCategory;
-  title: string;
-  /** Linha-resumo (subtítulo) mostrada na lista. */
-  lead: string;
-  /** Corpo do verbete (parágrafos separados por \n). */
-  body: string;
-  /** glb opcional para a vitrine 3D do verbete (personagem que gira, ou prop). */
-  model?: string;
   unlock: CodexUnlock;
 }
 
-export const CODEX: CodexEntry[] = [
-  // --- Personagens ---
-  {
-    id: "acendedora",
-    category: "personagens",
-    title: "A Acendedora",
-    lead: "A última guardiã que ainda carrega o fogo.",
-    body:
-      "Acendedora não é nome, é função: a que mantém o fogo. A última delas guarda no peito " +
-      "uma fagulha viva da Brasa, a chama que segura o reino inteiro contra o frio eterno. " +
-      "Quando a luz começa a recuar poço abaixo, é ela quem desce, câmara por câmara, " +
-      "reacendendo os braseiros que as anteriores deixaram apagar.\n" +
-      "Não desce por glória, e já nem por esperança: desce porque foi a única que sobrou. Se " +
-      "a Brasa apagar de vez, a superfície congela, as noites não terminam e os mortos sobem.\n" +
-      "Carrega pouco: o manto, o cajado que guarda a fagulha na ponta, e o costume de não " +
-      "olhar para trás. O escuro do poço é longo demais para se medir em coragem; mede-se em " +
-      "quantos braseiros ainda dá para acender antes do frio chegar ao coração.",
-    model: "/models/acendedora.glb",
-    unlock: { type: "always" },
-  },
-  {
-    id: "acendedoras-passadas",
-    category: "personagens",
-    title: "As Acendedoras anteriores",
-    lead: "Vozes e inscrições deixadas na pedra.",
-    body:
-      "Antes dela, outras desceram. Algumas reacenderam a Brasa e voltaram grisalhas; outras " +
-      "ficaram no escuro e viraram parte dele. O que restou são marcas riscadas na pedra, " +
-      "braseiros meio acesos e ecos que ainda sussurram a quem tem ouvido para o passado.\n" +
-      "\"Não confie na sala quente. O calor mente: é só a Brasa lembrando do que perdeu.\" " +
-      "A inscrição segue, raspada fundo, perto do terceiro braseiro.\n" +
-      "Outra, mais abaixo, é quase um pedido: \"Se você está lendo isto, eu não voltei. Acenda " +
-      "assim mesmo. Acenda por mim.\" Não há assinatura. Nenhuma delas assinava; o título não " +
-      "deixa espaço para nome.",
-    model: "/models/Rogue_Hooded.glb",
-    unlock: { type: "objective", objectiveId: "aproximar-braseiro" },
-  },
-  {
-    id: "guardiao",
-    category: "personagens",
-    title: "O Guardião",
-    lead: "O que vela a Brasa apagada no fundo.",
-    body:
-      "No fundo do poço, junto da Brasa moribunda, algo a vela. Não deixa que se apague de " +
-      "vez, nem que se reacenda: prende a chama no exato limiar entre a vida e o frio, e ali " +
-      "a segura há tempo demais para ter nome.\n" +
-      "Dizem os ecos que ele já desceu como Acendedor, muito antes, e que chegou ao fundo " +
-      "como todos chegam: tarde demais. Diante da Brasa apagando, não teve coragem de " +
-      "reacendê-la nem de deixá-la morrer, e o limiar o prendeu junto com ela. Guardar virou " +
-      "a única coisa que ainda sabe fazer.\n" +
-      "Para reavivar a Brasa, a Acendedora terá de fazer o que ele não fez: escolher.",
-    model: "/models/Skeleton_Warrior.glb",
-    unlock: { type: "objective", objectiveId: "alcancar-fundo" },
-  },
+/** Nicho: pessoa, lugar ou relato. */
+export interface CodexEntry extends Unlockable {
+  category: CodexCategory;
+  /** Andar em que o jogo passa a dizer isto (0 = desde a boca do poço). */
+  floor: number;
+  title: string;
+  /** Linha-resumo (subtítulo do folheto). */
+  lead: string;
+  /** Parágrafos do verbete. */
+  body: string[];
+  art: IllustrationId;
+}
 
-  // --- Lugares ---
-  {
-    id: "poco-cripta",
-    category: "lugares",
-    title: "O poço-cripta",
-    lead: "A descida de pedra até a Brasa.",
-    body:
-      "Um poço fundo demais para o sol, escavado em câmaras seladas ao longo de gerações. " +
-      "Cada andar foi fechado por uma porta de pedra; a luz só alcança uma câmara por vez, e " +
-      "a passagem seguinte só cede a quem devolve calor à atual.\n" +
-      "Não foi feito para descer, foi feito para guardar. Cada sala selada foi, um dia, um " +
-      "túmulo ou um depósito de coisas que ninguém queria perto da superfície. A descida da " +
-      "Acendedora é, no fundo, uma profanação necessária: abrir o que foi fechado para chegar " +
-      "ao que foi escondido mais fundo de tudo.\n" +
-      "Quanto mais fundo, mais frio, mais escuro, e mais perto da Brasa.",
-    unlock: { type: "always" },
-  },
-  {
-    id: "camara-guarda",
-    category: "lugares",
-    title: "A câmara de guarda",
-    lead: "A primeira sala da descida.",
-    body:
-      "Logo abaixo da boca do poço, uma sala de pedra com um braseiro frio ao centro. Foi " +
-      "feita para deter quem descia; agora, com o mundo invertido, detém o que sobe.\n" +
-      "Acender o braseiro devolve a luz à câmara, empurra o azul para as bordas e destrava a " +
-      "porta seguinte. É também a primeira lição da descida: aqui a luz não é conforto, é " +
-      "chave. Toda porta do poço se abre com fogo, não com força.",
-    unlock: { type: "objective", objectiveId: "entrar-cripta" },
-  },
-  {
-    id: "a-brasa",
-    category: "lugares",
-    title: "A Brasa",
-    lead: "A chama ancestral no fundo de tudo.",
-    body:
-      "No fundo do poço arde, ou agoniza, a Brasa: a chama que aquece o reino inteiro lá em " +
-      "cima. Não é metáfora. É uma única brasa do tamanho de um punho, e dela depende cada " +
-      "verão, cada colheita, cada noite que tem fim.\n" +
-      "Ninguém sabe quem a acendeu primeiro, nem do quê. Sabe-se apenas que nunca pode apagar, " +
-      "e que sozinha, sem quem a alimente, ela apaga. Por isso a ordem das Acendedoras; por " +
-      "isso a descida; por isso tudo.\n" +
-      "Reavivá-la é a razão da descida. E é mais difícil do que parece: uma brasa quase morta " +
-      "não quer voltar a arder. Tem que ser convencida.",
-    unlock: { type: "objective", objectiveId: "alcancar-fundo" },
-  },
+/** Decalque: a frotagem da inscrição de um andar. */
+export interface CodexDecal extends Unlockable {
+  title: string;
+  /** O eco ouvido ao entrar no andar (legenda do HUD). */
+  echo: string;
+  /** O texto gravado na pedra, tal como a descida o mostra. */
+  inscription: string;
+  body: string[];
+  art: IllustrationId;
+}
 
-  // --- Relatos ---
-  {
-    id: "frio-eterno",
-    category: "relatos",
-    title: "O frio eterno",
-    lead: "Por que o reino depende de uma só chama.",
-    body:
-      "Conta-se que o mundo lá fora morreria de frio se não fosse a Brasa, guardada no fundo " +
-      "da terra desde antes da memória. As estações da superfície são, na verdade, o pulso " +
-      "dessa chama: quando ela enfraquece, o gelo desce dos montes e as noites não terminam.\n" +
-      "Os velhos da superfície não chamam de inverno. Chamam de \"o frio que lembra\", porque " +
-      "diz a lenda que ele não é ausência de calor, e sim algo antigo e paciente que existia " +
-      "antes do fogo e quer o mundo de volta como era: parado, branco, calado. A Brasa é a " +
-      "única coisa que um dia disse não.",
-    unlock: { type: "always" },
-  },
-  {
-    id: "despertar-dos-mortos",
-    category: "relatos",
-    title: "O despertar dos mortos",
-    lead: "O que o escuro acorda nas câmaras.",
-    body:
-      "Os que foram selados nas câmaras dormiam enquanto havia luz. Conforme a Brasa recua, o " +
-      "escuro toma cada sala e eles se erguem, sem rosto e sem descanso, repetindo gestos de " +
-      "uma vida que já esqueceram.\n" +
-      "Não são malvados; são frios. Atacam quem traz calor pelo mesmo motivo que a mariposa " +
-      "busca a chama: porque é a única coisa que ainda sentem. A luz do braseiro os detém; a " +
-      "fagulha da Acendedora os enfrenta. Cair para eles não é morrer, é esfriar, e quem " +
-      "esfria no poço levanta junto na próxima vez que o escuro passar.",
-    model: "/models/Skeleton_Minion.glb",
-    unlock: { type: "objective", objectiveId: "aproximar-braseiro" },
-  },
+export interface CodexFloor {
+  /** 0 = boca do poço; 1 a 7 = andares da descida. */
+  n: number;
+  name: string;
+  /** Camada do poço (nome do canon). */
+  layer: string;
+  layerShort: string;
+  decal?: CodexDecal;
+  entries: CodexEntry[];
+}
 
+// --- Conteúdo ---
+
+export const CODEX_FLOORS: CodexFloor[] = [
   {
-    id: "a-fagulha",
-    category: "relatos",
-    title: "A fagulha",
-    lead: "A única luz que desce com ela.",
-    body:
-      "A fagulha é um pedaço vivo da própria Brasa, confiado a cada Acendedora no dia em que " +
-      "assume o título. Cabe na mão, pesa menos que uma moeda e nunca apaga enquanto a " +
-      "portadora respira.\n" +
-      "Enquanto a sala está fria, ela é o único ponto quente num mar de azul: é por isso que " +
-      "os mortos a procuram e é por isso que a Acendedora nunca está totalmente no escuro. " +
-      "Dela vem o golpe de fogo, a luz que reacende os braseiros e o teimoso lembrete de que " +
-      "o frio ainda não venceu.\n" +
-      "Dizem que, quando uma Acendedora morre longe da Brasa, a fagulha não morre com ela: " +
-      "espera, na pedra, a próxima mão.",
-    unlock: { type: "always" },
+    n: 0,
+    name: "A boca do poço",
+    layer: "A superfície",
+    layerShort: "Boca",
+    entries: [
+      {
+        id: "cinza",
+        category: "personagens",
+        floor: 0,
+        title: "Cinza",
+        lead: "A Acendedora. Fala pouco.",
+        body: [
+          "Acendedora é o título herdado; o nome é Cinza. Carrega no peito uma fagulha viva da Brasa e desce o poço de capuz, falando quase nada.",
+          "Desce porque Marta, a mentora que a criou, voltou da sua descida gasta demais para descer outra vez e agora morre de frio na superfície. Desce para reavivar a Brasa e para saber o que houve com quem desceu antes dela.",
+        ],
+        art: "cinza",
+        unlock: { type: "always" },
+      },
+      {
+        id: "poco-cripta",
+        category: "lugares",
+        floor: 0,
+        title: "O poço-cripta",
+        lead: "A descida de pedra até a Brasa.",
+        body: [
+          "Um poço vertical de pedra, escavado em câmaras seladas, que desce da superfície até o fundo onde arde a Brasa. Cada andar é uma câmara fechada por uma porta de pedra, e a luz só alcança uma câmara por vez.",
+          "Antes de ser masmorra, é um cemitério sagrado. As Câmaras de Cima guardam os mortos mais recentes; as Fundas, os mais antigos; as da Origem, o coração da ordem das Acendedoras. No fim, a Brasa.",
+        ],
+        art: "poco",
+        unlock: { type: "always" },
+      },
+      {
+        id: "frio-eterno",
+        category: "relatos",
+        floor: 0,
+        title: "O frio eterno",
+        lead: "O estado natural do mundo.",
+        body: [
+          "Não é o inverno, que passa. É o jeito natural das coisas: a vida é a exceção, e a exceção tem um único motivo, a Brasa.",
+          "Quando a luz recua, o Escuro não ataca: apenas volta a ocupar o que sempre foi dele. O reino sobrevive num anel de calor em volta da boca do poço, e quanto mais longe dela, mais a geada toma.",
+        ],
+        art: "frio",
+        unlock: { type: "always" },
+      },
+      {
+        id: "fagulha",
+        category: "relatos",
+        floor: 0,
+        title: "A fagulha",
+        lead: "A única luz que desce com ela.",
+        body: [
+          "Uma brasa viva alojada no peito da portadora, ligada à Brasa no fundo do poço. Só uma pessoa a carrega por vez.",
+          "Por isso só a Acendedora reacende o fogo morto das câmaras: ele só reconhece a fagulha da linhagem. E carregá-la consome. Quem a leva não envelhece como os outros; gasta-se.",
+        ],
+        art: "fagulha",
+        unlock: { type: "always" },
+      },
+    ],
   },
   {
-    id: "os-braseiros",
-    category: "lugares",
-    title: "Os braseiros",
-    lead: "As fogueiras que destravam a descida.",
-    body:
-      "Em cada câmara há um braseiro, posto ali pelas primeiras Acendedoras como degraus de " +
-      "luz para quem viesse depois. Aceso, ele transforma a sala: o azul recua, a porta de " +
-      "pedra cede e, por um instante, o poço lembra o que é ser quente.\n" +
-      "Acender um braseiro é também o respiro da descida: a sala limpa, a Brasa um pouco mais " +
-      "perto e a chance de fortalecer a fagulha antes do próximo escuro. Quem desce aprende a " +
-      "contar a jornada não em salas, mas em braseiros: cada um aceso é uma promessa de que " +
-      "ainda dá para ir mais fundo.",
-    unlock: { type: "objective", objectiveId: "entrar-cripta" },
+    n: 1,
+    name: "A câmara de guarda",
+    layer: "Câmaras de Cima",
+    layerShort: "De Cima",
+    decal: {
+      id: "decalque-1",
+      title: "Os nomes nos bancos",
+      echo: "Lê os nomes gravados nos bancos. Foram teu povo, antes do frio.",
+      inscription: "Aqui jaz a guarda da chama. Foram teu povo, antes do frio.",
+      body: [
+        "Nos bancos da primeira câmara há nomes gravados. É o povo do reino, enterrado com reverência perto da Brasa para repousar na luz.",
+        "Os selos nunca foram prisão: foram proteção, um gesto de amor. Um dos túmulos, porém, foi arrombado por dentro. É o ponto exato onde a luz recuou e os mortos começaram a despertar.",
+      ],
+      art: "mortos",
+      unlock: { type: "mark", id: markRead(1) },
+    },
+    entries: [
+      {
+        id: "mortos-selados",
+        category: "personagens",
+        floor: 1,
+        title: "Os mortos selados",
+        lead: "O povo, deitado na luz.",
+        body: [
+          "Gente do próprio reino, enterrada com reverência perto da Brasa para repousar na claridade. Os selos nunca foram prisão: foram proteção, um gesto de amor.",
+          "Quando a luz recua, o escuro os reclama e eles se levantam. Atacam Cinza porque a fagulha é o único calor que ainda sentem. Quanto mais fundo se desce, mais antigos e mais fortes eles são. Vencê-los é devolvê-los ao repouso.",
+        ],
+        art: "mortos",
+        unlock: { type: "mark", id: markRead(1) },
+      },
+    ],
+  },
+  {
+    n: 2,
+    name: "O salão",
+    layer: "Câmaras de Cima",
+    layerShort: "De Cima",
+    decal: {
+      id: "decalque-2",
+      title: "O manto rasgado",
+      echo: "Um manto rasgado. Uma fagulha apagada no chão. Alguém desceu antes de ti.",
+      inscription: "Outra desceu por estas escadas. Não a vimos voltar.",
+      body: [
+        "Junto à parede jaz um manto igual ao de Cinza, rasgado na altura do peito. Ao lado, no chão, uma fagulha que já foi viva e agora está apagada.",
+        "É a prova de que outra Acendedora desceu antes e não voltou. Entender o que houve com quem foi antes é parte do que leva Cinza poço abaixo.",
+      ],
+      art: "manto",
+      unlock: { type: "mark", id: markRead(2) },
+    },
+    entries: [],
+  },
+  {
+    n: 3,
+    name: "A cisterna",
+    layer: "Câmaras Fundas",
+    layerShort: "Fundas",
+    decal: {
+      id: "decalque-3",
+      title: "A que já estava aqui",
+      echo: "Dizem que ela foi a primeira. Dizem que já ardia aqui quando a primeira desceu.",
+      inscription: "Quem acendeu a primeira Brasa? A pedra não responde.",
+      body: [
+        "As inscrições da cisterna se contradizem. Uma fala de uma mulher que acendeu a primeira chama. Outra, da própria luz tomando forma. Outra jura que nunca houve primeira, que sempre houve fogo.",
+        "O poço guarda o mito inteiro e não escolhe nenhum. De onde veio a Brasa, a pedra não diz.",
+      ],
+      art: "eco",
+      unlock: { type: "mark", id: markRead(3) },
+    },
+    entries: [],
+  },
+  {
+    n: 4,
+    name: "O salão",
+    layer: "Câmaras Fundas",
+    layerShort: "Fundas",
+    decal: {
+      id: "decalque-4",
+      title: "O preço",
+      echo: "A Brasa não pede lenha. Pede quem a alimente por dentro.",
+      inscription: "A chama cobra em carne: uma vida por geração.",
+      body: [
+        "Aqui a pedra deixa de lamentar e faz a conta. A Brasa não arde por si: alimenta-se da fagulha viva de uma portadora, e cada geração entrega uma.",
+        "É o preço do calor que ainda sobe do poço, e ninguém o paga de graça.",
+      ],
+      art: "preco",
+      unlock: { type: "mark", id: markRead(4) },
+    },
+    entries: [],
+  },
+  {
+    n: 5,
+    name: "O santuário",
+    layer: "Câmaras Fundas",
+    layerShort: "Fundas",
+    decal: {
+      id: "decalque-5",
+      title: "Duas que desceram",
+      echo: "Dois conjuntos de ossos. Um voltou até a porta. O outro desceu mais fundo.",
+      inscription: "Que descanses, tu que voltaste. E tu, que desceste mais.",
+      body: [
+        "No santuário repousam os restos de duas Acendedoras. Uma voltou até a porta e ali ficou. A outra passou por ela e seguiu poço abaixo.",
+        "É um respiro na descida. A pedra deixa uma bênção para as duas: a que voltou e a que desceu mais.",
+      ],
+      art: "duas",
+      unlock: { type: "mark", id: markRead(5) },
+    },
+    entries: [],
+  },
+  {
+    n: 6,
+    name: "A cisterna",
+    layer: "Câmaras da Origem",
+    layerShort: "Da Origem",
+    decal: {
+      id: "decalque-6",
+      title: "O peso",
+      echo: "Marta dizia: se não eu, então tu. Agora sinto o peso do que ela carregou.",
+      inscription: "Marta gravou aqui: não temas o fundo. Teme ficar.",
+      body: [
+        "Três ecos se sobrepõem na cisterna e, entre os pilares, já se vê lá embaixo o clarão da Brasa. Na parede há um aviso que Marta gravou.",
+        "Marta é a mentora que criou Cinza: desceu na geração passada e voltou gasta demais para descer de novo. “Se não eu, então tu” era o que ela dizia. Aqui, Cinza sente o peso do que ela carregou.",
+      ],
+      art: "poco",
+      unlock: { type: "mark", id: markRead(6) },
+    },
+    entries: [
+      {
+        id: "marta",
+        category: "personagens",
+        floor: 6,
+        title: "Marta",
+        lead: "A mentora de Cinza.",
+        body: [
+          "Acendedora da geração passada. Criou Cinza. Voltou da sua descida gasta demais para tentar de novo e hoje morre de frio na superfície.",
+          "“Se não eu, então tu.” É o que Marta dizia, e é o peso que Cinza sente a cada andar.",
+        ],
+        art: "marta",
+        unlock: { type: "mark", id: markFloor(6) },
+      },
+      {
+        id: "a-brasa",
+        category: "lugares",
+        floor: 6,
+        title: "A Brasa",
+        lead: "A chama no fundo de tudo.",
+        body: [
+          "A única luz e o único calor do mundo. Não é o sol: é uma chama física, num lugar físico, e pode apagar. Tudo o que vive, vive porque ela ainda arde.",
+          "Não é eterna por natureza. Arde porque é alimentada, e hoje definha: faz tempo demais que ninguém renova a fagulha no fundo.",
+        ],
+        art: "brasa",
+        unlock: { type: "mark", id: markFloor(6) },
+      },
+    ],
+  },
+  {
+    n: 7,
+    name: "A câmara da Brasa",
+    layer: "A Brasa",
+    layerShort: "A Brasa",
+    decal: {
+      id: "decalque-7",
+      title: "A que ficou",
+      echo: "No fundo, a primeira Acendedora ainda arde. E te esperava.",
+      inscription: "Ela ainda guarda o fogo. Liberta-a, ou toma seu lugar.",
+      body: [
+        "No fundo, junto da Brasa, arde alguém. Ao ver Cinza, diz que esperou tanto que esqueceu o próprio nome, e pergunta o dela.",
+        "A inscrição propõe duas saídas: libertá-la, ou tomar o seu lugar. A escolha é de Cinza.",
+      ],
+      art: "guardia",
+      unlock: { type: "mark", id: markRead(7) },
+    },
+    entries: [
+      {
+        id: "a-primeira",
+        category: "personagens",
+        floor: 7,
+        title: "A Primeira",
+        lead: "Aquela que guarda o fogo.",
+        body: [
+          "A primeira Acendedora, e o Guardião da Brasa. Desceu há gerações, venceu e reacendeu a chama. Descobriu então o preço: a Brasa só arde se alguém fica presa dentro dela, alimentando-a com a própria fagulha. Escolheu ficar, e o tempo a consumiu.",
+          "Não atacou por maldade. Testou Cinza para saber se devia passar o fardo ou impedi-la de repetir o erro. Ao cair, sussurrou: “Vai. Acende a Brasa... e não a deixes sozinha, como eu fiquei.”",
+        ],
+        art: "guardia",
+        unlock: { type: "mark", id: MARK_BOSS_DOWN },
+      },
+    ],
   },
 ];
 
-export const CODEX_CATEGORIES: CodexCategory[] = ["personagens", "lugares", "relatos"];
+// --- Derivados ---
 
-/** Uma entrada está revelada se nasce assim ou se seu objetivo já foi concluído. */
-export function isCodexUnlocked(entry: CodexEntry, state: ProgressionState): boolean {
-  if (entry.unlock.type === "always") return true;
-  return state.objectivesDone.includes(entry.unlock.objectiveId);
+/** Todos os nichos, por andar e na ordem em que o jogo os revela. */
+export const CODEX_ENTRIES: CodexEntry[] = CODEX_FLOORS.flatMap((f) => f.entries);
+
+/** Andares da descida (1 a 7), cada um com o seu decalque. */
+export const CODEX_DESCENT: CodexFloor[] = CODEX_FLOORS.filter((f) => f.n >= 1);
+
+/** Eco por andar (índice do DESCENT): a legenda ouvida ao entrar. Única fonte, usada por main.ts. */
+export const FLOOR_ECHOES: string[] = CODEX_DESCENT.map((f) => f.decal?.echo ?? "");
+
+/** Inscrição por andar (índice do DESCENT): o texto gravado na pedra. Única fonte, usada por main.ts. */
+export const FLOOR_INSCRIPTIONS: string[] = CODEX_DESCENT.map((f) => f.decal?.inscription ?? "");
+
+/** Quantas páginas (decalques + nichos) a Crônica tem no total. */
+export const CODEX_TOTAL: { decals: number; entries: number } = {
+  decals: CODEX_DESCENT.filter((f) => f.decal).length,
+  entries: CODEX_ENTRIES.length,
+};
+
+/** Algo que sabe responder se uma marca já existe (um Set de ids, ou o CodexLog). */
+export interface SeenMarks {
+  has(id: string): boolean;
 }
 
-export function codexByCategory(category: CodexCategory): CodexEntry[] {
-  return CODEX.filter((e) => e.category === category);
+/** Liberado se nasce assim ou se a marca já está no save. */
+export function isCodexUnlocked(item: { unlock: CodexUnlock }, seen: SeenMarks): boolean {
+  return item.unlock.type === "always" || seen.has(item.unlock.id);
 }
 
-/** Quantas entradas já foram reveladas / total (para o cabeçalho da Crônica). */
-export function codexUnlockedCount(state: ProgressionState): { unlocked: number; total: number } {
-  return { unlocked: CODEX.filter((e) => isCodexUnlocked(e, state)).length, total: CODEX.length };
+/** Contagem de páginas liberadas, para o cabeçalho da Crônica. */
+export function codexProgress(seen: SeenMarks): { decals: number; entries: number } {
+  return {
+    decals: CODEX_DESCENT.filter((f) => f.decal && isCodexUnlocked(f.decal, seen)).length,
+    entries: CODEX_ENTRIES.filter((e) => isCodexUnlocked(e, seen)).length,
+  };
+}
+
+/** Algarismo romano (andares 1 a 7 da Parede). */
+export function romanNumeral(n: number): string {
+  const table: Array<[number, string]> = [
+    [10, "X"],
+    [9, "IX"],
+    [5, "V"],
+    [4, "IV"],
+    [1, "I"],
+  ];
+  let out = "";
+  let rest = n;
+  for (const [v, s] of table) {
+    while (rest >= v) {
+      out += s;
+      rest -= v;
+    }
+  }
+  return out || "0";
+}
+
+// --- Estado vivo (marcas vistas + o que acabou de ser liberado) ---
+
+/**
+ * As marcas que o jogador já viu, mais a lista do que foi liberado desde a última vez que a
+ * Crônica foi aberta (para o papel cair e o nicho acender uma única vez). Só as marcas vão
+ * para o save; o "novo" vive na sessão.
+ */
+export class CodexLog implements SeenMarks {
+  private readonly seen = new Set<string>();
+  private fresh = new Set<string>();
+
+  constructor(ids: string[] = []) {
+    for (const id of ids) this.seen.add(id);
+  }
+
+  has(id: string): boolean {
+    return this.seen.has(id);
+  }
+
+  all(): string[] {
+    return [...this.seen];
+  }
+
+  /** Recarrega tudo (trocar de slot, jogo novo). Não conta como "novo". */
+  load(ids: string[]): void {
+    this.seen.clear();
+    this.fresh = new Set();
+    for (const id of ids) this.seen.add(id);
+  }
+
+  /**
+   * Registra uma marca. `added` diz se ela era nova (para gravar o save) e `titles` traz os
+   * títulos das páginas que ela acabou de liberar, para o aviso "Nova página na Crônica".
+   */
+  mark(id: string): { added: boolean; titles: string[] } {
+    if (this.seen.has(id)) return { added: false, titles: [] };
+    this.seen.add(id);
+    const titles: string[] = [];
+    for (const f of CODEX_FLOORS) {
+      const d = f.decal;
+      if (d && d.unlock.type === "mark" && d.unlock.id === id) {
+        this.fresh.add(d.id);
+        titles.push(d.title);
+      }
+      for (const e of f.entries) {
+        if (e.unlock.type === "mark" && e.unlock.id === id) {
+          this.fresh.add(e.id);
+          titles.push(e.title);
+        }
+      }
+    }
+    return { added: true, titles };
+  }
+
+  /** O que foi liberado desde a última abertura da Crônica (e zera a lista). */
+  takeFresh(): Set<string> {
+    const out = this.fresh;
+    this.fresh = new Set();
+    return out;
+  }
 }

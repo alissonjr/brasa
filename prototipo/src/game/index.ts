@@ -57,8 +57,18 @@ export type { Achievement } from "./content/achievements";
 export { readGameSave } from "./content/saveData";
 export type { GameSaveData, RunSave } from "./content/saveData";
 export { readLeaderboard, submitTime, formatTime } from "./content/leaderboard";
-export { CODEX, isCodexUnlocked } from "./content/codex";
-export type { CodexEntry, CodexCategory } from "./content/codex";
+export {
+  CODEX_FLOORS,
+  CODEX_ENTRIES,
+  CodexLog,
+  FLOOR_ECHOES,
+  FLOOR_INSCRIPTIONS,
+  MARK_BOSS_DOWN,
+  isCodexUnlocked,
+  markFloor,
+  markRead,
+} from "./content/codex";
+export type { CodexEntry, CodexCategory, CodexFloor, CodexDecal } from "./content/codex";
 export { DEFAULT_CHARACTER, readCharacter, MANTOS, DONS, DIFFICULTIES, mantoColor } from "./content/character";
 export type { CharacterSave, Difficulty } from "./content/character";
 export { CombatDirector } from "./combat/combatDirector";

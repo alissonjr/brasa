@@ -9,6 +9,7 @@ import type {
   SettingsService,
 } from "@platform";
 import type { CharacterSave } from "../content/character";
+import type { CodexLog } from "../content/codex";
 
 /**
  * CAMADA JOGO. Contexto injetado nas telas: os serviços de plataforma de que a UI
@@ -23,6 +24,8 @@ export interface UiContext {
   score: ScoreService;
   achievements: AchievementService;
   progression: ProgressionService;
+  /** Marcas vistas da Crônica (o que já foi lido/alcançado) e o que acabou de ser liberado. */
+  codex: CodexLog;
   hasAutosave: boolean;
 
   /** Estatísticas vivas para a tela de Perfil. */

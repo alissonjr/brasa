@@ -1,4 +1,5 @@
 import { type CharacterSave, readCharacter } from "./character";
+import { markFloor, markRead } from "./codex";
 
 /**
  * CAMADA JOGO. Forma do payload `game` dentro do SaveData (a plataforma o trata
@@ -26,6 +27,8 @@ export interface GameSaveData {
   objectives: string[];
   inkState: string;
   achievements: string[];
+  /** Marcas vistas da Crônica (andares alcançados, inscrições lidas, queda do Guardião). */
+  codex: string[];
   character: CharacterSave;
   run: RunSave;
 }
@@ -51,15 +54,32 @@ function readRun(v: unknown): RunSave {
   };
 }
 
+/**
+ * Marcas da Crônica. Save novo: lê `codex` como veio. Save antigo (sem o campo): quem já estava
+ * numa descida passou pelos andares até o atual e leu (ou pôde ler) os já deixados para trás,
+ * então semeia essas marcas: a descida não volta atrás, e a leitura nunca foi guardada.
+ */
+function readCodex(o: Record<string, unknown>, run: RunSave): string[] {
+  if (Array.isArray(o.codex)) return strArray(o.codex);
+  const seeded: string[] = [];
+  if (run.active) {
+    for (let n = 1; n <= run.floorIndex + 1; n++) seeded.push(markFloor(n));
+    for (let n = 1; n <= run.floorIndex; n++) seeded.push(markRead(n));
+  }
+  return seeded;
+}
+
 export function readGameSave(blob: Record<string, unknown> | undefined): GameSaveData {
   const o = blob ?? {};
+  const run = readRun(o.run);
   return {
     chapter: typeof o.chapter === "string" ? o.chapter : "",
     checkpoint: typeof o.checkpoint === "string" ? o.checkpoint : "",
     objectives: strArray(o.objectives),
     inkState: typeof o.inkState === "string" ? o.inkState : "",
     achievements: strArray(o.achievements),
+    codex: readCodex(o, run),
     character: readCharacter(o.character as Record<string, unknown> | undefined),
-    run: readRun(o.run),
+    run,
   };
 }
